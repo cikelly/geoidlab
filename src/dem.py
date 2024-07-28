@@ -1,11 +1,11 @@
 import requests
 import os
 
-def srtm(bounding_box=None, save_path="srtm_data.tif"):
-    base_url = "https://portal.opentopography.org/API/globaldem"
+def srtm(bounding_box=None, save_path='srtm_data.tif'):
+    base_url = 'https://portal.opentopography.org/API/globaldem'
     params = {
-        "demtype": "SRTMGL1",
-        "outputFormat": "GTiff"
+        'demtype': 'SRTMGL1',
+        'outputFormat': 'GTiff'
     }
     
     if bounding_box:
