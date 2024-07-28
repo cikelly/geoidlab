@@ -2,3 +2,5 @@ gdal
 numpy
 requests
 python
+tqdm
+beautifulsoup4
