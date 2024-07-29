@@ -4,3 +4,7 @@ requests
 python
 tqdm
 beautifulsoup4
+xarray
+# dask
+# dask[complete]
+# wget
