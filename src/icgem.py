@@ -1,3 +1,9 @@
+############################################################
+# Fetching .gfc file from ICGEM                            #
+# Copyright (c) 2024, Caleb Kelly                          #
+# Author: Caleb Kelly  (2024)                              #
+############################################################
+
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm

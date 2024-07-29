@@ -1,3 +1,9 @@
+############################################################
+# Stokes' function and its modifications                   #
+# Copyright (c) 2024, Caleb Kelly                          #
+# Author: Caleb Kelly  (2024)                              #
+############################################################
+
 from numpy import (
     cos, sin, radians,
     sqrt, log

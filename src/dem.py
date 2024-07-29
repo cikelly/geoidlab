@@ -1,3 +1,9 @@
+############################################################
+# Utilities for automatic DEM download                     #
+# Copyright (c) 2024, Caleb Kelly                          #
+# Author: Caleb Kelly  (2024)                              #
+############################################################
+
 import requests
 import os
 import warnings
