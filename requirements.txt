@@ -5,6 +5,7 @@ python
 tqdm
 beautifulsoup4
 xarray
+netCDF4
 # dask
 # dask[complete]
 # wget
