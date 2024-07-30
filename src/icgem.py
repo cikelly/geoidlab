@@ -8,6 +8,9 @@ import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import os
+from numpy import (
+    zeros
+)
 
 def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
     '''
@@ -54,6 +57,7 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
         print(f"Error fetching model URL: {e}")
         return
     
+    print(f'Downloading {model_name + '.gfc'} ...\n')
     # Ensure output directory exists
     os.makedirs('downloads', exist_ok=True)
     file_path = os.path.join('downloads', model_name + '.gfc')
@@ -61,17 +65,17 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
     # Check if file already exists and has the correct size
     if os.path.exists(file_path):
         if os.path.getsize(file_path) == int(response.headers.get('content-length', 0)):
-            print(f"Model {model_name} already downloaded.")
-            print(f"Path: {file_path}")
+            print(f"{model_name + '.gfc'} already exists and is complete.")
+            # print(f"Path: {file_path}")
             return
         else:
-            print(f"Model {model_name} already exists but is incomplete. Redownloading ...")
+            print(f"Model {model_name  + '.gfc'} already exists but is incomplete. Redownloading ...")
             os.remove(file_path)
         
     total_size = int(response.headers.get('content-length', 0))
     block_size = 1024  # 1 Kibibyte
 
-    with tqdm(total=total_size, unit='iB', unit_scale=True) as pbar:
+    with tqdm(total=total_size, unit='iB', desc=model_name, unit_scale=True) as pbar:
         try:
             with open(file_path, 'wb') as f:
                 for data in response.iter_content(block_size):
@@ -85,4 +89,74 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
             # if os.path.exists(file_path):
             #     os.remove(file_path)
 
-    print(f"Downloaded model saved to {file_path}")
+    print(f"\n{model_name + '.gfc'} saved to downloads")
+
+
+
+def read_icgem(icgem_file:str):
+    '''
+    Read spherical harmonic coefficients from an ICGEM .gfc file.
+
+    Parameters
+    ----------
+    icgem_file : str
+        The path to the ICGEM .gfc file.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the following keys:
+        - 'a'       : The reference radius.
+        - 'nmax'    : The maximum degree of expansion.
+        - 'GM'      : The Earth's gravitational constant.
+        - 'Cnm'     : A numpy array containing the cosine coefficients.
+        - 'Snm'     : A numpy array containing the sine coefficients.
+        - 'sCnm'    : A numpy array containing the formal cosine errors.
+        - 'sSnm'    : A numpy array containing the formal sine errors.
+        - 'tide_sys': The tide system used in the model.
+    '''
+    with open(icgem_file, 'r') as f:
+        data = f.readlines()
+    
+    ##### Read a, GM, nmax
+    keys = {
+        'earth_gravity_constant': float,
+        'radius': float,
+        'max_degree': int,
+        'tide_system': str
+    }
+
+    values = {}
+    for line in data:
+        for key, type_ in keys.items():
+            if key in line:
+                values[key] = type_(line.split()[1])
+
+    nmax = values.get('max_degree')
+
+    ##### Read Cnm, Snm, sCnm, sSnm
+    Cnm = zeros( (nmax+1, nmax+1) )
+    Snm = zeros( (nmax+1, nmax+1) )
+    sCnm = zeros( (nmax+1, nmax+1) )
+    sSnm = zeros( (nmax+1, nmax+1) )
+    for line in data:
+        if line.strip().startswith('gfc'):
+            line = line.split()
+            n = int(line[1])
+            m = int(line[2])
+            Cnm[n,m]  = float(line[3])
+            Snm[n,m]  = float(line[4]) 
+            sCnm[n,m] = float(line[5]) 
+            sSnm[n,m] = float(line[6])
+
+    shc             = {}
+    shc['a']        = values.get('radius')
+    shc['nmax']     = nmax
+    shc['GM']       = values.get('earth_gravity_constant')
+    shc['Cnm']      = Cnm
+    shc['Snm']      = Snm
+    shc['sCnm']     = sCnm
+    shc['sSnm']     = sSnm
+    shc['tide_sys'] = values.get('tide_system')
+
+    return shc
