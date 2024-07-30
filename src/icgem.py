@@ -71,17 +71,17 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
     total_size = int(response.headers.get('content-length', 0))
     block_size = 1024  # 1 Kibibyte
 
-    with tqdm(total=total_size, unit='iB', unit_scale=True, ncols=150) as t:
+    with tqdm(total=total_size, unit='iB', unit_scale=True) as pbar:
         try:
             with open(file_path, 'wb') as f:
                 for data in response.iter_content(block_size):
-                    t.update(len(data))
+                    pbar.update(len(data))
                     f.write(data)
-            if total_size != 0 and t.n != total_size:
+            if total_size != 0 and pbar.n != total_size:
                 print("ERROR, something went wrong during the download.")
         except Exception as e:
             print(f"Error during file write: {e}")
-            # # Optionally, remove partially downloaded file if an error occurs
+            
             # if os.path.exists(file_path):
             #     os.remove(file_path)
 
