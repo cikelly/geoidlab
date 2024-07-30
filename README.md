@@ -20,13 +20,13 @@ easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation.
       ```sh
       conda create -n geoid_env -y
       mamba install -c conda-forge easy-pygeoid -y
-      ```
+      
 - Test installation
   
-      ```
+      ```sh
       compute_geoid.py -h
       compute_reference_geoid.py -h
-      ```
+      
   
 ## Reference
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
