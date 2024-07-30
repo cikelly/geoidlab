@@ -1,5 +1,5 @@
 ############################################################
-# Fetching .gfc file from ICGEM                            #
+# Constants for gravity field modelling                    #
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
@@ -53,15 +53,25 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
     except requests.RequestException as e:
         print(f"Error fetching model URL: {e}")
         return
-
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 1024  # 1 Kibibyte
-
+    
     # Ensure output directory exists
     os.makedirs('downloads', exist_ok=True)
     file_path = os.path.join('downloads', model_name + '.gfc')
+    
+    # Check if file already exists and has the correct size
+    if os.path.exists(file_path):
+        if os.path.getsize(file_path) == int(response.headers.get('content-length', 0)):
+            print(f"Model {model_name} already downloaded.")
+            print(f"Path: {file_path}")
+            return
+        else:
+            print(f"Model {model_name} already exists but is incomplete. Redownloading ...")
+            os.remove(file_path)
+        
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024  # 1 Kibibyte
 
-    with tqdm(total=total_size, unit='iB', unit_scale=True) as t:
+    with tqdm(total=total_size, unit='iB', unit_scale=True, ncols=150) as t:
         try:
             with open(file_path, 'wb') as f:
                 for data in response.iter_content(block_size):
@@ -71,8 +81,8 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
                 print("ERROR, something went wrong during the download.")
         except Exception as e:
             print(f"Error during file write: {e}")
-            # Optionally, remove partially downloaded file if an error occurs
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            # # Optionally, remove partially downloaded file if an error occurs
+            # if os.path.exists(file_path):
+            #     os.remove(file_path)
 
     print(f"Downloaded model saved to {file_path}")
