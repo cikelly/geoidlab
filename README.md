@@ -15,7 +15,11 @@ easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation.
 - Uses a template file so that users do not have to interact with the scripts
 
 ## Installation
-- `conda -c conda-forge easy-pygeoid`
+```
+conda create -n geoid_env
+conda install -c conda-forge easy-pygeoid
+```
+- `conda install -c conda-forge easy-pygeoid`
 - `pip install easy-pygeoid`
   
 ## Reference
