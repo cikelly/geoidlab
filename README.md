@@ -19,5 +19,7 @@ easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation.
 - `pip install easy-pygeoid`
   
 ## Reference
-1. Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
+- Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113,](http://www.mdpi.com/2076-3263/7/4/113)
+
+
