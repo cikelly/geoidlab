@@ -68,9 +68,9 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
     if downloads_dir:
         os.makedirs(downloads_dir, exist_ok=True)
         # os.chdir(downloads_dir)
-        print(f'Downloading {filename} to {downloads_dir} ...')
+        print(f'Downloading {filename} to {downloads_dir} ...\n')
     else:
-        print(f'Downloading {filename} to {os.getcwd()} ...')
+        print(f'Downloading {filename} to {os.getcwd()} ...\n')
         
     response = requests.get(url, verify=False, stream=True)
     
@@ -92,7 +92,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
                     f.flush()
                     sys.stdout.flush()
         except Exception as e:
-            print(e)
+            print(f'{e}\n')
             return
                     
     return filename
