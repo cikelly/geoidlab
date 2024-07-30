@@ -20,7 +20,7 @@ easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation.
 ```bash
   conda create -n geoid_env -y
   mamba install -c conda-forge easy-pygeoid -y
-      
+```      
 - Test installation
   
       ```sh
