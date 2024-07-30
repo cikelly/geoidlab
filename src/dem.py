@@ -61,7 +61,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
             print(f'File {filename} already exists and is complete. Skip download\n')
             return filename
         else:
-            print(f'File {filename} already exists but is incomplete. Redownloading ...\n')
+            print(f'{filename} already exists but is incomplete. Redownloading ...\n')
             os.remove(filepath)
             
     if downloads_dir:
