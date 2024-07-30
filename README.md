@@ -14,6 +14,10 @@ easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation.
 - Automatically downloads a GGM from [ICGEM](https://icgem.gfz-potsdam.de/tom_longtime)
 - Uses a template file so that users do not have to interact with the scripts
 
+## Installation
+- `conda -c conda-forge easy-pygeoid`
+- `pip install easy-pygeoid`
+  
 ## Reference
-1. [Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): Towards the Selection of an Optimal Global Geopotential
+1. Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113,](http://www.mdpi.com/2076-3263/7/4/113)
