@@ -11,7 +11,7 @@ from numpy import (
 from coordinates import geo_lat2geocentric
  
 def ALF(phi, nmax=60, ellipsoid='wgs84'):
-    """
+    '''
     Compute associated Legendre functions
 
     Parameters
@@ -29,7 +29,7 @@ def ALF(phi, nmax=60, ellipsoid='wgs84'):
     (1) Holmes and Featherstone (2002): A unified approach to the Clenshaw 
     summation and the recursive computation of very high degree and order 
     normalised associated Legendre functions (Eqs. 11 and 12)
-    """
+    '''
 
     # Select ellipsoid parameters
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
@@ -67,7 +67,7 @@ def ALF(phi, nmax=60, ellipsoid='wgs84'):
 
     return Pnm
     
-def legendre_poly(theta, nmax=60):
+def legendre_poly(theta=None, t=None, nmax=60):
     '''
     Compute Legendre polynomials of the First Kind i.e., m=0
 
@@ -75,6 +75,7 @@ def legendre_poly(theta, nmax=60):
     ----------
     theta     : geodetic latitude (degrees)
     nmax      : maximum degree of expansion
+    t         : cosine of theta 
     
     Returns 
     -------
@@ -84,7 +85,18 @@ def legendre_poly(theta, nmax=60):
     ---------
     https://en.wikipedia.org/wiki/Legendre_polynomials
     '''
-    t     = cos(radians(theta))
+    if theta is None and t is None:
+        raise ValueError('Either theta or t must be provided')
+    
+    if theta is not None:
+        if not -90 <= theta <= 90:
+            raise ValueError('theta must be in the range [-90, 90]')
+        t = cos(radians(theta))
+    elif t is not None:
+        if not -1 <= t <= 1:
+            raise ValueError('t must be in the range [-1, 1]')
+    
+    # t     = cos(radians(theta))
     Pn    = zeros((nmax+1,))
     Pn[0] = 1
     Pn[1] = t
