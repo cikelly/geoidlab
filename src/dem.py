@@ -6,6 +6,7 @@
 
 import requests
 import os
+import sys
 import warnings
 import netCDF4
 import xarray as xr
@@ -13,6 +14,23 @@ import numpy as np
 from tqdm import tqdm
 
 warnings.simplefilter('ignore')
+
+def get_readme_path():
+    '''
+    Function to get the path of the README.V11.txt, which is required for automatic DEM download.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    readme_path   : absolute path of the README.V11.txt
+    '''
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    readme_path = os.path.join(script_dir, '../src/data/README.V11.txt')
+    
+    return os.path.abspath(readme_path)
 
 def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
     '''
@@ -49,25 +67,33 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
     if downloads_dir:
         os.makedirs(downloads_dir, exist_ok=True)
         # os.chdir(downloads_dir)
-        print(f'Downloading {os.path.join(downloads_dir, filename)} to {downloads_dir} ...')
+        print(f'Downloading {filename} to {downloads_dir} ...')
     else:
         print(f'Downloading {filename} to {os.getcwd()} ...')
         
-    response = requests.get(url, verify=False)
+    response = requests.get(url, verify=False, stream=True)
+    
     total_size = int(response.headers.get('content-length', 0))
     
-    
-    with open(filename, 'wb') as f, tqdm(
-        desc=filename,
+    with tqdm(
+        # desc=filename,
         total=total_size,
         unit='iB',
         unit_scale=True,
-        unit_divisor=1024,
+        dynamic_ncols=True
     ) as pbar:
-        for data in response.iter_content(chunk_size=1024):
-            size = f.write(data)
-            pbar.update(size)
-    
+        try:
+            with open(filepath, 'wb') as f:
+                for data in response.iter_content(chunk_size=1024):
+                    size = f.write(data)
+                    pbar.update(len(data))
+                    pbar.refresh()
+                    f.flush()
+                    sys.stdout.flush()
+        except Exception as e:
+            print(e)
+            return
+                    
     return filename
 
 def fetch_url(bbox):
@@ -85,13 +111,13 @@ def fetch_url(bbox):
     -------
     url           : url of the srtm30plus tile
     '''
-
+    readme_path = get_readme_path()
     # Define the base URL
     base_url = 'https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/'
 
     # Read the tile boundaries from the README file
     tiles = {}
-    with open('../src/data/README.V11.txt', 'r') as f:
+    with open(readme_path, 'r') as f:
         for line in f:
             parts = line.split()
             if len(parts) == 5 and parts[0][0] in 'we':
@@ -153,5 +179,7 @@ def dem4geoid(bbox, ncfile=None, bbox_off=2, downloads_dir=None):
     # Subset over bbox
     bbox_subset = [bbox[0] - bbox_off, bbox[1] - bbox_off, bbox[2] + bbox_off, bbox[3] + bbox_off]
     dem = ds.sel(x=slice(bbox_subset[0], bbox_subset[2]), y=slice(bbox_subset[1], bbox_subset[3]))
+    
+    print('DEM created successfully!\n')
     
     return dem
