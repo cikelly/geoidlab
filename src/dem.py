@@ -17,7 +17,7 @@ warnings.simplefilter('ignore')
 
 def get_readme_path():
     '''
-    Function to get the path of the README.V11.txt, which is required for automatic DEM download.
+    Function to get the path of README.V11.txt, which is required for automatic DEM download.
     
     Parameters
     ----------
