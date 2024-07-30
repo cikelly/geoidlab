@@ -34,6 +34,7 @@ def get_readme_path():
 
 def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
     '''
+    Download SRTM30PLUS from https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/
     
     Parameters
     ----------
@@ -95,6 +96,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
             return
                     
     return filename
+
 
 def fetch_url(bbox):
     '''
