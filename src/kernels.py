@@ -6,8 +6,11 @@
 
 from numpy import (
     sin, cos, radians, 
-    sqrt, log, array
+    sqrt, log, array,
+    zeros_like, degrees
 )
+
+from legendre import legendre_poly
 
 def stokes(comp_point, int_points):
     '''
@@ -54,7 +57,75 @@ def stokes(comp_point, int_points):
         
     return S, cos_psi
     
+
+def wong_and_gore(comp_point, int_points, nmax):
+    '''
+    Wong and Gore's modification of Stokes' function
     
+    Parameters
+    ----------
+    comp_point : array-like, shape (2,)
+                    [lon, lat] of computation point
+    int_points : array-like, shape (n, 2)
+                    [lon, lat] of integration points
+    nmax       : Maximum degree of expansion
+    
+    Returns
+    -------
+    S_wg      : Modified Stokes' function
+    '''
+    # Calculate original Stokes' function
+    S, cos_psi = stokes(comp_point, int_points)
+    
+    # Wong and Gore's modification
+    S_wg = zeros_like(cos_psi)
+    for i, t in enumerate(cos_psi):
+        Pn = legendre_poly(t=t, nmax=nmax)
+        sum_term = 0
+        for n in range(2, nmax + 1):
+            sum_term += (2 * n + 1) / (n - 1) * Pn[n]
+        S_wg[i] = S[i] - sum_term
+    
+    return S_wg
+
+def heck_and_gruninger(comp_point, int_points, psi_0, nmax):
+    '''
+    Heck and Gruninger's modification of Stokes' function
+    
+    Parameters
+    ----------
+    comp_point : array-like, shape (2,)
+                    [lon, lat] of computation point
+    int_points : array-like, shape (n, 2)
+                    [lon, lat] of integration points
+    psi_0      : spherical distance of the spherical cap
+    nmax       : Maximum degree of expansion
+    
+    Returns
+    -------
+    S_hg      : Heck and Gruninger's modification of Stokes' function
+    '''
+    # Calculate original Stokes' function
+    # S, cos_psi = stokes(comp_point, int_points)
+    
+    # Wong and Gore
+    S_wg = wong_and_gore(comp_point, int_points, nmax)
+    
+    # Stokes' function for a spherical cap (psi_0)
+    S_0, cos_psi_0 = stokes([0, degrees(psi_0)], array([[0, 0]]))
+    # Wong and Gore for spherical cap (psi_0)
+    t = cos_psi_0
+    Pn = legendre_poly(t=t, nmax=nmax)
+    S_wgL = 0
+    for n in range(2, nmax + 1):
+        S_wgL += (2 * n + 1) / (n - 1) * Pn[n]
+    
+    # Heck and Gruninger
+    S_hg = S_wg - (S_0 - S_wgL)
+    
+    return S_hg
+
+# For plotting purposes
 def stokes_func(sph_dist):
     '''
     Stokes' function for a given spherical distance
@@ -76,15 +147,3 @@ def stokes_func(sph_dist):
         3*cos(sph_dist)*log(sin(sph_dist/2) + sin(sph_dist/2)**2)
     
     return S
-    
-
-def wong_and_gore():
-    '''
-    '''
-    pass
-
-def heck_and_gruninger():
-    '''
-    '''
-    
-    
