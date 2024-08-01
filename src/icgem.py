@@ -30,15 +30,23 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
     '''
     base_url = "https://icgem.gfz-potsdam.de/tom_longtime"
     model_url_prefix = 'https://icgem.gfz-potsdam.de'
-
-    try:
+    file_path = os.path.join('downloads', model_name + '.gfc')
+    
+    # Check if file already exists
+    if os.path.exists(file_path):
+        try:
+            response = requests.get(base_url)
+            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
+            soup = BeautifulSoup(response.text, 'html.parser')
+        except requests.ConnectionError as e:
+            print(f"Cannot verify completeness of {model_name + '.gfc'} due to connectivity issues. Using the existing file.\n")
+            return file_path
+        except requests.RequestException as e:
+            raise requests.RequestException(f"Error fetching base URL: {e}")
+    else:
         response = requests.get(base_url)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
-    except requests.RequestException as e:
-        print(f"Error fetching base URL: {e}")
-        return
-
-    soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, 'html.parser')
     
     model_url = None
     for link in soup.find_all('a', href=True):
@@ -57,10 +65,9 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
         print(f"Error fetching model URL: {e}")
         return
     
-    print(f'Downloading {model_name + '.gfc'} ...\n')
     # Ensure output directory exists
     os.makedirs('downloads', exist_ok=True)
-    file_path = os.path.join('downloads', model_name + '.gfc')
+    # file_path = os.path.join('downloads', model_name + '.gfc')
     
     # Check if file already exists and has the correct size
     if os.path.exists(file_path):
