@@ -54,36 +54,39 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
     
     # Check if the file already exists
     if os.path.exists(filepath):
-        response_head = requests.head(url, verify=False)
-        total_size = int(response_head.headers.get('content-length', 0))
-
-        # Check if the existing file size matches the expected size
-        if os.path.getsize(filepath) == total_size:
-            print(f'File {filename} already exists and is complete. Skip download\n')
+        try:
+            response_head = requests.head(url, verify=False)
+            total_size = int(response_head.headers.get('content-length', 0))
+            # Check if the existing file size matches the expected size
+            if os.path.getsize(filepath) == total_size:
+                print(f'File {filename} already exists and is complete. Skip download\n')
+                return filename
+            else:
+                print(f'{filename} already exists but is incomplete. Redownloading ...\n')
+                os.remove(filepath)
+        except requests.exceptions.RequestException:
+            print(f'Unable to check if {filename} is complete. {filename} in {downloads_dir} will be used ...\n')
             return filename
-        else:
-            print(f'{filename} already exists but is incomplete. Redownloading ...\n')
-            os.remove(filepath)
             
     if downloads_dir:
         os.makedirs(downloads_dir, exist_ok=True)
-        # os.chdir(downloads_dir)
         print(f'Downloading {filename} to {downloads_dir} ...\n')
     else:
         print(f'Downloading {filename} to {os.getcwd()} ...\n')
+    
+    # Download NetCDF file
+    try:
+        response = requests.get(url, verify=False, stream=True)
+        total_size = int(response.headers.get('content-length', 0))
         
-    response = requests.get(url, verify=False, stream=True)
-    
-    total_size = int(response.headers.get('content-length', 0))
-    
-    with tqdm(
-        # desc=filename,
-        total=total_size,
-        unit='iB',
-        unit_scale=True,
-        dynamic_ncols=True
-    ) as pbar:
-        try:
+        with tqdm(
+            # desc=filename,
+            total=total_size,
+            unit='iB',
+            unit_scale=True,
+            dynamic_ncols=True
+        ) as pbar:
+            
             with open(filepath, 'wb') as f:
                 for data in response.iter_content(chunk_size=1024):
                     size = f.write(data)
@@ -91,9 +94,8 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
                     pbar.refresh()
                     f.flush()
                     sys.stdout.flush()
-        except Exception as e:
-            print(f'{e}\n')
-            return
+    except Exception as e:
+            raise RuntimeError(f'Download failed: {e}. Are you connected to the internet?')
                     
     return filename
 
