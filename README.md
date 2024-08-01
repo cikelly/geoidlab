@@ -32,4 +32,6 @@ compute_reference_geoid.py -h
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113,](http://www.mdpi.com/2076-3263/7/4/113)
 
+- Featherstone, W.E. (2003): [Software for computing five existing types of deterministically modified integration kernel for gravimetric geoid determination, Computers & Geosciences, 29(2)](http://linkinghub.elsevier.com/retrieve/pii/S0098300402000742)
 
+- Holmes, S.A. and Featherstone, W.E., (2022): [A unified approach to the Clenshaw summation and the recursive computation of very high degree and order normalised associated Legendre functions, Journal of Geodesy, 76(5), 279-299](https://link.springer.com/article/10.1007/s00190-002-0216-2)
