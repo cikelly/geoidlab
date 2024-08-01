@@ -11,8 +11,8 @@ from numpy import (
 )
 import copy
 
-def geo_lat2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None):
-    """
+def geodetic2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None):
+    '''
     Convert geodetic (geographic) latitude into geocentric latitude
     
     Parameters
@@ -30,7 +30,7 @@ def geo_lat2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None)
     ----------
     1. https://en.wikipedia.org/wiki/Geodetic_coordinates
     2. Physical Geodesy, Hofmann-Wellenhof and Moritz (2005)
-    """
+    '''
     if semi_major is None or semi_minor is None:
         ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
         a = ref_ellipsoid['semi_major']
@@ -38,3 +38,4 @@ def geo_lat2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None)
     
     phi_bar = arctan((b/a)**2 * tan(radians(phi)))
     return degrees(phi_bar)
+

@@ -9,10 +9,10 @@ from numpy import (
     zeros, sqrt, arctan, tan
 )
 import copy
-from coordinates import geo_lat2geocentric
+from coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84'):
-    """
+    r'''
     Estimate normal gravity of a point on the reference ellipsoid
 
     Parameters
@@ -33,7 +33,7 @@ def normal_gravity(phi, ellipsoid='wgs84'):
     1. Equation 4.41b, Page 147
     2. $a\gamma_b$ in Eq. 4.41b should be $a\gamma_a$
     3. This is correctly specified in the 4th Edition of the book.
-    """
+    '''
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
     a = ref_ellipsoid['semi_major']
     b = ref_ellipsoid['semi_minor']
@@ -111,7 +111,7 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84'):
 
 
 def ellipsoid_radius(phi, ellipsoid='wgs84'):
-    """
+    '''
     Define local ellipsoid radius (r)
 
     Parameters
@@ -121,14 +121,14 @@ def ellipsoid_radius(phi, ellipsoid='wgs84'):
     Returns
     -------
     r        : local ellipsoid radius
-    """
+    '''
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
-    semi_major = ref_ellipsoid['semi_major']
+    a = ref_ellipsoid['semi_major']
 
     e2 = ref_ellipsoid['e2']
     numerator = e2 * (1 - e2) * sin(radians(phi)) ** 2
     denominator = 1 - e2 * sin(radians(phi)) ** 2
 
-    r = semi_major * sqrt( 1 - numerator / denominator )
+    r = a * sqrt( 1 - numerator / denominator )
     
     return r
