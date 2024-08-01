@@ -43,11 +43,11 @@ class StokesCalculator:
         S_hg = S_wg - (S_0 - S_wgL)
         return S_hg
 
-# Example usage
-comp_point = [0, 0]
-int_points = np.array([np.linspace(-180, 180, 100), np.linspace(-90, 90, 100)]).T
-calculator = StokesCalculator(comp_point, int_points)
-S, cos_psi = calculator.stokes()
-S_wg = calculator.wong_and_gore(nmax=60)
-S_hg = calculator.heck_and_gruninger(psi_0=1, nmax=60)
-S_m = calculator.meissl(psi_0=1)
+# # Example usage
+# comp_point = [0, 0]
+# int_points = np.array([np.linspace(-180, 180, 100), np.linspace(-90, 90, 100)]).T
+# calculator = StokesCalculator(comp_point, int_points)
+# S, cos_psi = calculator.stokes()
+# S_wg = calculator.wong_and_gore(nmax=60)
+# S_hg = calculator.heck_and_gruninger(psi_0=1, nmax=60)
+# S_m = calculator.meissl(psi_0=1)
