@@ -30,9 +30,9 @@ compute_reference_geoid.py -h
   
 ## References
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
-Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113,](http://www.mdpi.com/2076-3263/7/4/113)
+Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
 
-- C. I. Kelly, S. A. Andam-Akorful, C. M. Hancock, P. B. Laari & J. Ayer (2021): [Global gravity models and the Ghanaian vertical datum: challenges of a proper definition, Survey Review, 53(376), 44–54,](https://doi.org/10.1080/00396265.2019.1684006)
+- C. I. Kelly, S. A. Andam-Akorful, C. M. Hancock, P. B. Laari & J. Ayer (2021): [Global gravity models and the Ghanaian vertical datum: challenges of a proper definition, Survey Review, 53(376), 44–54](https://doi.org/10.1080/00396265.2019.1684006)
 
 - Featherstone, W.E. (2003): [Software for computing five existing types of deterministically modified integration kernel for gravimetric geoid determination, Computers & Geosciences, 29(2)](http://linkinghub.elsevier.com/retrieve/pii/S0098300402000742)
 
