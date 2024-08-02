@@ -12,7 +12,7 @@ from numpy import (
     zeros
 )
 
-def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
+def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
     '''
     Download static gravity model from ICGEM
     
@@ -39,7 +39,7 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e'):
             response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
             soup = BeautifulSoup(response.text, 'html.parser')
         except requests.ConnectionError as e:
-            print(f"Cannot verify completeness of {model_name + '.gfc'} due to connectivity issues. Using the existing file.\n")
+            print(f"{model_name + '.gfc'} exists, but I cannot verify its completeness due to connectivity issues. Using the existing file.\n")
             return file_path
         except requests.RequestException as e:
             raise requests.RequestException(f"Error fetching base URL: {e}")
@@ -120,8 +120,15 @@ def read_icgem(icgem_file:str):
         - 'Snm'     : A numpy array containing the sine coefficients.
         - 'sCnm'    : A numpy array containing the formal cosine errors.
         - 'sSnm'    : A numpy array containing the formal sine errors.
-        - 'tide_sys': The tide system used in the model.
+        - 'tide_sys': The permanent tide system of the model.
     '''
+    # Download file if it does not exist
+    if not os.path.exists(icgem_file):
+        print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading ...\n')
+        model_name = icgem_file.split('/')[-1].split('.')[0]
+        download_ggm(model_name)
+        icgem_file = 'downloads/' + model_name + '.gfc'
+        
     with open(icgem_file, 'r') as f:
         data = f.readlines()
     
