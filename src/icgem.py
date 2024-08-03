@@ -44,9 +44,13 @@ def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
         except requests.RequestException as e:
             raise requests.RequestException(f"Error fetching base URL: {e}")
     else:
-        response = requests.get(base_url)
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        try:
+            response = requests.get(base_url)
+            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
+            soup = BeautifulSoup(response.text, 'html.parser')
+        except requests.ConnectionError as e:
+            # print('Please check your internet connection.')
+            raise requests.ConnectionError(f'Please check your internet connection. {e}')
     
     model_url = None
     for link in soup.find_all('a', href=True):
