@@ -7,7 +7,7 @@ import constants
 from numpy import (
     sin, cos, radians, 
     zeros, sqrt, arctan, tan,
-    degrees
+    degrees, pi
 )
 import copy
 
@@ -39,3 +39,69 @@ def geodetic2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None
     phi_bar = arctan((b/a)**2 * tan(radians(phi)))
     return degrees(phi_bar)
 
+def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
+    '''
+    Estimate the radial distance from the center of an ellipsoid to a point
+    
+    Parameters
+    ----------
+    phi       : geodetic latitude (degrees)
+    lambd     : geodetic longitude (degrees)
+    height    : height above ellipsoid (m)
+    
+    Returns
+    -------
+    N         : radial distance from center of sphere to point
+    X         : colatitude
+    Y         : longitude (same as geodetic longitude)
+    Z
+    '''
+    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    a = ref_ellipsoid['semi_major']
+    e2 = ref_ellipsoid['e2']
+    
+    phi = radians(phi)
+    lambd = radians(lambd)
+    
+    N = a / sqrt( 1 - (e2*sin(phi)**2) )
+    X = (N+height)*cos(phi)*cos(lambd)
+    Y = (N+height)*cos(phi)*sin(lambd)
+    Z = (N+height)*sin(phi)
+    
+    return N, X, Y, Z
+    
+def gedetic2spherical(phi, lambd, ellipsoid, height=0):
+    '''
+    Estimate the radial distance from the center of an ellipsoid to a point
+    
+    Parameters
+    ----------
+    phi       : geodetic latitude (degrees)
+    lambd     : geodetic longitude (degrees)
+    height    : height above ellipsoid (m)
+    
+    Returns
+    -------
+    r         : radial distance from center of sphere to point
+    vartheta  : colatitude
+    lambda    : longitude (same as geodetic longitude)
+    
+    Notes
+    -----
+    1. We estimate the polar angle (psi) from the XY-plane to the point (X,Y,Z).
+       This conversion is different from what you might see elsewhere, where
+       the angle is taken from the positive Z-axis to the point (X,Y,Z) -- 
+       example: https://en.wikipedia.org/wiki/Spherical_coordinate_system.
+    2. Because of our conversion, we need to estimate colatitude (vartheta) as
+       np.pi/2 - psi
+    2. In the case where the polar angle is taken from the positive Z-axis to 
+       the point, the polar angle is the same as the colatitude
+       
+    '''
+    _, X, Y, Z = geodetic2cartesian(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
+    
+    r = sqrt( X**2 + Y**2 + Z**2 )
+    psi = arctan( Z/sqrt(X**2 + Y**2)) # polar angle from the XY-plane to the point (X,Y,Z)
+    vartheta = pi/2 - psi # colatitude
+    
+    return r, vartheta, lambd
