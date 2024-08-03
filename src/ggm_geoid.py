@@ -53,16 +53,14 @@ def height_anomaly(
     a_e = ref_ellipsoid['semi_major']
     
     zonal_harmonics = ['C20', 'C40', 'C60', 'C80', 'C100']
-    Cnm = shc['Cnm']
     
     for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
-        Cnm[n,0] = Cnm[n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
-     # Update shc
-    shc[Cnm] = Cnm
+        shc['Cnm'][n,0] = shc['Cnm'][n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
     
     # Fully normalized associated Legendre functions
     r, vartheta, _ = co.gedetic2spherical(phi=lat, lambd=lon, height=height, ellipsoid=ellipsoid)
-    Pnm = ALF(phi=vartheta, nmax=nmax, ellipsoid=ellipsoid)
+    Pnm = ALF(phi=vartheta, nmax=nmax, ellipsoid=ellipsoid) 
+
     
     # Height anomaly
     
@@ -100,8 +98,8 @@ def reference_geoid(
     
     
     gamma_0 = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
-    gamma_Q = gravity.normal_gravity_above_ellipsoid(phi=lat, h=height, ellipsoid=ellipsoid)
-    # r_phi = gravity.ellipsoid_radius(lat, ellipsoid=ellipsoid)
+    # gamma_Q = gravity.normal_gravity_above_ellipsoid(phi=lat, h=height, ellipsoid=ellipsoid)
+    r_phi = gravity.ellipsoid_radius(lat, ellipsoid=ellipsoid)
     
     # Reference ellipsoid: remove the even zonal harmonics from sine and cosine cofficients.
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
@@ -109,13 +107,9 @@ def reference_geoid(
     a_e = ref_ellipsoid['semi_major']
     
     zonal_harmonics = ['C20', 'C40', 'C60', 'C80', 'C100']
-    Cnm = shc['Cnm']
     
     for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
-        Cnm[n,0] = Cnm[n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
-     # Update shc
-    shc[Cnm] = Cnm
+        shc['Cnm'][n,0] = shc['Cnm'][n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
     
     # Fully normalized associated Legendre functions
-    r, vartheta, _ = co.gedetic2spherical(phi=lat, lambd=lon, height=height, ellipsoid=ellipsoid)
-    Pnm = ALF(phi=vartheta, nmax=nmax, ellipsoid=ellipsoid)  
+    Pnm = ALF(phi=r_phi, nmax=nmax, ellipsoid=ellipsoid)  

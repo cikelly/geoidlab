@@ -1,5 +1,5 @@
 ############################################################
-# Constants for gravity field modelling                    #
+# Utilities downloading and reading ICGEM gfc format       #
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################

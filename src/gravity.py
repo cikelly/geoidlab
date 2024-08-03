@@ -6,9 +6,9 @@
 import constants
 from numpy import (
     sin, cos, radians, 
-    zeros, sqrt, arctan, tan
+    sqrt
 )
-import copy
+# import copy
 from coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84'):
@@ -22,7 +22,7 @@ def normal_gravity(phi, ellipsoid='wgs84'):
 
     Returns
     -------
-    gamma_0   : normal gravity of the point on the ellipsoid
+    gamma_0   : normal gravity of the point on the ellipsoid (m/s^2)
 
     Reference
     ---------
@@ -61,7 +61,7 @@ def normal_gravity_somigliana(phi, ellipsoid='wgs84'):
 
     Returns
     -------
-    gamma_0   : normal gravity of the point on the ellipsoid
+    gamma_0   : normal gravity of the point on the ellipsoid (m/s^2)
     
     Reference
     ---------
@@ -96,7 +96,7 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84'):
 
     Returns
     -------
-    gamma_0_h : normal gravity of the point above the ellipsoid (mgal)
+    gamma_h : normal gravity of a point above the ellipsoid (mgal)
     '''
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
     a = ref_ellipsoid['semi_major']
@@ -105,9 +105,9 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84'):
     
     gamma_0 = normal_gravity(phi=phi, ellipsoid=ellipsoid)
     
-    gamma_0_h = gamma_0 * (1 - 2/a*(1+f+m-2*f*sin(radians(phi))**2)*h + (3/a**2 * h**2))
-    gamma_0_h = gamma_0_h * 1e5 # m/s2 to mgal
-    return gamma_0_h
+    gamma_h = gamma_0 * (1 - 2/a*(1+f+m-2*f*sin(radians(phi))**2)*h + (3/a**2 * h**2))
+    gamma_h = gamma_h * 1e5 # m/s2 to mgal
+    return gamma_h
 
 
 def ellipsoid_radius(phi, ellipsoid='wgs84'):
@@ -132,3 +132,64 @@ def ellipsoid_radius(phi, ellipsoid='wgs84'):
     r = a * sqrt( 1 - numerator / denominator )
     
     return r
+
+def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84'):
+    '''
+    Free-air and Bouguer gravity anomalies of a point on the Earth's 
+    surface
+    
+    Parameters
+    ----------
+    lon              : longitude                (degrees)
+    lat              : latitude                 (degrees)
+    gravity          : gravity at the point     (m/s2)
+    elevation        : height above the geoid   (m)
+    ellipsoid        : Reference ellipsoid (wgs84 or grs80)
+    
+    Returns
+    -------
+    free_air_anomaly : free-air gravity anomaly (mgal)
+    bouguer_anomaly  : Bouguer gravity anomaly (mgal)
+    
+    Notes
+    -----
+    1. Source for atm_corr: Encyclopedia of Geophysics Pg. 566
+    2. Hofmann-Wellenhof & Moritz (2005): Physical Geodesy, 2nd edition, 
+       Chapter 3, Equations 3-24 to 3-26 (free-air) and 3-28 to 3-29 (bouguer)
+    '''
+    # Free-air and Bouguer gravity
+    free_air_gravity = gravity + 0.3086 * elevation
+    bouguer_gravity  = free_air_gravity - 0.1119 * elevation
+    
+    # normal gravity
+    gamma_0 = normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    gamma_0 = gamma_0 * 1e5 # m/s2 to mgal
+    
+    # Atmospheric correction
+    atm_corr = 0.874 - 9.9e-5 * elevation + 3.56e-9*elevation**2
+
+    # Gravity anomalies
+    free_air_anomaly = free_air_gravity - gamma_0 + atm_corr
+    bouguer_anomaly  = bouguer_gravity - gamma_0 + atm_corr
+    
+    return free_air_anomaly, bouguer_anomaly
+
+def gravity_reduction(gravity, elevation):
+    '''
+    Free-air and Bouguer gravity reductions
+    
+    Parameters
+    ----------
+    gravity          : gravity at the point (m/s2)
+    elevation        : height above the geoid (m)
+    
+    Returns
+    -------
+    free_air_gravity : free-air gravity (mgal)
+    bouguer_gravity  : Bouguer gravity (mgal)
+    '''
+    # Free-air and Bouguer gravity
+    free_air_gravity = gravity + 0.3086 * elevation
+    bouguer_gravity = free_air_gravity - 0.1119 * elevation
+    
+    return free_air_gravity, bouguer_gravity

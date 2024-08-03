@@ -6,10 +6,10 @@
 import constants
 from numpy import (
     sin, cos, radians, 
-    zeros, sqrt, arctan, tan,
+    sqrt, arctan, tan,
     degrees, pi
 )
-import copy
+# import copy
 
 def geodetic2geocentric(phi, ellipsoid='wgs84', semi_major=None, semi_minor=None):
     '''
@@ -54,7 +54,7 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     N         : radial distance from center of sphere to point
     X         : colatitude
     Y         : longitude (same as geodetic longitude)
-    Z
+    Z         :
     '''
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
     a = ref_ellipsoid['semi_major']
@@ -70,7 +70,7 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     
     return N, X, Y, Z
     
-def gedetic2spherical(phi, lambd, ellipsoid, height=0):
+def geodetic2spherical(phi, lambd, ellipsoid, height=0):
     '''
     Estimate the radial distance from the center of an ellipsoid to a point
     
@@ -94,9 +94,8 @@ def gedetic2spherical(phi, lambd, ellipsoid, height=0):
        example: https://en.wikipedia.org/wiki/Spherical_coordinate_system.
     2. Because of our conversion, we need to estimate colatitude (vartheta) as
        np.pi/2 - psi
-    2. In the case where the polar angle is taken from the positive Z-axis to 
+    3. In the case where the polar angle is taken from the positive Z-axis to 
        the point, the polar angle is the same as the colatitude
-       
     '''
     _, X, Y, Z = geodetic2cartesian(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
     
