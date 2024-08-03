@@ -8,7 +8,7 @@ from numpy import (
     sin, cos, radians, 
     zeros, sqrt
 )
-from coordinates import geo_lat2geocentric
+from coordinates import geodetic2geocentric
  
 def ALF(phi, nmax=60, ellipsoid='wgs84'):
     '''
@@ -37,7 +37,7 @@ def ALF(phi, nmax=60, ellipsoid='wgs84'):
     semi_minor = ref_ellipsoid['semi_minor']
 
     # Convert geodetic latitude to geocentric latitude
-    phi_bar = geo_lat2geocentric(phi, semi_major=semi_major, semi_minor=semi_minor)
+    phi_bar = geodetic2geocentric(phi, semi_major=semi_major, semi_minor=semi_minor)
     # phi_bar = phi
 
     # Calculate trigonometric values
