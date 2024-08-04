@@ -8,10 +8,13 @@ from legendre import ALF
 from shtools import replace_zonal_harmonics
 
 import coordinates as co
+import numpy as np
+
 import gravity
 import tide_system
 import icgem
 import constants
+
 
 
 def height_anomaly(
@@ -63,7 +66,7 @@ def height_anomaly(
     #     shc['Cnm'][n,0] = shc['Cnm'][n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
     
     # Fully normalized associated Legendre functions
-    r, vartheta, _ = co.gedetic2spherical(phi=lat, lambd=lon, height=height, ellipsoid=ellipsoid)
+    r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=height, ellipsoid=ellipsoid)
     Pnm = ALF(phi=vartheta, nmax=nmax, ellipsoid=ellipsoid) 
 
     
@@ -120,13 +123,49 @@ def reference_geoid(
     Pnm = ALF(phi=r_phi, nmax=nmax, ellipsoid=ellipsoid)  
     
     
-def gravity_anomaly(shc, ellipsoid='wgs84'):
+def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     '''
     Calculate gravity anomalies from global model
     
     Parameters
     ----------
+    shc       : Spherical Harmonic Coefficients (output of icgem.read_icgem())
+    grav_data : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+    ellipsoid : Reference ellipsoid
+    nmax      : Maximum spherical harmonic degree of expansion
     
     Returns
     -------
+    Dg        : Gravity anomaly (mGal)
     '''
+    if grav_data is None:
+        raise ValueError('Provide data with columns lon, lat, and elevation in order')
+    else:
+        lon = grav_data['lon']
+        lat = grav_data['lat']
+        h   = grav_data['elevation']    
+    r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
+    
+    if len(grav_data) > 1:
+        Pnm = np.zeros((len(vartheta), nmax+1, nmax+1))
+        
+    lon = np.radians(lon)
+    lat = np.radians(lat)
+    
+    Pnm = ALF(phi=vartheta, nmax=nmax, ellipsoid=ellipsoid)
+    
+    # Gravity anomalies
+    if grav_data is None:
+        Dg = np.zeros((len(lat), len(lon)))
+    else:
+        Dg = np.zeros(len(grav_data))
+        
+    for n in range(1, nmax+1):
+        sum = np.zeros(len(grav_data))
+        for m in range(n+1):
+            sum += (shc['Cnm'][n, m] * np.cos(m*lon)) + (shc['Snm'][n, m] * np.sin(m*lon)) * Pnm[n, m]
+        Dg += (n-1) * (shc['a'] / r) ** n * sum
+    
+    Dg = shc['GM'] / r ** 2 * Dg * 10**5 # mGal
+    
+    return Dg
