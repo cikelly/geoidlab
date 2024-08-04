@@ -118,3 +118,15 @@ def reference_geoid(
     
     # Fully normalized associated Legendre functions
     Pnm = ALF(phi=r_phi, nmax=nmax, ellipsoid=ellipsoid)  
+    
+    
+def gravity_anomaly(shc, ellipsoid='wgs84'):
+    '''
+    Calculate gravity anomalies from global model
+    
+    Parameters
+    ----------
+    
+    Returns
+    -------
+    '''
