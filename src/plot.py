@@ -129,3 +129,9 @@ def km2deg(km):
     Convert km to degrees
     '''
     return km / 111.11
+
+def plot_degree_variances():
+    '''
+    
+    '''
+    pass
