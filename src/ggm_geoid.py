@@ -5,11 +5,14 @@
 ############################################################
 
 from legendre import ALF
+from shtools import replace_zonal_harmonics
+
 import coordinates as co
 import gravity
 import tide_system
 import icgem
 import constants
+
 
 def height_anomaly(
     lon, lat, height=0, nmax=300,
@@ -48,14 +51,16 @@ def height_anomaly(
     # r_phi = gravity.ellipsoid_radius(lat, ellipsoid=ellipsoid)
     
     # Reference ellipsoid: remove the even zonal harmonics from sine and cosine cofficients.
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
-    GMe = ref_ellipsoid['GM']
-    a_e = ref_ellipsoid['semi_major']
+    shc = replace_zonal_harmonics(shc, ellipsoid=ellipsoid)
     
-    zonal_harmonics = ['C20', 'C40', 'C60', 'C80', 'C100']
+    # ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    # GMe = ref_ellipsoid['GM']
+    # a_e = ref_ellipsoid['semi_major']
     
-    for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
-        shc['Cnm'][n,0] = shc['Cnm'][n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
+    # zonal_harmonics = ['C20', 'C40', 'C60', 'C80', 'C100']
+    
+    # for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
+    #     shc['Cnm'][n,0] = shc['Cnm'][n,0] - ( shc['GM']/GMe) * (shc['a']/a_e )**2 * ref_ellipsoid[Cn0]
     
     # Fully normalized associated Legendre functions
     r, vartheta, _ = co.gedetic2spherical(phi=lat, lambd=lon, height=height, ellipsoid=ellipsoid)
