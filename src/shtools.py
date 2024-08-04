@@ -29,38 +29,93 @@ def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
     coefficients  = [['Cnm', 'Snm'], ['sCnm', 'sSnm']]
     variance_dict = {}
     
-    for i in range(len(coefficients)):
-        geoid   = zeros(shc1['nmax']+1)
-        degree  = zeros(shc1['nmax']+1)
-        anomaly = zeros(shc1['nmax']+1)
-        
-        C = shc1[coefficients[i][0]]
-        S = shc1[coefficients[i][1]]
-        
-        C2 = C ** 2
-        S2 = S ** 2
+    # for i in range(len(coefficients)):
+    geoid   = zeros(shc1['nmax']+1)
+    degree  = zeros(shc1['nmax']+1)
+    anomaly = zeros(shc1['nmax']+1)
+    
+    C = shc1['Cnm']
+    S = shc1['Snm']
+    
+    C2 = C ** 2
+    S2 = S ** 2
 
-        for n in range(1, shc1['nmax']+1):
-            sum = 0
-            for m in range(n+1):
-                sum += C2[n, m] + S2[n, m]
-            
-            geoid[n]   = sqrt(shc1['a']**2 * sum)
-            anomaly[n] = sqrt((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2 * sum)
-            
-            degree[n]  = n
+    for n in range(1, shc1['nmax']+1):
+        sum = 0
+        for m in range(n+1):
+            sum += C2[n, m] + S2[n, m]
         
-        # Assign to the appropriate keys in the variance_dict
-        if i == 0:
-            variance_dict['geoid'] = geoid
-            variance_dict['anomaly'] = anomaly
-        else:
-            variance_dict['error_geoid'] = geoid
-            variance_dict['error_anomaly'] = anomaly
-
+        geoid[n]   = sqrt(shc1['a']**2 * sum)
+        anomaly[n] = sqrt((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2 * sum)
+        
+        degree[n]  = n
+    
+    variance_dict['geoid'] = geoid
+    variance_dict['anomaly'] = anomaly
     variance_dict['degree'] = degree
 
     return variance_dict  
+
+def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
+    '''
+    Calculate geoid and anomaly error degree amplitude from spherical harmonic coefficients
+    
+    Parameters
+    ----------
+    shc                     : spherical harmonic coefficients (output of read_icgem)
+    replace_zonal_harmonics : Replace zonal harmonic coefficients (C[n,0])
+    
+    Returns
+    -------
+    variances               : Cumulative error variance (geoid and anomaly)
+    
+    Notes
+    -----
+    1. Torge, Müller & Pail (2023): Geodesy, 5 Edition
+            (a) Gravity anomaly error: (P. 341, Eq. 6.138)
+            (b) Geoid error: (P. 342, Eq. 6.139)
+    '''
+    shc1 = copy.deepcopy(shc)
+    
+    if replace_zonal:
+        shc1 = replace_zonal_harmonics(shc1, ellipsoid=ellipsoid)
+    ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
+    
+    variance_dict = {}
+    
+    geoid   = zeros(shc1['nmax']+1)
+    degree  = zeros(shc1['nmax']+1)
+    anomaly  = zeros(shc1['nmax']+1)
+    
+    dC = shc1['sCnm']
+    dS = shc1['sSnm']
+    
+    dC2 = dC ** 2
+    dS2 = dS ** 2
+
+    sum1 = 0
+    sum2 = 0
+    for n in range(1, shc1['nmax']+1):
+        sum = 0
+        for m in range(n+1):
+            sum += dC2[n, m] + dS2[n, m]
+        
+        sum1 += ((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2)*sum # anomaly
+        sum2 += shc1['a']**2 * sum                                       # geoid (m)
+        anomaly[n] = sum1
+        geoid[n]   = sum2
+        degree[n]  = n
+        
+    anomaly = sqrt(anomaly)
+    geoid   = sqrt(geoid)
+    
+    variance_dict['error_anomaly'] = anomaly
+    variance_dict['error_geoid']   = geoid * 100 # geoid (cm)
+
+    variance_dict['degree'] = degree
+
+    return variance_dict 
+
 
 def replace_zonal_harmonics(
         shc: dict[str, ndarray],
@@ -102,64 +157,3 @@ def replace_zonal_harmonics(
         shc['Cnm'][n, 0] = shc['Cnm'][n, 0] - (shc['GM'] / GMe) * (shc['a'] / a_e) ** 2 * ref_ellipsoid[Cn0]
 
     return shc
-
-def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
-    '''
-    Calculate geoid and anomaly error degree amplitude from spherical harmonic coefficients
-    
-    Parameters
-    ----------
-    shc                     : spherical harmonic coefficients (output of read_icgem)
-    replace_zonal_harmonics : Replace zonal harmonic coefficients (C[n,0])
-    
-    Returns
-    -------
-    variances               : Cumulative error variance (geoid and anomaly)
-    
-    Notes
-    -----
-    1. Torge, Müller & Pail (2023): Geodesy, 5 Edition
-            (a) Gravity anomaly error: (P. 341, Eq. 6.138)
-            (b) Geoid error: (P. 342, Eq. 6.139)
-    '''
-    shc1 = copy.deepcopy(shc)
-    
-    if replace_zonal:
-        shc1 = replace_zonal_harmonics(shc1, ellipsoid=ellipsoid)
-    ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
-    
-    variance_dict = {}
-    
-    
-    geoid   = zeros(shc1['nmax']+1)
-    degree  = zeros(shc1['nmax']+1)
-    anomaly  = zeros(shc1['nmax']+1)
-    
-    dC = shc1['sCnm']
-    dS = shc1['sSnm']
-    
-    dC2 = dC ** 2
-    dS2 = dS ** 2
-
-    sum1 = 0
-    sum2 = 0
-    for n in range(1, shc1['nmax']+1):
-        sum = 0
-        for m in range(n+1):
-            sum += dC2[n, m] + dS2[n, m]
-        
-        sum1 += ((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2)*sum # anomaly
-        sum2 += shc1['a']**2 * sum                                       # geoid (m)
-        anomaly[n] = sum1
-        geoid[n]   = sum2
-        degree[n]  = n
-        
-    anomaly = sqrt(anomaly)
-    geoid   = sqrt(geoid)
-    
-    variance_dict['error_anomaly'] = anomaly
-    variance_dict['error_geoid']   = geoid * 100 # geoid (cm)
-
-    variance_dict['degree'] = degree
-
-    return variance_dict 
