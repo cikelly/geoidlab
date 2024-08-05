@@ -6,7 +6,14 @@
 import pandas as pd
 import numpy as np
 
-class TideSystemConverter:
+import constants
+from numpy import (
+    sin, cos, radians, 
+    zeros, sqrt, arctan, tan
+)
+from coordinates import geo_lat2geocentric
+
+class GravityTideSystemConverter:
     '''
     Convert between different permanet tide systems
     
@@ -113,53 +120,69 @@ class TideSystemConverter:
         
         return data
     
-    # TO DO: Add other methods for other tide systems
+class GeoidTideSystemConverter:
+    '''
+    Convert between different permanet tide systems
     
+    Parameters
+    ----------
+    path_to_data      : path to data file
+    data              : numpy array or Pandas DataFrame or dict
+                        (lon, lat, elevation, gravity)
     
-    # def geoid_mean2free(self):
-    #     '''
-    #     Convert free tide to mean tide system for geoid data
+    Methods
+    -------
+    geoid_mean2zero   : Mean tide geoid to zero tide geoid
+    geoid_mean2free   : Mean tide geoid to free tide geoid
+    
+    Attributes
+    ----------
+    phi               : Geodetic latitude (degrees).
+    geoid             : Geoid heights.
+    ellipsoid         : reference ellipsoid ('wgs84' or 'grs80').
+    semi_major        : Semi-major axis of the ellipsoid.
+    semi_minor        : Semi-minor axis of the ellipsoid.
+    varphi            : Geocentric latitude.
+    '''
+    def __init__(self, phi, geoid=None, ellipsoid='wgs84'):
+        '''
+        Initialize 
         
-    #     References
-    #     ----------
-    #     1. Tenzer et al. (2010): Assessment of the LVD offsets for the normal-orthometric 
-    #                             heights and different permanent tide systems—A case study of New Zealand
-    #                             http://link.springer.com/10.1007/s12518-010-0038-5
-                                
-    #     2. Ekman (1989)        : Impacts of geodynamic phenomena on systems for height and gravity
-    #                             http://www.springerlink.com/index/10.1007/BF02520477
-    #     '''
-    #     # Code for conversion goes here
-    #     pass
-    
-    # def gravity_free2mean(self):
-    #     '''
-    #     Convert free tide to mean tide system for gravity data
+        Parameters
+        ----------
+        phi       : geodetic latitude (degrees)
+        geoid     : geoid model (output of ggm_tools.reference_geoid())
+        ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+        '''
         
-    #     References
-    #     ----------
-    #     1. Tenzer et al. (2010): Assessment of the LVD offsets for the normal-orthometric 
-    #                             heights and different permanent tide systems—A case study of New Zealand
-    #                             http://link.springer.com/10.1007/s12518-010-0038-5
-                                
-    #     2. Ekman (1989)        : Impacts of geodynamic phenomena on systems for height and gravity
-    #                             http://www.springerlink.com/index/10.1007/BF02520477
-    #     '''
-    #     # Code for conversion goes here
-    #     pass
+        self.phi   = phi
+        self.geoid = geoid
+        self.ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+        self.semi_major = self.ellipsoid['semi_major']
+        self.semi_minor = self.ellipsoid['semi_minor']
+        self.varphi = geo_lat2geocentric(self.phi, self.semi_major, self.semi_minor)
     
-    # def geoid_free2mean(self):
-    #     '''
-    #     Convert free tide to mean tide system for geoid data
+    def geoid_mean2zero(self):
+        '''
+        Convert geoid in mean tide system to zero tide system
         
-    #     References
-    #     ----------
-    #     1. Tenzer et al. (2010): Assessment of the LVD offsets for the normal-orthometric 
-    #                             heights and different permanent tide systems—A case study of New Zealand
-    #                             http://link.springer.com/10.1007/s12518-010-0038-5
-                                
-    #     2. Ekman (1989)        : Impacts of geodynamic phenomena on systems for height and gravity
-    #                             http://www.springerlink.com/index/10.1007/BF02520477
-    #     '''
-    #     # Code for conversion goes here
-    #     pass
+        Returns
+        -------
+        Nzero     : numpy array of geoid heights in zero tide system (m)
+        '''
+        if self.geoid is None:
+            raise ValueError('Please provide geoid heights.')
+        return self.geoid - ( -0.198 * (3/2 * sin(radians(self.varphi))**2 - 1/2) )
+        
+    def geoid_mean2free(self):
+        '''
+        Convert geoid in mean tide system to free tide system
+        
+        Returns
+        -------
+        Nfree     : numpy array of geoid heights in free tide system (m)
+        '''
+        if self.geoid is None:
+            raise ValueError('Please provide geoid heights.')
+        k = 0.3 # Love number
+        return self.geoid - ( (1+k) * (-0.198) * (3/2 * sin(radians(self.varphi))**2 - 1/2) )
