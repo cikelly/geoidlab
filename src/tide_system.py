@@ -7,10 +7,10 @@ import pandas as pd
 import numpy as np
 
 import constants
-from numpy import (
-    sin, cos, radians, 
-    zeros, sqrt, arctan, tan
-)
+# from numpy import (
+#     sin, cos, radians, 
+#     zeros, sqrt, arctan, tan
+# )
 from coordinates import geo_lat2geocentric
 
 class GravityTideSystemConverter:
@@ -172,7 +172,7 @@ class GeoidTideSystemConverter:
         '''
         if self.geoid is None:
             raise ValueError('Please provide geoid heights.')
-        return self.geoid - ( -0.198 * (3/2 * sin(radians(self.varphi))**2 - 1/2) )
+        return self.geoid - ( -0.198 * (3/2 * np.sin(np.radians(self.varphi))**2 - 1/2) )
         
     def geoid_mean2free(self):
         '''
@@ -185,4 +185,4 @@ class GeoidTideSystemConverter:
         if self.geoid is None:
             raise ValueError('Please provide geoid heights.')
         k = 0.3 # Love number
-        return self.geoid - ( (1+k) * (-0.198) * (3/2 * sin(radians(self.varphi))**2 - 1/2) )
+        return self.geoid - ( (1+k) * (-0.198) * (3/2 * np.sin(np.radians(self.varphi))**2 - 1/2) )
