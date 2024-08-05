@@ -17,8 +17,8 @@ def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
     Parameters
     ----------
     phi       : geodetic latitude (degrees)
-    vartheta  : colatitude (degrees)
     lambd     : geodetic longitude (degrees)
+    vartheta  : colatitude (radians)
     nmax      : maximum degree of expansion
     ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
     
@@ -42,11 +42,13 @@ def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
         phi_bar = vartheta
     elif phi is not None:
         _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
-        phi_bar = degrees(phi_bar)
+        # phi_bar = degrees(phi_bar)
     
     # sine (u) and cosine (t) terms
-    t = cos(radians(phi_bar))
-    u = sin(radians(phi_bar))
+    # t = cos(radians(phi_bar))
+    # u = sin(radians(phi_bar))
+    t = cos(phi_bar)
+    u = sin(phi_bar)
 
     # Initialize the Pnm array
     Pnm = zeros((nmax + 1, nmax + 1))
@@ -110,6 +112,64 @@ def legendre_poly(theta=None, t=None, nmax=60):
     
     return Pn
 
+def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
+    '''
+    Compute associated Legendre functions for multiple points
+
+    Parameters
+    ----------
+    phi       : geodetic latitude (degrees)
+    lambd     : geodetic longitude (degrees)
+    vartheta  : colatitude (radians)
+    nmax      : maximum degree of expansion
+    ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+    
+    Returns
+    -------
+    Pnm       : Fully normalized Associated Legendre functions
+    
+    References
+    ----------
+    (1) Holmes and Featherstone (2002): A unified approach to the Clenshaw 
+    summation and the recursive computation of very high degree and order 
+    normalised associated Legendre functions (Eqs. 11 and 12)
+    '''
+    if phi is None and vartheta is None:
+        raise ValueError('Either phi or vartheta must be provided')
+    
+    if lambd is None and vartheta is None:
+        raise ValueError('Please provide lambd')
+    
+    if vartheta is not None: 
+        phi_bar = vartheta
+    elif phi is not None:
+        _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
+    
+    t = cos(phi_bar)
+    u = sin(phi_bar)
+
+    if vartheta is not None:
+        Pnm = zeros((len(vartheta), nmax + 1, nmax + 1))
+    elif phi is not None:
+        Pnm = zeros((len(phi), nmax + 1, nmax + 1))
+        
+    Pnm[:, 0, 0] = 1.0
+
+    if nmax >= 1:
+        Pnm[:, 1, 0] = sqrt(3.0) * t
+        Pnm[:, 1, 1] = sqrt(3.0) * u
+
+    for n in range(2, nmax + 1):
+        for m in range(0, n):
+            a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+            b_nm = 0.
+            if n - m - 1 >= 0:
+                b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+            Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
+        # Sectoral harmonics (n = m)
+        Pnm[:, n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
+
+    return Pnm
 
 # def ALF(phi=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
 #     '''
