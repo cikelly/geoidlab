@@ -15,7 +15,7 @@ def plot_gravity_anomaly(
     which='both', colormap='jet',
     ellipsoid='wgs84', interp='nearest',
     figsize=(12, 6), save=False, step=1,
-    origin='lower'
+    origin='lower', plot_interp=None
 ):
     '''
     Plot the free-air and Bouguer gravity anomaly
@@ -36,6 +36,7 @@ def plot_gravity_anomaly(
     save         : save the figure
     step         : step size for gridding the data (km)
     origin       : 'lower' or 'upper'
+    plot_interp  : Interpolation method for imshow
     
     Returns
     -------
@@ -98,10 +99,10 @@ def plot_gravity_anomaly(
     if which == 'both':
         fig, axs = plt.subplots(1, 2, figsize=figsize)
         
-        im = axs[0].imshow(freeAir, cmap=colormap, extent=extent, origin=origin)
+        im = axs[0].imshow(freeAir, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp)
         fig.colorbar(im, ax=axs[0], shrink=0.7, label='Gravity anomaly (mGal)')
         
-        im = axs[1].imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin)
+        im = axs[1].imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp)
         fig.colorbar(im, ax=axs[1], shrink=0.7, label='Gravity anomaly (mGal)')
         titles = ['Free-air', 'Bouguer']
         _ = [axs[i].set_title(titles[i], fontweight='bold') for i in range(2)]
@@ -110,14 +111,14 @@ def plot_gravity_anomaly(
             plt.savefig('gravity_anomalies.png', dpi=300, bbox_inches='tight')
         plt.show()
     elif which == 'free_air':
-        plt.imshow(freeAir, cmap=colormap, extent=extent, origin=origin)
+        plt.imshow(freeAir, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp)
         plt.title('Free-air', fontweight='bold')
         plt.colorbar(shrink=.95, label='Gravity anomaly (mGal)')
         if save:
             plt.savefig('gravity_anomalies.png', dpi=300, bbox_inches='tight')
         plt.show()
     else:
-        plt.imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin)
+        plt.imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp)
         plt.title('Bouguer', fontweight='bold')
         plt.colorbar(shrink=.95, label='Gravity anomaly (mGal)')
         if save:
