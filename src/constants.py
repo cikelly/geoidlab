@@ -72,20 +72,20 @@ def wgs84():
     Returns
     -------
     dict
-        semi_major: semi-major axis (m)
-        semi_minor: semi-minor axis (m)
-        GM        : geocentric gravitational constant (m**3 s**-2)
-        w         : angular velocity of the earth (rad s**-1)
-        E         : linear eccentricity
-        c         : polar radius of curvature (m)
-        e         : first eccentricity
-        e2        : first eccentricity squared
-        ep2       : second eccentricity squared
-        f         : flattening
-        U0        : normal potential at the ellipsoid (m**2 s**-2)
-        m         : w**2a**2b/(GM)
-        gamma_a   : normal gravity at the equator (m s**-2)
-        gamma_b   : normal gravity at the pole (m s**-2)
+        semi_major  : semi-major axis (m)
+        semi_minor  : semi-minor axis (m)
+        GM          : geocentric gravitational constant (m**3 s**-2)
+        w           : angular velocity of the earth (rad s**-1)
+        E           : linear eccentricity
+        c           : polar radius of curvature (m)
+        e           : first eccentricity
+        e2          : first eccentricity squared
+        ep2         : second eccentricity squared
+        f           : flattening
+        U0          : normal potential at the ellipsoid (m**2 s**-2)
+        m           : w**2a**2b/(GM)
+        gamma_a     : normal gravity at the equator (m s**-2)
+        gamma_b     : normal gravity at the pole (m s**-2)
     """
 
     wgs84 = {
