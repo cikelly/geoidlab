@@ -13,8 +13,8 @@ def grs80():
     Returns
     -------
     dict
-        semi_major: semi-major axis (m)
-        semi_minor: semi-minor axis (m)
+        semi_major  : semi-major axis (m)
+        semi_minor  : semi-minor axis (m)
         GM          : geocentric gravitational constant (m**3 s**-2)
         J2          : dynamical form factor of the Earth 
         w           : angular velocity of the earth (rad s**-1)
