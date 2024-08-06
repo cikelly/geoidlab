@@ -38,6 +38,8 @@ compute_reference_geoid.py -h
   ensure that they are free-air anomalies
 - Call `compute_geoid.py --start [step]`
 
+See the [tutorial repo](https://github.com/cikelly/easy-pygeoid-tutorial) for examples of using `easy-pygeoid`.
+
 ## References
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
