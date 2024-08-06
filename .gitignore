@@ -8,3 +8,4 @@ downloads
 Gravity Anomalies.csv
 mean_tide_gravity_ghana.csv
 MeanTideGravity.csv
+*.ipynb
