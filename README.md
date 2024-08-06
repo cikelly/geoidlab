@@ -1,6 +1,6 @@
 # easy-pygeoid
 
-easy-pygeoid is a Python package developed for easy geoid modelling. 
+`easy-pygeoid` is a Python package developed for easy geoid modelling. 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
 
 - the original Stokes' kernel
@@ -9,20 +9,20 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Terrain correction
 - Residual Terrain Modeling (RTM)
 
-easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
+`easy-pygeoid` uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
 
 - Automatically downloads [SRTM30PLUS](https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/) over the bounding box of interest
 - Automatically downloads a GGM from [ICGEM](https://icgem.gfz-potsdam.de/tom_longtime)
 - Uses a template file so that users do not have to interact with the scripts
 
 ## Installation
-- easy-pygeoid can be installed using conda/mamba or pip.
+`easy-pygeoid` can be installed using conda/mamba or pip.
   
 ```
 conda create -n geoid_env -y
 mamba install -c conda-forge easy-pygeoid -y
 ```      
-- Test installation
+Test installation
 
 ```
 compute_geoid.py -h
