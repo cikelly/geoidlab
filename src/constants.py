@@ -113,4 +113,20 @@ def wgs84():
     }
     return wgs84
     
-
+def earth():
+    '''
+    Constants for Earth/Geoid
+    
+    References
+    ----------
+    1. Gravity potential (W0) of the geoid:
+        a. Sanchez et al. (2016), A conventional value for the geoid reference potential W0.
+           Journal of Geodesy, 90, 815-835
+        b. Sanchez & Sideris (2017), Vertical datum unification for the International Height Reference System (IHRS). 
+           Geophysical journal international, 209, 570–586
+    '''
+    
+    earth = {
+        'W0'        : 62_636_853.40,  # m**2 s**-2
+        'radius'    : 6_371_000,      # m
+    }

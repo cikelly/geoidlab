@@ -126,22 +126,47 @@ def reference_geoid(
     
     return
 
-def zero_order_term(geoid=None, ellipsoid='wgs84'):
+def zero_degree_term(lat, shc=None, GM=None, geoid=None, ellipsoid='wgs84'):
     '''
-    Add zero-order term to the GGM geoid
+    Add zero-degree term to the GGM geoid
     
     Parameters
     ----------
+    lat        : Geodetic latitude of point(s) (degrees)
+    shc        : Spherical Harmonic Coefficients (output of icgem.read_icgem())
+    GM         : Gravity constant of the GGM
     geoid      : Geoid model (output of ggm_tools.reference_geoid())
     ellipsoid  : Reference ellipsoid (wgs84 or grs80)
     
     Returns
     -------
-    N          : Geoid corrected for zero-order term
+    N          : Geoid corrected for zero-degree term
     
-    Notes
-    -----
+    Reference
+    ---------
+    Hofmann-Wellenhof & Moritz (2006): Physical Geodesy, Eq. 2–356, p. 113
     '''
+    if geoid is None:
+        raise ValueError('Please provide geoid')
+    
+    if shc is None and GM is None:
+        raise ValueError('Please provide shc (output of icgem.read_icgem()) or GM from GGM')
+    
+    if shc is not None:
+        GM = shc['GM']
+    
+    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    GMe = ref_ellipsoid['GM']
+    U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
+    
+    W0  = constants.earth('W0')
+    R   = constants.earth('R')
+    
+    gamma_0 = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    
+    N = geoid + ( (GM - GMe) / R - (W0 - U0) ) / gamma_0 
+    
+    return N
     
 def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     '''
