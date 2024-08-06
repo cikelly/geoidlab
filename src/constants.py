@@ -15,22 +15,22 @@ def grs80():
     dict
         semi_major: semi-major axis (m)
         semi_minor: semi-minor axis (m)
-        GM        : geocentric gravitational constant (m**3 s**-2)
-        J2        : dynamical form factor of the Earth 
-        w         : angular velocity of the earth (rad s**-1)
-        E         : linear eccentricity
-        c         : polar radius of curvature (m)
-        e2        : first eccentricity squared
-        ep2       : second eccentricity squared
-        f         : flattening
-        1/f       : reciprocal flattening
-        U0        : normal potential at the ellipsoid (m**2 s**-2)
-        J4        : spherical harmonic coefficient
-        J6        : spherical harmonic coefficient
-        J8        : spherical harmonic coefficient
-        m         : w**2a**2b/(GM)
-        gamma_a   : normal gravity at the equator (m s**-2)
-        gamma_b   : normal gravity at the pole (m s**-2)
+        GM          : geocentric gravitational constant (m**3 s**-2)
+        J2          : dynamical form factor of the Earth 
+        w           : angular velocity of the earth (rad s**-1)
+        E           : linear eccentricity
+        c           : polar radius of curvature (m)
+        e2          : first eccentricity squared
+        ep2         : second eccentricity squared
+        f           : flattening
+        1/f         : reciprocal flattening
+        U0          : normal potential at the ellipsoid (m**2 s**-2)
+        J4          : spherical harmonic coefficient
+        J6          : spherical harmonic coefficient
+        J8          : spherical harmonic coefficient
+        m           : w**2a**2b/(GM)
+        gamma_a     : normal gravity at the equator (m s**-2)
+        gamma_b     : normal gravity at the pole (m s**-2)
     """
 
     grs80 = {
