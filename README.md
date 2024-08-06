@@ -7,6 +7,7 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Wong and Gore's modification of Stokes' kernel
 - Heck and Gruninger's modification of Stokes' kernel
 - Terrain correction
+- Residual Terrain Modeling (RTM)
 
 easy-pygeoid uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
 
@@ -27,7 +28,16 @@ mamba install -c conda-forge easy-pygeoid -y
 compute_geoid.py -h
 compute_reference_geoid.py -h
 ```
-  
+## Examples
+- Prepare data: This includes all relevant data for your study area
+  Terrestrial gravity data
+  Marine gravity data
+  Global Geopotential Model (GGM). `easy-pygeoid` can automatically download this. Just provide the name of the GGM in the template file
+  Digital Elevation Model (DEM). `easy-pygeoid` presently downloads SRTM30PLUS
+- Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
+  ensure that they are free-air anomalies
+- Call `compute_geoid.py --start [step]`
+
 ## References
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
