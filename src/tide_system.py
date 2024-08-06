@@ -7,10 +7,6 @@ import pandas as pd
 import numpy as np
 
 import constants
-# from numpy import (
-#     sin, cos, radians, 
-#     zeros, sqrt, arctan, tan
-# )
 from coordinates import geo_lat2geocentric
 
 class GravityTideSystemConverter:
