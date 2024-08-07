@@ -11,3 +11,4 @@ MeanTideGravity.csv
 *.ipynb
 Notebooks
 classes
+*.mat
