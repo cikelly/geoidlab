@@ -156,7 +156,7 @@ class GeoidTideSystemConverter:
         self.ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
         self.semi_major = self.ellipsoid['semi_major']
         self.semi_minor = self.ellipsoid['semi_minor']
-        self.varphi = geo_lat2geocentric(self.phi, self.semi_major, self.semi_minor)
+        self.varphi = geodetic2geocentric(self.phi, self.semi_major, self.semi_minor)
     
     def geoid_mean2zero(self):
         '''
