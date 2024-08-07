@@ -212,7 +212,7 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
                 h = np.zeros(len(lat))
                 
     r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
-    
+    # print(r)
     # if len(grav_data) > 1:
     #     Pnm = np.zeros((len(vartheta), nmax+1, nmax+1))
         
