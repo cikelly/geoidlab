@@ -231,7 +231,7 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
         r=r, Pnm=Pnm, nmax=nmax
     )
     
-    return pd.Series(Dg, index=grav_data.index)
+    return pd.Series(Dg)
 
 @jit(nopython=True)
 def gravity_anomaly_numba(Cnm, Snm, lon, a, GM, r, Pnm, nmax):
