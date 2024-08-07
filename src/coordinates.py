@@ -66,7 +66,8 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     N = a / sqrt( 1 - (e2*sin(phi)**2) )
     X = (N+height)*cos(phi)*cos(lambd)
     Y = (N+height)*cos(phi)*sin(lambd)
-    Z = (N+height)*sin(phi)
+    # Z = (N+height)*sin(phi)
+    Z = (N*(1-e2)+height)*sin(phi)
     
     return N, X, Y, Z
     

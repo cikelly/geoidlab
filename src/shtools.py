@@ -154,6 +154,6 @@ def replace_zonal_harmonics(
     for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
         if Cn0 not in ref_ellipsoid:
             raise KeyError(f"{Cn0} coefficient not found in the reference ellipsoid")
-        shc['Cnm'][n, 0] = shc['Cnm'][n, 0] - (shc['GM'] / GMe) * (shc['a'] / a_e) ** 2 * ref_ellipsoid[Cn0]
+        shc['Cnm'][n, 0] = shc['Cnm'][n, 0] - (GMe / shc['GM']) * (a_e / shc['a']) ** n * ref_ellipsoid[Cn0]
 
     return shc

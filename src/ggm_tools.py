@@ -6,6 +6,7 @@
 
 from legendre import ALF, ALFsGravityAnomaly
 from shtools import replace_zonal_harmonics
+from numba import jit
 
 import coordinates as co
 import numpy as np
@@ -170,7 +171,7 @@ def zero_degree_term(lat, shc=None, GM=None, geoid=None, ellipsoid='wgs84'):
     
 def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     '''
-    Calculate gravity anomalies from global model
+    Wrapper function to handle data and call the Numba-optimized function
     
     Parameters
     ----------
@@ -202,35 +203,63 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
         elif isinstance(grav_data, pd.DataFrame):
             lon_column = [col for col in grav_data.columns if pd.Series(col).str.contains('lon', case=False).any()][0]
             lat_column = [col for col in grav_data.columns if pd.Series(col).str.contains('lat', case=False).any()][0]
-            lon = grav_data[lon_column]
-            lat = grav_data[lat_column]
+            lon = grav_data[lon_column].values
+            lat = grav_data[lat_column].values
             try:
                 elev_column = [col for col in grav_data.columns if pd.Series(col).str.contains(r'elev|height', case=False).any()][0]
-                h = grav_data[elev_column]
+                h = grav_data[elev_column].values
             except IndexError:
                 print('Looks like there is no elevation column. Setting elevation to 0')
                 h = np.zeros(len(lat))
                 
     r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
-    # print(r)
-    # if len(grav_data) > 1:
-    #     Pnm = np.zeros((len(vartheta), nmax+1, nmax+1))
         
     lon = np.radians(lon)
     lat = np.radians(lat)
     
     Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
     
-    # Gravity anomalies
-    Dg = np.zeros(len(grav_data))
-        
-    for n in range(1, nmax+1):
-        sum = np.zeros(len(grav_data))
-        for m in range(n+1):
-            # sum += (shc['Cnm'][n, m] * np.cos(m*lon)) + (shc['Snm'][n, m] * np.sin(m*lon)) * Pnm[n, m]
-            sum += (shc['Cnm'][n, m] * np.cos(m*lon)) + (shc['Snm'][n, m] * np.sin(m*lon)) * Pnm[:, n, m]
-        Dg += (n-1) * (shc['a'] / r) ** n * sum
+   
+    Cnm = np.array(shc['Cnm'])
+    Snm = np.array(shc['Snm'])
+    a   = shc['a']
+    Gm  = shc['GM']
     
-    Dg = shc['GM'] / r ** 2 * Dg * 10**5 # mGal
+    Dg = gravity_anomaly_numba(
+        Cnm=Cnm, Snm=Snm, 
+        lon=lon, a=a, GM=Gm, 
+        r=r, Pnm=Pnm, nmax=nmax
+    )
+    
+    return pd.Series(Dg, index=grav_data.index)
+
+@jit(nopython=True)
+def gravity_anomaly_numba(Cnm, Snm, lon, a, GM, r, Pnm, nmax):
+    '''
+    Calculate gravity anomalies from global model using Numba for optimization
+    
+    Parameters
+    ----------
+    Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+    lon      : Longitude (1D arrays)
+    a        : Reference radius 
+    GM       : Gravitational constant times the mass of the Earth
+    r        : Radial distance (1D array)
+    Pnm      : Associated Legendre functions (3D array)
+    nmax     : Maximum spherical harmonic degree of expansion
+    
+    Returns
+    -------
+    Dg       : Gravity anomaly (mGal)
+    '''
+    Dg = np.zeros(len(lon))
+    
+    for n in range(2, nmax+1):
+        sum = np.zeros(len(lon))
+        for m in range(n+1):
+            sum += (Cnm[n, m] * np.cos(m*lon) + Snm[n, m] * np.sin(m*lon)) * Pnm[:, n, m]
+        Dg += (n-1) * (a / r) ** n * sum
+    
+    Dg = GM / r ** 2 * Dg * 10**5 # mGal
     
     return Dg

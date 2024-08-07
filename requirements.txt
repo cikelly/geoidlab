@@ -8,6 +8,7 @@ xarray
 netCDF4
 pandas
 scipy
+numba
 # dask
 # dask[complete]
 # wget
