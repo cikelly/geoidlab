@@ -9,6 +9,10 @@ from numpy import (
     zeros, sqrt, degrees
 )
 from coordinates import geodetic2spherical
+from numba import jit
+# from numba import jit
+# import numpy as np
+from numba_progress import ProgressBar
  
 def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
     '''
@@ -112,9 +116,40 @@ def legendre_poly(theta=None, t=None, nmax=60):
     
     return Pn
 
+
+
+@jit(nopython=True)
+def compute_legendre_chunk(vartheta, n, Pnm):
+    '''
+    Compute a chunk of associated Legendre functions for a specific degree n using Numba for optimization
+
+    Parameters
+    ----------
+    vartheta  : colatitude (radians)
+    n         : specific degree
+    Pnm       : array to store the computed Legendre functions
+
+    Returns
+    -------
+    Updated Pnm array with computed values for degree n
+    '''
+    t = cos(vartheta)
+    u = sin(vartheta)
+
+    for m in range(0, n):
+        a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+        b_nm = 0.
+        if n - m - 1 >= 0:
+            b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+        Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
+    # Sectoral harmonics (n = m)
+    Pnm[:, n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
+
+    return Pnm
+
 def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
     '''
-    Compute associated Legendre functions for multiple points
+    Wrapper function to handle data and call the Numba-optimized function
 
     Parameters
     ----------
@@ -127,12 +162,6 @@ def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='
     Returns
     -------
     Pnm       : Fully normalized Associated Legendre functions
-    
-    References
-    ----------
-    (1) Holmes and Featherstone (2002): A unified approach to the Clenshaw 
-    summation and the recursive computation of very high degree and order 
-    normalised associated Legendre functions (Eqs. 11 and 12)
     '''
     if phi is None and vartheta is None:
         raise ValueError('Either phi or vartheta must be provided')
@@ -145,31 +174,83 @@ def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='
     elif phi is not None:
         _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
     
-    t = cos(phi_bar)
-    u = sin(phi_bar)
-
-    if vartheta is not None:
-        Pnm = zeros((len(vartheta), nmax + 1, nmax + 1))
-    elif phi is not None:
-        Pnm = zeros((len(phi), nmax + 1, nmax + 1))
-        
+    # Initialize Pnm array
+    Pnm = zeros((len(phi_bar), nmax + 1, nmax + 1))
     Pnm[:, 0, 0] = 1.0
 
     if nmax >= 1:
+        t = cos(phi_bar)
+        u = sin(phi_bar)
         Pnm[:, 1, 0] = sqrt(3.0) * t
         Pnm[:, 1, 1] = sqrt(3.0) * u
 
-    for n in range(2, nmax + 1):
-        for m in range(0, n):
-            a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
-            b_nm = 0.
-            if n - m - 1 >= 0:
-                b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
-            Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
-        # Sectoral harmonics (n = m)
-        Pnm[:, n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
-
+    # Initialize progress bar
+    with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+        for n in range(2, nmax + 1):
+            Pnm = compute_legendre_chunk(phi_bar, n, Pnm)
+            pbar.update(1)
+    
     return Pnm
+
+
+# def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
+#     '''
+#     Compute associated Legendre functions for multiple points
+
+#     Parameters
+#     ----------
+#     phi       : geodetic latitude (degrees)
+#     lambd     : geodetic longitude (degrees)
+#     vartheta  : colatitude (radians)
+#     nmax      : maximum degree of expansion
+#     ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+    
+#     Returns
+#     -------
+#     Pnm       : Fully normalized Associated Legendre functions
+    
+#     References
+#     ----------
+#     (1) Holmes and Featherstone (2002): A unified approach to the Clenshaw 
+#     summation and the recursive computation of very high degree and order 
+#     normalised associated Legendre functions (Eqs. 11 and 12)
+#     '''
+#     if phi is None and vartheta is None:
+#         raise ValueError('Either phi or vartheta must be provided')
+    
+#     if lambd is None and vartheta is None:
+#         raise ValueError('Please provide lambd')
+    
+#     if vartheta is not None: 
+#         phi_bar = vartheta
+#     elif phi is not None:
+#         _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
+    
+#     t = cos(phi_bar)
+#     u = sin(phi_bar)
+
+#     if vartheta is not None:
+#         Pnm = zeros((len(vartheta), nmax + 1, nmax + 1))
+#     elif phi is not None:
+#         Pnm = zeros((len(phi), nmax + 1, nmax + 1))
+        
+#     Pnm[:, 0, 0] = 1.0
+
+#     if nmax >= 1:
+#         Pnm[:, 1, 0] = sqrt(3.0) * t
+#         Pnm[:, 1, 1] = sqrt(3.0) * u
+
+#     for n in range(2, nmax + 1):
+#         for m in range(0, n):
+#             a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+#             b_nm = 0.
+#             if n - m - 1 >= 0:
+#                 b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+#             Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
+#         # Sectoral harmonics (n = m)
+#         Pnm[:, n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
+
+#     return Pnm
 
 # def ALF(phi=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
 #     '''
