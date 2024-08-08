@@ -4,10 +4,10 @@
   <img src="logo/logo.png" alt="Logo" width="200"/>
 </div>
 
-
+<p></p>
                                                                                   
 
-**`easy-pygeoid` is a Python package developed for easy geoid modelling.**
+**`easy-pygeoid` is a highly automated Python package developed for easy geoid modeling.**
 
 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
