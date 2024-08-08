@@ -1,4 +1,7 @@
-# easy-pygeoid                                                                                       <img src="https://github.com/user-attachments/assets/9e0a9db7-8cf6-4aa1-b2bf-4d9222b3efc5" alt="gravity_disturbance_globe" width="45" height="40"> 
+# easy-pygeoid                                                                                       
+
+[![logo](https://i.imgur.com/9OOSpDm.png)](https://github.com/gee-community/geemap/blob/master/docs/assets/logo.png)
+
 
 
 `easy-pygeoid` is a Python package developed for easy geoid modelling. 
