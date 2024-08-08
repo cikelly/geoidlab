@@ -9,6 +9,7 @@ netCDF4
 pandas
 scipy
 numba
+numba-progress
 # dask
 # dask[complete]
 # wget
