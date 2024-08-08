@@ -1,9 +1,11 @@
+# easy-pygeoid     
+
 <div align="center">
   <img src="logo/logo.png" alt="Logo" width="200"/>
 </div>
 
 
-# easy-pygeoid                                                                                       
+                                                                                  
 
 `easy-pygeoid` is a Python package developed for easy geoid modelling. 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
