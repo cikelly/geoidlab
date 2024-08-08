@@ -8,6 +8,8 @@
                                                                                   
 
 **`easy-pygeoid` is a Python package developed for easy geoid modelling.**
+
+
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
 
 - the original Stokes' kernel
