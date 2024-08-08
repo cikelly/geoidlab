@@ -1,5 +1,5 @@
 # easy-pygeoid
-![gravity_disturbance_globe](https://github.com/user-attachments/assets/9e0a9db7-8cf6-4aa1-b2bf-4d9222b3efc5)
+<img src="https://github.com/user-attachments/assets/9e0a9db7-8cf6-4aa1-b2bf-4d9222b3efc5" alt="gravity_disturbance_globe" width="300" height="200">
 `easy-pygeoid` is a Python package developed for easy geoid modelling. 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
 
