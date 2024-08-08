@@ -1,4 +1,7 @@
-![Logo](logo/logo.png)
+<div align="center">
+  <img src="logo/logo.png" alt="Logo" width="200"/>
+</div>
+
 
 # easy-pygeoid                                                                                       
 
