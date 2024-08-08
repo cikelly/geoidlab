@@ -10,6 +10,7 @@ pandas
 scipy
 numba
 numba-progress
+openpyxl
 # dask
 # dask[complete]
 # wget
