@@ -191,3 +191,24 @@ def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='
             pbar.update(1)
     
     return Pnm
+
+# TO DO: Add derivative of Legendre polynomial
+
+# def legendre_deriv(n, vartheta, ellipsoid='wgs84'):
+#     '''
+#     Compute the derivative of the associated Legendre functions
+
+#     Parameters
+#     ----------
+#     n         : specific degree
+#     vartheta  : colatitude (radians)
+#     ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+    
+#     Returns
+#     -------
+#     Pnm       : Fully normalized Associated Legendre functions
+#     '''
+#     Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=n, ellipsoid=ellipsoid)
+#     Pnm = Pnm * n
+
+#     return Pnm
