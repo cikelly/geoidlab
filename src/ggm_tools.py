@@ -14,7 +14,7 @@ import pandas as pd
 from numba_progress import ProgressBar
 
 import gravity
-import tide_system
+import tide
 import icgem
 import constants
 
