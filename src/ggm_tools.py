@@ -168,7 +168,43 @@ def zero_degree_term(lat, shc=None, GM=None, geoid=None, ellipsoid='wgs84'):
     N = geoid + ( (GM - GMe) / R - (W0 - U0) ) / gamma_0 
     
     return N
-    
+
+
+
+
+
+from numba import jit
+import numpy as np
+import pandas as pd
+from numba_progress import ProgressBar
+
+@jit(nopython=True)
+def compute_gravity_chunk(Cnm, Snm, lon, a, GM, r, Pnm, n, Dg):
+    '''
+    Compute a chunk of gravity anomaly for a specific degree n using Numba for optimization
+
+    Parameters
+    ----------
+    Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+    lon      : Longitude (1D arrays)
+    a        : Reference radius 
+    GM       : Gravitational constant times the mass of the Earth
+    r        : Radial distance (1D array)
+    Pnm      : Associated Legendre functions (3D array)
+    n        : Specific degree
+    Dg       : Gravity anomaly array to update
+
+    Returns
+    -------
+    Updated Dg array with computed values for degree n
+    '''
+    sum = np.zeros(len(lon))
+    for m in range(n+1):
+        sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
+    Dg += (n - 1) * (a / r) ** n * sum
+
+    return Dg
+
 def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     '''
     Wrapper function to handle data and call the Numba-optimized function
@@ -219,47 +255,115 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     
     Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
     
-   
     Cnm = np.array(shc['Cnm'])
     Snm = np.array(shc['Snm'])
     a   = shc['a']
     Gm  = shc['GM']
     
-    Dg = gravity_anomaly_numba(
-        Cnm=Cnm, Snm=Snm, 
-        lon=lon, a=a, GM=Gm, 
-        r=r, Pnm=Pnm, nmax=nmax
-    )
+    Dg = np.zeros(len(lon))
+
+    # Initialize progress bar
+    with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies') as pbar:
+        for n in range(2, nmax + 1):
+            Dg = compute_gravity_chunk(Cnm, Snm, lon, a, Gm, r, Pnm, n, Dg)
+            pbar.update(1)
+    
+    Dg = Gm / r ** 2 * Dg * 10**5  # mGal
     
     return pd.Series(Dg)
 
-@jit(nopython=True)
-def gravity_anomaly_numba(Cnm, Snm, lon, a, GM, r, Pnm, nmax):
-    '''
-    Calculate gravity anomalies from global model using Numba for optimization
+
+# def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
+#     '''
+#     Wrapper function to handle data and call the Numba-optimized function
     
-    Parameters
-    ----------
-    Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
-    lon      : Longitude (1D arrays)
-    a        : Reference radius 
-    GM       : Gravitational constant times the mass of the Earth
-    r        : Radial distance (1D array)
-    Pnm      : Associated Legendre functions (3D array)
-    nmax     : Maximum spherical harmonic degree of expansion
+#     Parameters
+#     ----------
+#     shc       : Spherical Harmonic Coefficients (output of icgem.read_icgem() and shtools.replace_zonal_harmonics())
+#     grav_data : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+#     ellipsoid : Reference ellipsoid
+#     nmax      : Maximum spherical harmonic degree of expansion
     
-    Returns
-    -------
-    Dg       : Gravity anomaly (mGal)
-    '''
-    Dg = np.zeros(len(lon))
+#     Returns
+#     -------
+#     Dg        : Gravity anomaly (mGal)
     
-    for n in range(2, nmax+1):
-        sum = np.zeros(len(lon))
-        for m in range(n+1):
-            sum += (Cnm[n, m] * np.cos(m*lon) + Snm[n, m] * np.sin(m*lon)) * Pnm[:, n, m]
-        Dg += (n-1) * (a / r) ** n * sum
+#     Notes
+#     -----
+#     1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
+#     2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to gravity_anomaly()
+#     '''        
+#     if grav_data is None:
+#         raise ValueError('Provide data with columns lon, lat, and elevation in order')
+#     else:
+#         if isinstance(grav_data, np.ndarray):
+#             lon = grav_data[:,0]
+#             lat = grav_data[:,1]
+#             try:
+#                 h = grav_data[:,2]
+#             except IndexError:
+#                 print('Looks like there is no elevation column. Setting elevation to 0')
+#                 h = np.zeros(len(lat))
+#         elif isinstance(grav_data, pd.DataFrame):
+#             lon_column = [col for col in grav_data.columns if pd.Series(col).str.contains('lon', case=False).any()][0]
+#             lat_column = [col for col in grav_data.columns if pd.Series(col).str.contains('lat', case=False).any()][0]
+#             lon = grav_data[lon_column].values
+#             lat = grav_data[lat_column].values
+#             try:
+#                 elev_column = [col for col in grav_data.columns if pd.Series(col).str.contains(r'elev|height', case=False).any()][0]
+#                 h = grav_data[elev_column].values
+#             except IndexError:
+#                 print('Looks like there is no elevation column. Setting elevation to 0')
+#                 h = np.zeros(len(lat))
+                
+#     r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
+        
+#     lon = np.radians(lon)
+#     lat = np.radians(lat)
     
-    Dg = GM / r ** 2 * Dg * 10**5 # mGal
+#     Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
     
-    return Dg
+   
+#     Cnm = np.array(shc['Cnm'])
+#     Snm = np.array(shc['Snm'])
+#     a   = shc['a']
+#     Gm  = shc['GM']
+    
+#     Dg = gravity_anomaly_numba(
+#         Cnm=Cnm, Snm=Snm, 
+#         lon=lon, a=a, GM=Gm, 
+#         r=r, Pnm=Pnm, nmax=nmax
+#     )
+    
+#     return pd.Series(Dg)
+
+# @jit(nopython=True)
+# def gravity_anomaly_numba(Cnm, Snm, lon, a, GM, r, Pnm, nmax):
+#     '''
+#     Calculate gravity anomalies from global model using Numba for optimization
+    
+#     Parameters
+#     ----------
+#     Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+#     lon      : Longitude (1D arrays)
+#     a        : Reference radius 
+#     GM       : Gravitational constant times the mass of the Earth
+#     r        : Radial distance (1D array)
+#     Pnm      : Associated Legendre functions (3D array)
+#     nmax     : Maximum spherical harmonic degree of expansion
+    
+#     Returns
+#     -------
+#     Dg       : Gravity anomaly (mGal)
+#     '''
+#     Dg = np.zeros(len(lon))
+    
+#     for n in range(2, nmax+1):
+#         sum = np.zeros(len(lon))
+#         for m in range(n+1):
+#             sum += (Cnm[n, m] * np.cos(m*lon) + Snm[n, m] * np.sin(m*lon)) * Pnm[:, n, m]
+#         Dg += (n-1) * (a / r) ** n * sum
+    
+#     Dg = GM / r ** 2 * Dg * 10**5 # mGal
+    
+#     return Dg
