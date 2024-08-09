@@ -11,10 +11,8 @@ import numpy as np
 
 # from tqdm import tqdm
 
-
-
 class DigitalTerrainModel:
-    def __init__(self, model_name=None, nmax=300):
+    def __init__(self, model_name=None, nmax=2190):
         self.name = model_name
         self.nmax = nmax
         
@@ -22,19 +20,22 @@ class DigitalTerrainModel:
             script_dir = os.path.dirname(__file__)
             self.name = os.path.join(script_dir, 'data', 'DTM2006.xz')
             print(f'Using compressed file in src/data directory ...')
+            with lzma.open(self.name, 'rt') as f:
+                self.dtm = f.readlines()
+        else:
+            with open(self.name, 'r') as f:
+                self.dtm = f.readlines()
             
-    def read_dtm2006_lzma(self):
+    def read_dtm2006(self):
         '''
-        Read DTM data stored as compressed LZMA file
+        Read DTM data stored as compressed LZMA file or the original DTM2006 file
         '''
-        with lzma.open(self.name, 'rt') as f:
-            dtm = f.readlines()
 
         HCnm = np.zeros((self.nmax+1, self.nmax+1))
         HSnm = np.zeros((self.nmax+1, self.nmax+1))
             
             
-        for line in dtm:
+        for line in self.dtm:
             line = line.split()
             
             n = int(line[0])
@@ -42,24 +43,12 @@ class DigitalTerrainModel:
 
             if n > self.nmax:
                 break
+            
             if n <= self.nmax+1 and m <= self.nmax+1:
                 HCnm[n,m] = float(line[2].replace('D', 'E'))
                 HSnm[n,m] = float(line[3].replace('D', 'E'))
             
-        return HCnm, HSnm
-        
-        # for line in tqdm(range(len(dtm))):
-        #     line = line.split()
-        #     n = int(line[0])
-        #     m = int(line[1])
-        #     HCnm[n,m] = float(line[2].replace('D', 'E'))
-        #     HSnm[n,m] = float(line[3].replace('D', 'E'))
+        return self.HCnm, self.HSnm
 
-        # return HCnm, HSnm
-    
-    def read_dtm2006(self):
-        '''
-        Read DTM data stored as uncompressed binary file
-        '''
-        with open(f'data/{self.name}', 'r') as f:
-            dtm = f.readlines()
+    def calculate_height(self):
+        pass
