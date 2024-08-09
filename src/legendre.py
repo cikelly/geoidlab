@@ -172,7 +172,7 @@ def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='
     if vartheta is not None: 
         phi_bar = vartheta
     elif phi is not None:
-        _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
+        _, phi_bar, _ = geodetic2spherical(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=0)
     
     # Initialize Pnm array
     Pnm = zeros((len(phi_bar), nmax + 1, nmax + 1))
