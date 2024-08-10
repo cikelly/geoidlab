@@ -192,13 +192,39 @@ def compute_gravity_chunk(Cnm, Snm, lon, a, GM, r, Pnm, n, Dg):
     Updated Dg array with computed values for degree n
     '''
     sum = np.zeros(len(lon))
-    for m in range(n+1):
+    for m in range(n + 1):
         sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
     Dg += (n - 1) * (a / r) ** n * sum
 
     return Dg
 
-def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
+def compute_gravity_for_chunk(Cnm, Snm, lon, a, GM, r, Pnm, nmax, Dg):
+    '''
+    Compute gravity anomaly for a chunk of data
+
+    Parameters
+    ----------
+    Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+    lon      : Longitude (1D arrays)
+    a        : Reference radius 
+    GM       : Gravitational constant times the mass of the Earth
+    r        : Radial distance (1D array)
+    Pnm      : Associated Legendre functions (3D array)
+    nmax     : Maximum spherical harmonic degree of expansion
+    Dg       : Gravity anomaly array to update
+
+    Returns
+    -------
+    Updated Dg array with computed values for all degrees
+    '''
+    with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies for chunk') as pbar:
+        for n in range(2, nmax + 1):
+            Dg = compute_gravity_chunk(Cnm, Snm, lon, a, GM, r, Pnm, n, Dg)
+            pbar.update(1)
+    
+    return Dg
+
+def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300, chunk_size=100, split_data=False):
     '''
     Wrapper function to handle data and call the Numba-optimized function
     
@@ -208,6 +234,8 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     grav_data : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
     ellipsoid : Reference ellipsoid
     nmax      : Maximum spherical harmonic degree of expansion
+    chunk_size: Size of the chunk of data to process at once
+    split_data: Whether to split the data into chunks
     
     Returns
     -------
@@ -222,10 +250,10 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
         raise ValueError('Provide data with columns lon, lat, and elevation in order')
     else:
         if isinstance(grav_data, np.ndarray):
-            lon = grav_data[:,0]
-            lat = grav_data[:,1]
+            lon = grav_data[:, 0]
+            lat = grav_data[:, 1]
             try:
-                h = grav_data[:,2]
+                h = grav_data[:, 2]
             except IndexError:
                 print('Looks like there is no elevation column. Setting elevation to 0')
                 h = np.zeros(len(lat))
@@ -242,25 +270,40 @@ def gravity_anomaly(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
                 h = np.zeros(len(lat))
                 
     r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
-        
-    lon = np.radians(lon)
-    lat = np.radians(lat)
-    
-    Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
     
     Cnm = np.array(shc['Cnm'])
     Snm = np.array(shc['Snm'])
-    a   = shc['a']
-    Gm  = shc['GM']
+    a = shc['a']
+    Gm = shc['GM']
     
     Dg = np.zeros(len(lon))
 
-    # Initialize progress bar
-    with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies') as pbar:
-        for n in range(2, nmax + 1):
-            Dg = compute_gravity_chunk(Cnm, Snm, lon, a, Gm, r, Pnm, n, Dg)
-            pbar.update(1)
-    
+    if not split_data:
+        lon = np.radians(lon)
+        Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
+        Dg = compute_gravity_for_chunk(Cnm, Snm, lon, a, Gm, r, Pnm, nmax, Dg)
+    else:
+        n_points = len(lon)
+        n_chunks = (n_points // chunk_size) + 1
+        print(f'Data will be processed in {n_chunks} chunks...\n')
+
+        for i in range(n_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, n_points)
+
+            lon_chunk = lon[start_idx:end_idx]
+            r_chunk = r[start_idx:end_idx]
+            vartheta_chunk = vartheta[start_idx:end_idx]
+            Dg_chunk = np.zeros(len(lon_chunk))
+
+            print(f'Processing chunk {i + 1} of {n_chunks}...')
+            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=nmax, ellipsoid=ellipsoid)
+
+            Dg_chunk = compute_gravity_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, Gm, r_chunk, Pnm_chunk, nmax, Dg_chunk)
+
+            Dg[start_idx:end_idx] = Dg_chunk
+            print('\n')
+
     Dg = Gm / r ** 2 * Dg * 10**5  # mGal
     
     return pd.Series(Dg)
