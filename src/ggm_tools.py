@@ -329,13 +329,39 @@ def compute_disturbance_chunk(Cnm, Snm, lon, a, GM, r, Pnm, n, dg):
     Updated dg array with computed values for degree n
     '''
     sum = np.zeros(len(lon))
-    for m in range(n+1):
+    for m in range(n + 1):
         sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
     dg += (n + 1) * (a / r) ** n * sum
 
     return dg
 
-def gravity_disturbance(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
+def compute_disturbance_for_chunk(Cnm, Snm, lon, a, GM, r, Pnm, nmax, dg):
+    '''
+    Compute gravity anomaly for a chunk of data
+
+    Parameters
+    ----------
+    Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+    lon      : Longitude (1D arrays)
+    a        : Reference radius 
+    GM       : Gravitational constant times the mass of the Earth
+    r        : Radial distance (1D array)
+    Pnm      : Associated Legendre functions (3D array)
+    nmax     : Maximum spherical harmonic degree of expansion
+    dg       : Gravity disturbance array to update
+
+    Returns
+    -------
+    Updated dg array with computed values for all degrees
+    '''
+    with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies for chunk') as pbar:
+        for n in range(2, nmax + 1):
+            dg = compute_disturbance_chunk(Cnm, Snm, lon, a, GM, r, Pnm, n, dg)
+            pbar.update(1)
+    
+    return dg
+
+def gravity_disturbance(shc, grav_data=None, ellipsoid='wgs84', nmax=300, chunk_size=100, split_data=False):
     '''
     Wrapper function to handle data and call the Numba-optimized function
     
@@ -345,24 +371,26 @@ def gravity_disturbance(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
     grav_data : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
     ellipsoid : Reference ellipsoid
     nmax      : Maximum spherical harmonic degree of expansion
+    chunk_size: Size of the chunk of data to process at once
+    split_data: Whether to split the data into chunks
     
     Returns
     -------
-    dg        : Gravity anomaly (mGal)
+    dg        : Gravity disturbance (mGal)
     
     Notes
     -----
-    1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.35b, p.297
-    2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to gravity_anomaly()
+    1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
+    2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to gravity_disturbance()
     '''        
     if grav_data is None:
         raise ValueError('Provide data with columns lon, lat, and elevation in order')
     else:
         if isinstance(grav_data, np.ndarray):
-            lon = grav_data[:,0]
-            lat = grav_data[:,1]
+            lon = grav_data[:, 0]
+            lat = grav_data[:, 1]
             try:
-                h = grav_data[:,2]
+                h = grav_data[:, 2]
             except IndexError:
                 print('Looks like there is no elevation column. Setting elevation to 0')
                 h = np.zeros(len(lat))
@@ -379,25 +407,40 @@ def gravity_disturbance(shc, grav_data=None, ellipsoid='wgs84', nmax=300):
                 h = np.zeros(len(lat))
                 
     r, vartheta, _ = co.geodetic2spherical(phi=lat, lambd=lon, height=h, ellipsoid=ellipsoid)
-        
-    lon = np.radians(lon)
-    lat = np.radians(lat)
-    
-    Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
     
     Cnm = np.array(shc['Cnm'])
     Snm = np.array(shc['Snm'])
-    a   = shc['a']
-    Gm  = shc['GM']
+    a = shc['a']
+    Gm = shc['GM']
     
     dg = np.zeros(len(lon))
 
-    # Initialize progress bar
-    with ProgressBar(total=nmax - 1, desc='Calculating Gravity Disturbance') as pbar:
-        for n in range(2, nmax + 1):
-            dg = compute_disturbance_chunk(Cnm, Snm, lon, a, Gm, r, Pnm, n, dg)
-            pbar.update(1)
-    
+    if not split_data:
+        lon = np.radians(lon)
+        Pnm = ALFsGravityAnomaly(vartheta=vartheta, nmax=nmax, ellipsoid=ellipsoid)
+        dg = compute_disturbance_for_chunk(Cnm, Snm, lon, a, Gm, r, Pnm, nmax, dg)
+    else:
+        n_points = len(lon)
+        n_chunks = (n_points // chunk_size) + 1
+        print(f'Data will be processed in {n_chunks} chunks...\n')
+
+        for i in range(n_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, n_points)
+
+            lon_chunk = lon[start_idx:end_idx]
+            r_chunk = r[start_idx:end_idx]
+            vartheta_chunk = vartheta[start_idx:end_idx]
+            dg_chunk = np.zeros(len(lon_chunk))
+
+            print(f'Processing chunk {i + 1} of {n_chunks}...')
+            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=nmax, ellipsoid=ellipsoid)
+
+            dg_chunk = compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, Gm, r_chunk, Pnm_chunk, nmax, dg_chunk)
+
+            dg[start_idx:end_idx] = dg_chunk
+            print('\n')
+
     dg = Gm / r ** 2 * dg * 10**5  # mGal
     
     return pd.Series(dg)
