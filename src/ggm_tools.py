@@ -1,10 +1,14 @@
 import icgem
+import shtools
+import constants
+import gravity
+
 import numpy as np
 import pandas as pd
 import coordinates as co
+
 from legendre import ALFsGravityAnomaly
 from numba import jit
-import shtools
 from numba_progress import ProgressBar
 
 class GlobalGeopotentialModel():
@@ -259,3 +263,42 @@ class GlobalGeopotentialModel():
         dg = GM / self.r ** 2 * dg * 10**5 # mGal
         
         return pd.Series(dg)
+
+    def zero_degree_term(self, geoid=None, GM=None):
+        '''
+        Add zero-degree term to the GGM geoid
+        
+        Parameters
+        ----------
+        geoid      : Geoid model (output of ggm_tools.reference_geoid())
+        GM         : Gravity constant of the GGM
+        
+        Returns
+        -------
+        N          : Geoid corrected for zero-degree term
+        
+        Reference
+        ---------
+        Hofmann-Wellenhof & Moritz (2006): Physical Geodesy, Eq. 2–356, p. 113
+        '''
+        if geoid is None:
+            raise ValueError('Please provide geoid')
+        
+        if self.shc is None and GM is None:
+            raise ValueError('Please provide shc (output of icgem.read_icgem()) or GM from GGM')
+        
+        if self.shc is not None and GM is None:
+            GM = self.shc['GM']
+        
+        ref_ellipsoid = constants.wgs84() if 'wgs84' in self.ellipsoid.lower() else constants.grs80()
+        GM0 = ref_ellipsoid['GM']
+        U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
+        
+        W0  = constants.earth('W0')
+        R   = constants.earth('R')
+        
+        gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
+        
+        N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma_0 
+        
+        return N
