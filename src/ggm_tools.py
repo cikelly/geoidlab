@@ -16,6 +16,7 @@ import coordinates as co
 from legendre import ALFsGravityAnomaly, ALF
 from numba import jit
 from numba_progress import ProgressBar
+from tqdm import tqdm
 
 class GlobalGeopotentialModel():
     def __init__(self, shc=None, model_name=None, ellipsoid='wgs84', nmax=300, grav_data=None, chunk_size=100, split_data=False):
@@ -43,7 +44,7 @@ class GlobalGeopotentialModel():
         if self.shc is None:
             self.shc = icgem.read_icgem(self.model)
         # Subtract even zonal harmonics
-        self.shc = shtools.replace_zonal_harmonics(self.shc, self.ellipsoid)
+        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid)
         
         if self.grav_data is None:
             raise ValueError('Provide data with columns lon, lat, and elevation in order')
@@ -134,7 +135,7 @@ class GlobalGeopotentialModel():
         Notes
         -----
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
-        2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to gravity_anomaly()
+        2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to gravity_anomaly()
         '''
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
@@ -233,7 +234,7 @@ class GlobalGeopotentialModel():
         Notes
         -----
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
-        2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to gravity_disturbance()
+        2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to gravity_disturbance()
         '''
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
@@ -374,7 +375,7 @@ class GlobalGeopotentialModel():
         Notes
         -----
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.39, p.298
-        2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to second_radial()
+        2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to second_radial()
         '''
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
@@ -407,7 +408,7 @@ class GlobalGeopotentialModel():
                 Tzz_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
                 Tzz[start_idx:end_idx] = Tzz_chunk
                 print('\n')
-        Tzz = GM / self.r ** 3 * Tzz # E = Eötvös
+        Tzz = GM / self.r ** 3 * Tzz * 10 ** 9 # E = Eötvös
         
         return pd.Series(Tzz)
     
@@ -450,3 +451,150 @@ class GlobalGeopotentialModel():
                 df[col] = 0
 
         return df
+    
+
+class GlobalGeopotentialModel2D():
+    def __init__(
+        self, shc=None, model_name=None, 
+        ellipsoid='wgs84', nmax=300, 
+        lon=None, lat=None, 
+        height=None, grid_spacing=1
+    ):
+        '''
+        Initialize the GlobalGeopotentialModel2D class
+        
+        Parameters
+        ----------
+        shc         : spherical harmonic coefficients
+        model_name  : model name
+        ellipsoid   : ellipsoid
+        nmax        : maximum degree
+        lon         : Longitude (1D array) -- units of degree
+        lat         : Latitude (1D array)  -- units of degree
+        height      : Height (1D array)
+        grid_spacing: grid spacing (in degrees)
+        '''
+        self.shc = shc
+        self.model = model_name
+        self.ellipsoid = ellipsoid
+        self.nmax = nmax
+        self.lon = lon
+        self.lat = lat
+        self.grid_spacing = grid_spacing
+        self.height = height
+        
+        if self.shc is None and self.model is None:
+            raise ValueError('Either shc or model_name must be specified')
+        
+        if self.shc is None:
+            self.shc = icgem.read_icgem(self.model)
+        # Subtract even zonal harmonics
+        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid)
+        
+        if self.lon is None and self.lat is None:
+            print('No grid coordinates provided. Computing over the entire globe...\n')
+            self.lambda_ = np.radians(np.arange(-180, 180+self.grid_spacing, self.grid_spacing))
+            self.theta   = np.radians(np.arange(0, 180+self.grid_spacing, self.grid_spacing)) # co-latitude
+            self.lon     = np.arange(-180, 180+self.grid_spacing, self.grid_spacing)
+            self.lat     = np.arange(-90, 90+self.grid_spacing, self.grid_spacing)
+            # print(self.lon.shape, self.lat.shape)
+            # self.r, _ ,_ = co.geodetic2spherical(
+            #     phi=self.lat, lambd=self.lon, 
+            #     height=len(self.lon), ellipsoid=self.ellipsoid
+            # )
+        else:
+            self.r, self.theta, _ = co.geodetic2spherical(
+                phi=self.lat, lambd=self.lon, 
+                height=len(self.lon), ellipsoid=self.ellipsoid
+            )
+            self.lambda_ = np.radians(self.lon)
+        
+        
+        self.Lon, self.Lat = np.meshgrid(self.lon, self.lat)
+        self.Lat *= -1
+        # Precompute for vectorization
+        self.n = np.arange(self.shc['nmax'] + 1)
+        self.cosm = np.cos(np.arange(0, self.shc['nmax']+1)[:, np.newaxis] * self.lambda_)
+        self.sinm = np.sin(np.arange(0, self.shc['nmax']+1)[:, np.newaxis] * self.lambda_)
+ 
+
+    def gravity_anomaly_2D(self):
+        '''
+        Vectorized computations of gravity anomalies on a grid
+        
+        Returns
+        -------
+        Dg     : Gravity anomaly array (2D array)
+        '''
+        degree_term = self.shc['GM'] / self.shc['a'] ** 2 * (self.n - 1) * 10 ** 5 # mGal
+        # degree_term = self.shc['GM'] / self.r ** 2 * (self.n - 1) *  self.shc['a']/self.r ** self.n * 10 ** 5 # mGal
+        # Set degrees 0 and 1 to zero
+        degree_term[0:2] = 0
+        
+        Dg = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity anomalies'):
+            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Dg[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, Dg
+    
+    def gravity_disturbance_2D(self):
+        '''
+        Vectorized computations of gravity disturbances on a grid
+        
+        Returns
+        -------
+        dg     : Gravity disturbance array (2D array)
+        '''
+        degree_term = self.shc['GM'] / self.shc['a'] ** 2 * (self.n + 1) * 10 ** 5 # mGal
+        # Set degrees 0 and 1 to zero
+        degree_term[0:2] = 0
+        
+        dg = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity disturbances'):
+            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            dg[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, dg
+    
+    def second_radial_derivative_2D(self):
+        '''
+        Vectorized computations of second radial derivative on a grid
+        
+        Returns
+        -------
+        Tzz    : Second radial derivative array (2D array)
+        '''
+        degree_term = self.shc['GM'] / self.shc['a'] ** 3 * (self.n + 1) * (self.n + 2) * 10 ** 9 # E
+        # Set degrees 0 and 1 to zero
+        degree_term[0:2] = 0
+        
+        Tzz = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing vertical gradient'):
+            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Tzz[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, Tzz
+    
+    def geoid_2D(self):
+        '''
+        Vectorized computations of geoid on a grid
+        
+        Returns
+        -------
+        N      : Geoid array (2D array)
+        '''
+        degree_term = np.ones(len(self.n)) * self.shc['a']
+        # Set degrees 0 and 1 to zero
+        degree_term[0:2] = 0
+        
+        N = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing vertical gradient'):
+            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            N[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, N
