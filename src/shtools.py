@@ -23,7 +23,7 @@ def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
     '''
     shc1 = copy.deepcopy(shc)
     if replace_zonal:
-        shc1 = replace_zonal_harmonics(shc1, ellipsoid=ellipsoid)
+        shc1 = subtract_zonal_harmonics(shc1, ellipsoid=ellipsoid)
     ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
     
     coefficients  = [['Cnm', 'Snm'], ['sCnm', 'sSnm']]
@@ -62,8 +62,8 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
     
     Parameters
     ----------
-    shc                     : spherical harmonic coefficients (output of read_icgem)
-    replace_zonal_harmonics : Replace zonal harmonic coefficients (C[n,0])
+    shc                      : spherical harmonic coefficients (output of read_icgem)
+    subtract_zonal_harmonics : Replace zonal harmonic coefficients (C[n,0])
     
     Returns
     -------
@@ -78,7 +78,7 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
     shc1 = copy.deepcopy(shc)
     
     if replace_zonal:
-        shc1 = replace_zonal_harmonics(shc1, ellipsoid=ellipsoid)
+        shc1 = subtract_zonal_harmonics(shc1, ellipsoid=ellipsoid)
     ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
     
     variance_dict = {}
@@ -117,7 +117,7 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True):
     return variance_dict 
 
 
-def replace_zonal_harmonics(
+def subtract_zonal_harmonics(
         shc: dict[str, ndarray],
         ellipsoid: str = 'wgs84'
     ) -> dict[str, ndarray]:
