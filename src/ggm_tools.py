@@ -90,7 +90,7 @@ class GlobalGeopotentialModel():
         
         return Dg
     
-    def compute_gravity_for_chunk(self, Cnm, Snm, lon, a, GM, r, Pnm, nmax, Dg):
+    def compute_gravity_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Dg):
         '''
         Compute gravity anomaly for a chunk of data
         
@@ -99,7 +99,6 @@ class GlobalGeopotentialModel():
         Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
         lon      : Longitude (1D arrays)
         a        : Reference radius 
-        GM       : Gravitational constant times the mass of the Earth
         r        : Radial distance (1D array)
         Pnm      : Associated Legendre functions (3D array)
         nmax     : Maximum spherical harmonic degree of expansion
@@ -190,7 +189,7 @@ class GlobalGeopotentialModel():
         
         return dg
     
-    def compute_disturbance_for_chunk(self, Cnm, Snm, lon, a, GM, r, Pnm, nmax, dg):
+    def compute_disturbance_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, dg):
         '''
         Compute disturbance for a chunk of data
         
@@ -199,7 +198,6 @@ class GlobalGeopotentialModel():
         Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
         lon      : Longitude (1D arrays)
         a        : Reference radius 
-        GM       : Gravitational constant times the mass of the Earth
         r        : Radial distance (1D array)
         Pnm      : Associated Legendre functions (3D array)
         nmax     : Maximum spherical harmonic degree of expansion
@@ -302,3 +300,105 @@ class GlobalGeopotentialModel():
         N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma_0 
         
         return N
+    
+        
+    @staticmethod
+    @jit(nopython=True)
+    def compute_radial_chunk(Cnm, Snm, lon, a, r, Pnm, n, Tzz):
+        '''
+        Compute a chunk of second radial derivative of the disturbing potential 
+        for a specific degree using Numba optimization -- vertical gravity gradient
+        
+        Parameters
+        ----------
+        Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+        lon      : Longitude (1D arrays)
+        a        : Reference radius 
+        r        : Radial distance (1D array)
+        Pnm      : Associated Legendre functions (3D array)
+        n        : Specific degree
+        Tzz      : Gravity radial array to update (unit: 1E = 10^{−9}s^{−2})
+        
+        Returns
+        -------
+        Tzz      : Updated second radial derivative array for degree n
+        '''
+        sum = np.zeros(len(lon))
+        for m in range(n + 1):
+            sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
+        Tzz += (n + 1) * (n + 2) * (a / r) ** n * sum
+        
+        return Tzz
+    
+    def compute_radial_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Tzz):
+        '''
+        Compute radial for a chunk of data
+        
+        Parameters
+        ----------
+        Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+        lon      : Longitude (1D arrays)
+        a        : Reference radius 
+        r        : Radial distance (1D array)
+        Pnm      : Associated Legendre functions (3D array)
+        nmax     : Maximum spherical harmonic degree of expansion
+        Tzz       : Radial array to update (Eötvös (E): 10^{−9}s^{−2})
+
+        Returns
+        -------
+        Updated Tzz array with computed values for all degrees
+        '''
+        with ProgressBar(total=nmax - 1, desc='Calculating Gravity Radial') as pbar:
+            for n in range(2, nmax + 1):
+                Tzz = self.compute_radial_chunk(Cnm, Snm, lon, a, r, Pnm, n, Tzz)
+                pbar.update(1)
+        
+        return Tzz
+    
+    def second_radial_derivative(self):
+        '''
+        Wrapper function to handle data and call the Numba-optimized function
+        
+        Returns
+        -------
+        Tzz       : Second radial derivative array (Eötvös (E): 10^{−9}s^{−2})
+        
+        Notes
+        -----
+        1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.39, p.298
+        2. Please ensure that you have called shtools.replace_zonal_harmonics() on shc before passing it to second_radial()
+        '''
+        Cnm = np.array(self.shc['Cnm'])
+        Snm = np.array(self.shc['Snm'])
+        a   = np.array(self.shc['a'])
+        GM  = np.array(self.shc['GM'])
+        
+        Tzz = np.zeros(len(self.lon))
+        
+        if not self.split:
+            lon = np.radians(self.lon)
+            Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
+            Tzz = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, GM, self.r, Pnm, self.nmax, Tzz)
+        else:
+            n_points = len(self.lon)
+            n_chunks = (n_points // self.chunk) + 1
+            print(f'Data will be processed in {n_chunks} chunks...\n')
+
+            for i in range(n_chunks):
+                start_idx = i * self.chunk
+                end_idx = min((i + 1) * self.chunk, n_points)
+                
+                lon_chunk = self.lon[start_idx:end_idx]
+                r_chunk = self.r[start_idx:end_idx]
+                vartheta_chunk = self.vartheta[start_idx:end_idx]
+                Tzz_chunk = np.zeros(len(lon_chunk))
+                
+                print(f'Processing chunk {i + 1} of {n_chunks}...')
+                Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                
+                Tzz_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
+                Tzz[start_idx:end_idx] = Tzz_chunk
+                print('\n')
+        Tzz = GM / self.r ** 3 * Tzz # E = Eötvös
+        
+        return pd.Series(Tzz)
