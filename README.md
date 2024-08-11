@@ -1,7 +1,7 @@
 # easy-pygeoid     
 
 <div align="center">
-  <img src="logo/logo.png" alt="Logo" width="200"/>
+  <img src="logo/logo1.png" alt="Logo" width="200"/>
 </div>
 
 <p></p>
