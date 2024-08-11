@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import coordinates as co
 
-from legendre import ALFsGravityAnomaly
+from legendre import ALFsGravityAnomaly, ALF
 from numba import jit
 from numba_progress import ProgressBar
 
@@ -47,6 +47,8 @@ class GlobalGeopotentialModel():
         
         if self.grav_data is None:
             raise ValueError('Provide data with columns lon, lat, and elevation in order')
+        elif isinstance(self.grav_data, str):
+            self.grav_data = self.read_file()
         else:
             if isinstance(self.grav_data, np.ndarray):
                 self.lon = self.grav_data[:,0]
@@ -408,3 +410,43 @@ class GlobalGeopotentialModel():
         Tzz = GM / self.r ** 3 * Tzz # E = Eötvös
         
         return pd.Series(Tzz)
+    
+    def read_file(self):
+        '''
+        Read file containing gravity data (or lat/lon data)
+        
+        Returns
+        -------
+        df        : Pandas DataFrame
+        '''
+        column_mapping = {
+            'lon': ['lon', 'long', 'longitude', 'x'],
+            'lat': ['lat', 'lati', 'latitude', 'y'],
+            'h': ['h', 'height', 'z', 'elevation', 'elev'],
+            'gravity': ['gravity', 'g', 'acceleration', 'grav']
+        }
+        file_path = self.grav_data
+        
+        if file_path is None:
+            raise ValueError('File path not specified')
+        
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+        elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
+            df = pd.read_excel(file_path)
+        elif file_path.endswith('.txt'):
+            df = pd.read_csv(file_path, delimiter='\t')
+        else:
+            raise ValueError('Unsupported file format')
+
+        # Rename columns to standardized names
+        df = df.rename(columns=lambda col: next((key for key, values in column_mapping.items() if col.lower() in values), col))
+
+        # Ensure the DataFrame only contains the expected columns, fill missing ones with NaN
+        expected_columns = ['lon', 'lat', 'h', 'gravity']
+        df = df[[col for col in df.columns if col in expected_columns]]
+        for col in expected_columns:
+            if col not in df.columns:
+                df[col] = 0
+
+        return df
