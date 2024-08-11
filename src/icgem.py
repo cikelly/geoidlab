@@ -76,7 +76,7 @@ def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
     # Check if file already exists and has the correct size
     if os.path.exists(file_path):
         if os.path.getsize(file_path) == int(response.headers.get('content-length', 0)):
-            print(f"{model_name + '.gfc'} already exists and is complete.")
+            print(f"{model_name + '.gfc'} already exists in downloads/ and is complete.")
             # print(f"Path: {file_path}")
             return
         else:
@@ -128,7 +128,7 @@ def read_icgem(icgem_file:str):
     '''
     # Download file if it does not exist
     if not os.path.exists(icgem_file):
-        print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading ...\n')
+        print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading to downloads/ ...\n')
         model_name = icgem_file.split('/')[-1].split('.')[0]
         download_ggm(model_name)
         icgem_file = 'downloads/' + model_name + '.gfc'
