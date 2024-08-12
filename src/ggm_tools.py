@@ -302,7 +302,7 @@ class GlobalGeopotentialModel():
         U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
         
         W0  = constants.earth('W0')
-        R   = constants.earth('R')
+        R   = constants.earth('radius')
         
         gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
         
