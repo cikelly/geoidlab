@@ -130,3 +130,4 @@ def earth():
         'W0'        : 62_636_853.40,  # Geoid potential (m2/s2)
         'radius'    : 6_371_000,      # Mean Earth radius (m)
     }
+    return earth
