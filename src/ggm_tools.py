@@ -19,16 +19,22 @@ from numba_progress import ProgressBar
 from tqdm import tqdm
 
 class GlobalGeopotentialModel():
-    def __init__(self, shc=None, model_name=None, ellipsoid='wgs84', nmax=300, grav_data=None, chunk_size=100, split_data=False):
+    def __init__(
+        self, shc=None, model_name=None, 
+        ellipsoid='wgs84', nmax=300, 
+        grav_data=None, chunk_size=100, 
+        split_data=False, zonal_harmonics=True
+    ):
         '''
         Initialize the GlobalGeopotentialModel class
         
         Parameters
         ----------
-        shc       : Spherical Harmonic Coefficients -- output of icgem.read_icgem()
-        ellipsoid : Reference ellipsoid ('wgs84' or 'grs80')
-        nmax      : Maximum spherical harmonic degree
-        grav_data : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+        shc             : Spherical Harmonic Coefficients -- output of icgem.read_icgem()
+        ellipsoid       : Reference ellipsoid ('wgs84' or 'grs80')
+        nmax            : Maximum spherical harmonic degree
+        grav_data       : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+        zonal_harmonics : Whether to subtract even zonal harmonics or not
         '''
         self.shc       = shc
         self.model     = model_name
@@ -44,7 +50,7 @@ class GlobalGeopotentialModel():
         if self.shc is None:
             self.shc = icgem.read_icgem(self.model)
         # Subtract even zonal harmonics
-        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid)
+        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
         if self.grav_data is None:
             raise ValueError('Provide data with columns lon, lat, and elevation in order')
@@ -452,27 +458,33 @@ class GlobalGeopotentialModel():
 
         return df
     
+    def reference_geoid():
+        '''
+        
+        '''
 
 class GlobalGeopotentialModel2D():
     def __init__(
         self, shc=None, model_name=None, 
         ellipsoid='wgs84', nmax=300, 
         lon=None, lat=None, 
-        height=None, grid_spacing=1
+        height=None, grid_spacing=1,
+        zonal_harmonics=True
     ):
         '''
         Initialize the GlobalGeopotentialModel2D class
         
         Parameters
         ----------
-        shc         : spherical harmonic coefficients
-        model_name  : model name
-        ellipsoid   : ellipsoid
-        nmax        : maximum degree
-        lon         : Longitude (1D array) -- units of degree
-        lat         : Latitude (1D array)  -- units of degree
-        height      : Height (1D array)
-        grid_spacing: grid spacing (in degrees)
+        shc            : spherical harmonic coefficients
+        model_name     : model name
+        ellipsoid      : ellipsoid
+        nmax           : maximum degree
+        lon            : Longitude (1D array) -- units of degree
+        lat            : Latitude (1D array)  -- units of degree
+        height         : Height (1D array)
+        grid_spacing   : grid spacing (in degrees)
+        zonal_harmonics: whether to subtract zonal harmonics
         '''
         self.shc = shc
         self.model = model_name
@@ -489,7 +501,7 @@ class GlobalGeopotentialModel2D():
         if self.shc is None:
             self.shc = icgem.read_icgem(self.model)
         # Subtract even zonal harmonics
-        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid)
+        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
         if self.lon is None and self.lat is None:
             print('No grid coordinates provided. Computing over the entire globe...\n')
