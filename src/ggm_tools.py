@@ -153,7 +153,7 @@ class GlobalGeopotentialModel():
         if not self.split:
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            Dg = self.compute_gravity_for_chunk(Cnm, Snm, lon, a, GM, self.r, Pnm, self.nmax, Dg)
+            Dg = self.compute_gravity_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Dg)
         else:
             n_points = len(self.lon)
             n_chunks = (n_points // self.chunk) + 1
@@ -252,7 +252,7 @@ class GlobalGeopotentialModel():
         if not self.split:
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            dg = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, GM, self.r, Pnm, self.nmax, dg)
+            dg = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, dg)
         else:
             n_points = len(self.lon)
             n_chunks = (n_points // self.chunk) + 1
@@ -458,10 +458,104 @@ class GlobalGeopotentialModel():
 
         return df
     
-    def reference_geoid():
+    @staticmethod
+    @jit(nopython=True)
+    def compute_disturbing_potential_chunk(Cnm, Snm, lon, a, r, Pnm, n, T):
         '''
+        Compute a chunk of anomalous potential for a specific degree using Numba optimization
+        Parameters
+        ----------
+        Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+        lon      : Longitude (1D arrays)
+        a        : Reference radius 
+        r        : Radial distance (1D array)
+        Pnm      : Associated Legendre functions (3D array)
+        n        : Specific degree
+        T        : Disturbing potential array to update
         
+        Returns
+        -------
+        T        : Updated anomalous potential array for degree n
         '''
+        sum = np.zeros(len(lon))
+        for m in range(n + 1):
+            sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
+        T += (a / r) ** n * sum
+        
+        return T
+    
+    def compute_disturbing_potential_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, T):
+        '''
+        Compute gravity anomaly for a chunk of data
+        
+        Parameters
+        ----------
+        Cnm, Snm : Spherical Harmonic Coefficients (2D arrays)
+        lon      : Longitude (1D arrays)
+        a        : Reference radius 
+        r        : Radial distance (1D array)
+        Pnm      : Associated Legendre functions (3D array)
+        nmax     : Maximum spherical harmonic degree of expansion
+        T        : Anomalous potential array to update
+
+        Returns
+        -------
+        Updated T array with computed values for all degrees
+        '''
+        with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies') as pbar:
+            for n in range(2, nmax + 1):
+                T = self.compute_disturbing_potential_chunk(Cnm, Snm, lon, a, r, Pnm, n, T)
+                pbar.update(1)
+        
+        return T
+    
+    def disturbing_potential(self):
+        '''
+        Wrapper function to handle data and call the Numba-optimized function
+        
+        Returns
+        -------
+        T       : Disturbing potential array (m2/s2)
+        
+        Notes
+        -----
+        1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
+        2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to disturbing_potential()
+        '''
+        Cnm = np.array(self.shc['Cnm'])
+        Snm = np.array(self.shc['Snm'])
+        a   = np.array(self.shc['a'])
+        GM  = np.array(self.shc['GM'])
+        
+        T = np.zeros(len(self.lon))
+        
+        if not self.split:
+            lon = np.radians(self.lon)
+            Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
+            T = self.compute_disturbing_potential_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, T)
+        else:
+            n_points = len(self.lon)
+            n_chunks = (n_points // self.chunk) + 1
+            print(f'Data will be processed in {n_chunks} chunks...\n')
+
+            for i in range(n_chunks):
+                start_idx = i * self.chunk
+                end_idx = min((i + 1) * self.chunk, n_points)
+                
+                lon_chunk = self.lon[start_idx:end_idx]
+                r_chunk = self.r[start_idx:end_idx]
+                vartheta_chunk = self.vartheta[start_idx:end_idx]
+                T_chunk = np.zeros(len(lon_chunk))
+                
+                print(f'Processing chunk {i + 1} of {n_chunks}...')
+                Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                
+                T_chunk = self.compute_disturbing_potential_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, T_chunk)
+                T[start_idx:end_idx] = T_chunk
+                print('\n')
+        T = GM / self.r * T # m2/s2
+        
+        return pd.Series(T)
 
 class GlobalGeopotentialModel2D():
     def __init__(
