@@ -704,3 +704,23 @@ class GlobalGeopotentialModel2D():
             N[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, N
+
+    def disturbing_potential_2D(self):
+        '''
+        Vectorized computations of anomalous potential on a grid
+        
+        Returns
+        -------
+        T      : Disturbing potential array (2D array)
+        '''
+        degree_term = np.ones(len(self.n)) * self.shc['GM'] / self.shc['a']
+        # Set degrees 0 and 1 to zero
+        degree_term[0:2] = 0
+        
+        T = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity anomalies'):
+            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            T[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, T
