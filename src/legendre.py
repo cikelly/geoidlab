@@ -49,8 +49,6 @@ def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
         # phi_bar = degrees(phi_bar)
     
     # sine (u) and cosine (t) terms
-    # t = cos(radians(phi_bar))
-    # u = sin(radians(phi_bar))
     t = cos(phi_bar)
     u = sin(phi_bar)
 
