@@ -10,34 +10,15 @@ import numpy as np
 import pandas as pd
 from numba import jit
 from numba_progress import ProgressBar
-from legendre import ALFsGravityAnomaly
-
-@jit(nopython=True)
-def compute_height_chunk(HCnm, HSnm, lon, n, Pnm):
-    '''
-    Compute a chunk of heights for a specific degree n using Numba for optimization
-
-    Parameters
-    ----------
-    HCnm, HSnm : Spherical Harmonic Coefficients (2D arrays)
-    lon        : Longitude (1D arrays)
-    n          : Specific degree
-    Pnm        : Associated Legendre functions (3D array)
-
-    Returns
-    -------
-    H          : Heights (1D array)
-    '''
-    H = np.zeros(len(lon))
-    for m in range(n + 1):
-        H += (HCnm[n, m] * np.cos(m * lon) + HSnm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
-    return H
-
+from legendre import ALFsGravityAnomaly, ALF
+import coordinates as co
+from tqdm import tqdm
 
 class DigitalTerrainModel:
-    def __init__(self, model_name=None, nmax=2190):
+    def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84'):
         self.name = model_name
         self.nmax = nmax
+        self.ellipsoid = ellipsoid
 
         if self.name is None:
             script_dir = os.path.dirname(__file__)
@@ -71,6 +52,28 @@ class DigitalTerrainModel:
         self.HCnm = HCnm
         self.HSnm = HSnm
 
+    @staticmethod
+    @jit(nopython=True)
+    def compute_height_chunk(HCnm, HSnm, lon, n, Pnm):
+        '''
+        Compute a chunk of heights for a specific degree n using Numba for optimization
+
+        Parameters
+        ----------
+        HCnm, HSnm : Spherical Harmonic Coefficients (2D arrays)
+        lon        : Longitude (1D arrays)
+        n          : Specific degree
+        Pnm        : Associated Legendre functions (3D array)
+
+        Returns
+        -------
+        H          : Heights (1D array)
+        '''
+        H = np.zeros(len(lon))
+        for m in range(n + 1):
+            H += (HCnm[n, m] * np.cos(m * lon) + HSnm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
+        return H
+    
     def calculate_height_chunk(self, lon, lat, Pnm):
         '''
         Calculate height for a chunk of data
@@ -96,12 +99,12 @@ class DigitalTerrainModel:
 
         with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
             for n in range(self.nmax + 1):
-                H_chunk += compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                H_chunk += self.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
                 pbar.update(1)
 
         return H_chunk
 
-    def calculate_height(self, lon, lat, Pnm=None, ellipsoid='wgs84', chunk_size=100, split_data=False):
+    def calculate_height(self, lon, lat, Pnm=None, chunk_size=100, split_data=False):
         '''
         Wrapper function to handle data and call the Numba-optimized function
 
@@ -134,7 +137,7 @@ class DigitalTerrainModel:
 
         if not split_data:
             if Pnm is None:
-                Pnm = ALFsGravityAnomaly(phi=lat, lambd=lon, nmax=self.nmax, ellipsoid=ellipsoid)
+                Pnm = ALFsGravityAnomaly(phi=lat, lambd=lon, nmax=self.nmax, ellipsoid=self.ellipsoid)
             
             lon = np.radians(lon)
             lat = np.radians(lat)
@@ -145,7 +148,7 @@ class DigitalTerrainModel:
 
             with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
                 for n in range(self.nmax + 1):
-                    H += compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                    H += self.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
                     pbar.update(1)
         else:
             n_points = len(lon)
@@ -162,10 +165,62 @@ class DigitalTerrainModel:
                 lat_chunk = lat[start_idx:end_idx]
 
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
-                Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=ellipsoid)
+                Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
 
                 H[start_idx:end_idx] = self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk)
                 print('\n')
 
                 Pnm_chunk = None
         return H
+    
+    def calculate_height_2D(self, lon=None, lat=None, grid_spacing=1):
+        '''
+        Vectorized computations of height on a grid
+        
+        Parameters
+        ----------
+        lon         : Longitude (1D array) -- units of degree
+        lat         : Latitude (1D array)  -- units of degree
+        grid_spacing: grid spacing (in degrees)
+
+        Returns
+        -------
+        H      : Height array (2D array)
+        '''
+        self.lon = lon
+        self.lat = lat
+        self.grid_spacing = grid_spacing
+        
+        if self.lon is None and self.lat is None:
+            print('No grid coordinates provided. Computing over the entire globe...\n')
+            self.lambda_ = np.radians(np.arange(-180, 180+self.grid_spacing, self.grid_spacing))
+            self.theta   = np.radians(np.arange(0, 180+self.grid_spacing, self.grid_spacing)) # co-latitude
+            self.lon     = np.arange(-180, 180+self.grid_spacing, self.grid_spacing)
+            self.lat     = np.arange(-90, 90+self.grid_spacing, self.grid_spacing)
+        else:
+            self.r, self.theta, _ = co.geodetic2spherical(
+                phi=self.lat, lambd=self.lon, 
+                height=len(self.lon), ellipsoid=self.ellipsoid
+            )
+            self.lambda_ = np.radians(self.lon)
+        
+        
+        self.Lon, self.Lat = np.meshgrid(self.lon, self.lat)
+        self.Lat *= -1
+        
+        # Precompute for vectorization
+        self.n = np.arange(self.nmax + 1)
+        self.cosm = np.cos(np.arange(0, self.nmax+1)[:, np.newaxis] * self.lambda_)
+        self.sinm = np.sin(np.arange(0, self.nmax+1)[:, np.newaxis] * self.lambda_)        
+        
+        degree_term = np.ones(len(self.n))
+        # Set degrees 0 and 1 to zero
+        # degree_term[0:2] = 0
+        
+        H = np.zeros((len(self.theta), len(self.lambda_)))
+        
+        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing heights'):
+            Pnm = ALF(vartheta=theta_, nmax=self.nmax, ellipsoid=self.ellipsoid)
+            H[i,:] = degree_term @ ((self.HCnm * Pnm) @ self.cosm + (self.HSnm * Pnm) @ self.sinm)
+            
+        return self.Lon, self.Lat, H
