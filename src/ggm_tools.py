@@ -1,5 +1,5 @@
 ############################################################
-# Utilities for calculating reference geoid                #
+# Utilities for synthesizing gravity functionals           #
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
@@ -277,15 +277,15 @@ class GlobalGeopotentialModel():
         
         return dg
 
-    def zero_degree_term(self, geoid=None, GM=None):
+    def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid'):
         '''
         Add zero-degree term to the GGM geoid
         
         Parameters
         ----------
-        geoid      : Geoid model (output of ggm_tools.reference_geoid())
-        GM         : Gravity constant of the GGM
-        
+        geoid         : Geoid model (output of ggm_tools.reference_geoid())
+        GM            : Gravity constant of the GGM
+        zeta_or_geoid : 'zeta' or 'geoid'
         Returns
         -------
         N          : Geoid corrected for zero-degree term
@@ -310,7 +310,12 @@ class GlobalGeopotentialModel():
         W0  = constants.earth('W0')
         R   = constants.earth('radius')
         
-        gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
+        if zeta_or_geoid == 'zeta':
+            gamma_0 = gravity.normal_gravity_above_ellipsoid(
+                phi=self.lat, h=self.height, ellipsoid=self.ellipsoid
+            ) # This is actually gamma_Q
+        else:
+            gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
         
         N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma_0 
         
@@ -557,6 +562,54 @@ class GlobalGeopotentialModel():
         
         return T
 
+    
+    def height_anomaly(self):
+        '''
+        Height anomaly based on Bruns' method
+        
+        Returns
+        -------
+        zeta    : Height anomaly (m)
+        
+        Notes
+        -----
+        1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.9, p.288
+        '''
+        print('Using Bruns\' method to calculate height anomaly...\n')
+        T = self.disturbing_potential()
+        gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.height, ellipsoid=self.ellipsoid)
+        
+        zeta = T/gammaQ
+        
+        # Zero-degree term
+        zeta_0 = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
+        
+        return zeta + zeta_0
+    
+    def geoid(self):
+        '''
+        Geoid heights based on Bruns' method
+        
+        Returns
+        -------
+        zeta    : Geoid height (m)
+        
+        Notes
+        -----
+        1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.8, p.288
+        '''
+        print('Using Bruns\' method to calculate geoid height...\n')
+        
+        T = self.disturbing_potential()
+        gamma0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
+
+        N = T / gamma0
+        
+        # Zero-degree term
+        N_0 = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
+        
+        return N + N_0
+    
 class GlobalGeopotentialModel2D():
     def __init__(
         self, shc=None, model_name=None, 
