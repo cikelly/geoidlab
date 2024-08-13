@@ -563,9 +563,13 @@ class GlobalGeopotentialModel():
         return T
 
     
-    def height_anomaly(self):
+    def height_anomaly(self, T=None):
         '''
         Height anomaly based on Bruns' method
+        
+        Parameters
+        ----------
+        T         : Disturbing potential array (m2/s2)
         
         Returns
         -------
@@ -576,7 +580,8 @@ class GlobalGeopotentialModel():
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.9, p.288
         '''
         print('Using Bruns\' method to calculate height anomaly...\n')
-        T = self.disturbing_potential()
+        
+        T = self.disturbing_potential() if T is None else T
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.height, ellipsoid=self.ellipsoid)
         
         zeta = T/gammaQ
@@ -586,9 +591,13 @@ class GlobalGeopotentialModel():
         
         return zeta + zeta_0
     
-    def geoid(self):
+    def geoid(self, T=None):
         '''
         Geoid heights based on Bruns' method
+        
+        Parameters
+        ----------
+        T         : Disturbing potential array (m2/s2)
         
         Returns
         -------
@@ -600,7 +609,7 @@ class GlobalGeopotentialModel():
         '''
         print('Using Bruns\' method to calculate geoid height...\n')
         
-        T = self.disturbing_potential()
+        T = self.disturbing_potential() if T is None else T
         gamma0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
