@@ -176,7 +176,7 @@ class GlobalGeopotentialModel():
                 print('\n')
         Dg = GM / self.r ** 2 * Dg * 10**5 # mGal
         
-        return pd.Series(Dg)
+        return Dg
             
     @staticmethod
     @jit(nopython=True)
@@ -275,7 +275,7 @@ class GlobalGeopotentialModel():
                 print('\n')
         dg = GM / self.r ** 2 * dg * 10**5 # mGal
         
-        return pd.Series(dg)
+        return dg
 
     def zero_degree_term(self, geoid=None, GM=None):
         '''
@@ -416,7 +416,7 @@ class GlobalGeopotentialModel():
                 print('\n')
         Tzz = GM / self.r ** 3 * Tzz * 10 ** 9 # E = Eötvös
         
-        return pd.Series(Tzz)
+        return Tzz
     
     def read_file(self):
         '''
@@ -555,7 +555,7 @@ class GlobalGeopotentialModel():
                 print('\n')
         T = GM / self.r * T # m2/s2
         
-        return pd.Series(T)
+        return T
 
 class GlobalGeopotentialModel2D():
     def __init__(
