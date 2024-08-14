@@ -398,7 +398,7 @@ class GlobalGeopotentialModel():
         if not self.split:
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            Tzz = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, GM, self.r, Pnm, self.nmax, Tzz)
+            Tzz = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Tzz)
         else:
             n_points = len(self.lon)
             n_chunks = (n_points // self.chunk) + 1
@@ -416,7 +416,7 @@ class GlobalGeopotentialModel():
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
                 Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
                 
-                Tzz_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
+                Tzz_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
                 Tzz[start_idx:end_idx] = Tzz_chunk
                 print('\n')
         Tzz = GM / self.r ** 3 * Tzz * 10 ** 9 # E = Eötvös
@@ -507,7 +507,7 @@ class GlobalGeopotentialModel():
         -------
         Updated T array with computed values for all degrees
         '''
-        with ProgressBar(total=nmax - 1, desc='Calculating Gravity Anomalies') as pbar:
+        with ProgressBar(total=nmax - 1, desc='Calculating Disturbing Potential') as pbar:
             for n in range(2, nmax + 1):
                 T = self.compute_disturbing_potential_chunk(Cnm, Snm, lon, a, r, Pnm, n, T)
                 pbar.update(1)
