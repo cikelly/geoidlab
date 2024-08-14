@@ -12,13 +12,14 @@ from numpy import (
     zeros
 )
 
-def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
+def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e', model_dir='downloads'):
     '''
     Download static gravity model from ICGEM
     
     Parameters
     ----------
     model_name: (str) Name of global model
+    model_dir : (str) Directory to download model to
     
     Returns
     -------
@@ -30,7 +31,7 @@ def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
     '''
     base_url = "https://icgem.gfz-potsdam.de/tom_longtime"
     model_url_prefix = 'https://icgem.gfz-potsdam.de'
-    file_path = os.path.join('downloads', model_name + '.gfc')
+    file_path = os.path.join(model_dir, model_name + '.gfc')
     
     # Check if file already exists
     if os.path.exists(file_path):
@@ -70,13 +71,13 @@ def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
         return
     
     # Ensure output directory exists
-    os.makedirs('downloads', exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
     # file_path = os.path.join('downloads', model_name + '.gfc')
     
     # Check if file already exists and has the correct size
     if os.path.exists(file_path):
         if os.path.getsize(file_path) == int(response.headers.get('content-length', 0)):
-            print(f"{model_name + '.gfc'} already exists in downloads/ and is complete.")
+            print(f"{model_name + '.gfc'} already exists in {model_dir} and is complete.")
             # print(f"Path: {file_path}")
             return
         else:
@@ -100,11 +101,11 @@ def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e'):
             # if os.path.exists(file_path):
             #     os.remove(file_path)
 
-    print(f"\n{model_name + '.gfc'} saved to downloads")
+    print(f"\n{model_name + '.gfc'} saved to {model_dir}")
 
 
 
-def read_icgem(icgem_file:str):
+def read_icgem(icgem_file:str, model_dir='downloads'):
     '''
     Read spherical harmonic coefficients from an ICGEM .gfc file.
 
@@ -128,12 +129,12 @@ def read_icgem(icgem_file:str):
     '''
     # Download file if it does not exist
     if not os.path.exists(icgem_file):
-        print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading to downloads/ ...\n')
+        print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading to {model_dir} ...\n')
         model_name = icgem_file.split('/')[-1].split('.')[0]
         download_ggm(model_name)
-        icgem_file = 'downloads/' + model_name + '.gfc'
-        
-    with open(icgem_file, 'r') as f:
+        icgem_file = f'{model_dir}' + model_name + '.gfc'
+    
+    with open(icgem_file, 'r', encoding='utf-8', errors='ignore') as f:
         data = f.readlines()
     
     ##### Read a, GM, nmax
@@ -149,7 +150,7 @@ def read_icgem(icgem_file:str):
         for key, type_ in keys.items():
             if key in line:
                 values[key] = type_(line.split()[1])
-
+    
     nmax = values.get('max_degree')
 
     ##### Read Cnm, Snm, sCnm, sSnm
