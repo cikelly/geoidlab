@@ -8,6 +8,7 @@ import icgem
 import shtools
 import constants
 import gravity
+import os
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,8 @@ class GlobalGeopotentialModel():
         self, shc=None, model_name=None, 
         ellipsoid='wgs84', nmax=300, 
         grav_data=None, chunk_size=100, 
-        split_data=False, zonal_harmonics=True
+        split_data=False, zonal_harmonics=True,
+        model_dir='downloads'
     ):
         '''
         Initialize the GlobalGeopotentialModel class
@@ -31,10 +33,12 @@ class GlobalGeopotentialModel():
         Parameters
         ----------
         shc             : Spherical Harmonic Coefficients -- output of icgem.read_icgem()
+        model_name      : Name of gravity model without extension
         ellipsoid       : Reference ellipsoid ('wgs84' or 'grs80')
         nmax            : Maximum spherical harmonic degree
         grav_data       : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
         zonal_harmonics : Whether to subtract even zonal harmonics or not
+        model_dir       : Directory where model file is stored
         '''
         self.shc       = shc
         self.model     = model_name
@@ -43,12 +47,16 @@ class GlobalGeopotentialModel():
         self.grav_data = grav_data
         self.chunk     = chunk_size
         self.split     = split_data
+        self.model_dir = model_dir
         
+        if self.model.endswith('.gfc'):
+            self.model = self.model.split('.gfc')[0]
+            
         if self.shc is None and self.model is None:
             raise ValueError('Either shc or model_name must be specified')
         
         if self.shc is None:
-            self.shc = icgem.read_icgem(self.model)
+            self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
         # Subtract even zonal harmonics
         self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
@@ -63,8 +71,9 @@ class GlobalGeopotentialModel():
                 try:
                     self.h = self.grav_data[:,2]
                 except IndexError:
-                    print('Looks like there is no elevation column. Setting elevation to 0')
-                    self.h = np.zeros(len(self.lat))
+                    raise ValueError('Provide data with columns lon, lat, and elevation in order.')
+                    # print('Looks like there is no elevation column. Setting elevation to 0')
+                    # self.h = np.zeros(len(self.lat))
             elif isinstance(self.grav_data, pd.DataFrame):
                 lon_column = [col for col in self.grav_data.columns if pd.Series(col).str.contains('lon', case=False).any()][0]
                 lat_column = [col for col in self.grav_data.columns if pd.Series(col).str.contains('lat', case=False).any()][0]
@@ -76,9 +85,16 @@ class GlobalGeopotentialModel():
                 except IndexError:
                     print('Looks like there is no elevation column. Setting elevation to 0')
                     self.h = np.zeros(len(self.lat))
-
+        # if np.all(self.h == 0):
+        #     raise ValueError('All elevations are 0. Use GlobalGeopotentialModel2D instead if you have gridded data')
         self.r, self.vartheta, _ = co.geodetic2spherical(phi=self.lat, lambd=self.lon, height=self.h, ellipsoid=self.ellipsoid)
-
+        
+        # Set self.r = self.shc['a'] if all self.h = 0 (Doesn't really matter)
+        if np.all(self.h == 0):
+            print('Setting r = R ...')
+            self.r = self.shc['a']
+            
+            
     @staticmethod
     @jit(nopython=True)
     def compute_gravity_chunk(Cnm, Snm, lon, a, r, Pnm, n, Dg):
@@ -308,12 +324,14 @@ class GlobalGeopotentialModel():
         U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
         
         W0  = constants.earth()['W0']
-        R   = constants.earth()['radius']
+        # R   = constants.earth()['radius']
+        R = self.r
         
         if zeta_or_geoid == 'zeta':
             gamma_0 = gravity.normal_gravity_above_ellipsoid(
                 phi=self.lat, h=self.h, ellipsoid=self.ellipsoid
             ) # This is actually gamma_Q
+            gamma_0 = gamma_0 / 1e5 # mgal to m/s2
         else:
             gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
         
@@ -337,7 +355,7 @@ class GlobalGeopotentialModel():
         r        : Radial distance (1D array)
         Pnm      : Associated Legendre functions (3D array)
         n        : Specific degree
-        Tzz      : Gravity radial array to update (unit: 1E = 10^{−9}s^{−2})
+        Tzz      : Radial derivative array to update (unit: 1E = 10^{−9}s^{−2})
         
         Returns
         -------
@@ -368,7 +386,7 @@ class GlobalGeopotentialModel():
         -------
         Updated Tzz array with computed values for all degrees
         '''
-        with ProgressBar(total=nmax - 1, desc='Calculating Gravity Radial') as pbar:
+        with ProgressBar(total=nmax - 1, desc='Calculating Radial Derivative') as pbar:
             for n in range(2, nmax + 1):
                 Tzz = self.compute_radial_chunk(Cnm, Snm, lon, a, r, Pnm, n, Tzz)
                 pbar.update(1)
@@ -398,7 +416,7 @@ class GlobalGeopotentialModel():
         if not self.split:
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            Tzz = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Tzz)
+            Tzz = self.compute_radial_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Tzz)
         else:
             n_points = len(self.lon)
             n_chunks = (n_points // self.chunk) + 1
@@ -416,7 +434,7 @@ class GlobalGeopotentialModel():
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
                 Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
                 
-                Tzz_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
+                Tzz_chunk = self.compute_radial_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, Tzz_chunk)
                 Tzz[start_idx:end_idx] = Tzz_chunk
                 print('\n')
         Tzz = GM / self.r ** 3 * Tzz * 10 ** 9 # E = Eötvös
@@ -559,6 +577,7 @@ class GlobalGeopotentialModel():
                 T[start_idx:end_idx] = T_chunk
                 print('\n')
         T = GM / self.r * T # m2/s2
+        # T = T
         
         return T
 
@@ -583,13 +602,14 @@ class GlobalGeopotentialModel():
         
         T = self.disturbing_potential() if T is None else T
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
-        
+        gammaQ = gammaQ * 1e-5 # mgal to m/s2
         zeta = T/gammaQ
+        # zeta = (T * self.shc['GM'] / self.r) / gammaQ
         
         # Zero-degree term
-        zeta_0 = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
+        zeta = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
         
-        return zeta + zeta_0
+        return zeta #+ zeta_0
     
     def geoid(self, T=None):
         '''
@@ -615,9 +635,9 @@ class GlobalGeopotentialModel():
         N = T / gamma0
         
         # Zero-degree term
-        N_0 = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
+        N = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
         
-        return N + N_0
+        return N
     
 class GlobalGeopotentialModel2D():
     def __init__(
@@ -625,7 +645,7 @@ class GlobalGeopotentialModel2D():
         ellipsoid='wgs84', nmax=300, 
         lon=None, lat=None, 
         height=None, grid_spacing=1,
-        zonal_harmonics=True
+        zonal_harmonics=True, model_dir='downloads'
     ):
         '''
         Initialize the GlobalGeopotentialModel2D class
@@ -642,20 +662,24 @@ class GlobalGeopotentialModel2D():
         grid_spacing   : grid spacing (in degrees)
         zonal_harmonics: whether to subtract zonal harmonics
         '''
-        self.shc = shc
-        self.model = model_name
-        self.ellipsoid = ellipsoid
-        self.nmax = nmax
-        self.lon = lon
-        self.lat = lat
+        self.shc          = shc
+        self.model        = model_name
+        self.ellipsoid    = ellipsoid
+        self.nmax         = nmax
+        self.lon          = lon
+        self.lat          = lat
         self.grid_spacing = grid_spacing
-        self.h = height
+        self.h            = height
+        self.model_dir    = model_dir
         
+        if self.model.endswith('.gfc'):
+            self.model = self.model.split('.gfc')[0]
+            
         if self.shc is None and self.model is None:
             raise ValueError('Either shc or model_name must be specified')
         
         if self.shc is None:
-            self.shc = icgem.read_icgem(self.model)
+            self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
         # Subtract even zonal harmonics
         self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
