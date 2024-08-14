@@ -14,7 +14,7 @@ from numba import jit
 # import numpy as np
 from numba_progress import ProgressBar
  
-def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
+def ALF(phi=None, lambd=None, vartheta=None, height=None, nmax=60, ellipsoid='wgs84'):
     '''
     Compute associated Legendre functions
 
@@ -45,7 +45,9 @@ def ALF(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
     if vartheta is not None: 
         phi_bar = vartheta
     elif phi is not None:
-        _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=0)
+        if height is None:
+            height = 0
+        _, phi_bar, _ = geodetic2spherical(phi, lambd, ellipsoid, height=height)
         # phi_bar = degrees(phi_bar)
     
     # sine (u) and cosine (t) terms
@@ -145,7 +147,7 @@ def compute_legendre_chunk(vartheta, n, Pnm):
 
     return Pnm
 
-def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
+def ALFsGravityAnomaly(phi=None, lambd=None, height=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
     '''
     Wrapper function to handle data and call the Numba-optimized function
 
@@ -170,7 +172,9 @@ def ALFsGravityAnomaly(phi=None, lambd=None, vartheta=None, nmax=60, ellipsoid='
     if vartheta is not None: 
         phi_bar = vartheta
     elif phi is not None:
-        _, phi_bar, _ = geodetic2spherical(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=0)
+        if height is None:
+            height = 0
+        _, phi_bar, _ = geodetic2spherical(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
     
     # Initialize Pnm array
     Pnm = zeros((len(phi_bar), nmax + 1, nmax + 1))
