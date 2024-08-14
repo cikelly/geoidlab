@@ -71,9 +71,9 @@ class GlobalGeopotentialModel():
                 try:
                     self.h = self.grav_data[:,2]
                 except IndexError:
-                    raise ValueError('Provide data with columns lon, lat, and elevation in order.')
-                    # print('Looks like there is no elevation column. Setting elevation to 0')
-                    # self.h = np.zeros(len(self.lat))
+                    # raise ValueError('Provide data with columns lon, lat, and elevation in order.')
+                    print('Looks like there is no elevation column. Setting elevation to 0')
+                    self.h = np.zeros(len(self.lat))
             elif isinstance(self.grav_data, pd.DataFrame):
                 lon_column = [col for col in self.grav_data.columns if pd.Series(col).str.contains('lon', case=False).any()][0]
                 lat_column = [col for col in self.grav_data.columns if pd.Series(col).str.contains('lat', case=False).any()][0]
