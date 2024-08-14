@@ -307,12 +307,12 @@ class GlobalGeopotentialModel():
         GM0 = ref_ellipsoid['GM']
         U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
         
-        W0  = constants.earth('W0')
-        R   = constants.earth('radius')
+        W0  = constants.earth()['W0']
+        R   = constants.earth()['radius']
         
         if zeta_or_geoid == 'zeta':
             gamma_0 = gravity.normal_gravity_above_ellipsoid(
-                phi=self.lat, h=self.height, ellipsoid=self.ellipsoid
+                phi=self.lat, h=self.h, ellipsoid=self.ellipsoid
             ) # This is actually gamma_Q
         else:
             gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
@@ -582,7 +582,7 @@ class GlobalGeopotentialModel():
         print('Using Bruns\' method to calculate height anomaly...\n')
         
         T = self.disturbing_potential() if T is None else T
-        gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.height, ellipsoid=self.ellipsoid)
+        gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
         
         zeta = T/gammaQ
         
@@ -649,7 +649,7 @@ class GlobalGeopotentialModel2D():
         self.lon = lon
         self.lat = lat
         self.grid_spacing = grid_spacing
-        self.height = height
+        self.h = height
         
         if self.shc is None and self.model is None:
             raise ValueError('Either shc or model_name must be specified')
