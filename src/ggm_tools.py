@@ -629,8 +629,12 @@ class GlobalGeopotentialModel():
         
         T = self.disturbing_potential() if T is None else T
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
+        gammaQ = gammaQ * 1e-5  # mgal to m/s2
         zeta_old = T / gammaQ
         zeta_old = self.zero_degree_term(geoid=zeta_old, zeta_or_geoid='zeta')
+        
+        if max_iter == 0:
+            return zeta_old
         
         print(f'Iterating to refine zeta...\n')
         
