@@ -601,14 +601,15 @@ class GlobalGeopotentialModel():
         
         return T
 
-    
-    def height_anomaly(self, T=None):
+    def height_anomaly(self, T=None, tolerance=5e-3, max_iter=5):
         '''
         Height anomaly based on Bruns' method
         
         Parameters
         ----------
         T         : Disturbing potential array (m2/s2)
+        tolerance : Tolerance for refining height anomaly
+        max_iter  : Maximum number of iterations
         
         Returns
         -------
@@ -617,19 +618,46 @@ class GlobalGeopotentialModel():
         Notes
         -----
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.9, p.288
+        2. We need to iterate to refine zeta because we start estimating zeta using `H` not `hn`
+            Steps:
+                1. Estimate hn (normal height): hn = self.h - zeta
+                2. Use hn to calculate gammaQ
+                3. Use gammaQ to calculate updated zeta (zeta1)
+                4. Repeat until convergence.
         '''
-        print('Using Bruns\' method to calculate height anomaly...\n')
+        print('Using Bruns\' method with zero-degree correction to calculate height anomaly...\n')
         
         T = self.disturbing_potential() if T is None else T
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
-        gammaQ = gammaQ * 1e-5 # mgal to m/s2
-        zeta = T/gammaQ
-        # zeta = (T * self.shc['GM'] / self.r) / gammaQ
+        zeta_old = T / gammaQ
+        zeta_old = self.zero_degree_term(geoid=zeta_old, zeta_or_geoid='zeta')
         
-        # Zero-degree term
-        zeta = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
+        print(f'Iterating to refine zeta...\n')
         
-        return zeta #+ zeta_0
+        converged = np.zeros_like(zeta_old, dtype=bool)
+        
+        for _ in range(max_iter):
+            print(f'Iteration {_ + 1}')
+            gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h - zeta_old, ellipsoid=self.ellipsoid)
+            gammaQ = gammaQ * 1e-5  # mgal to m/s2
+            zeta = T / gammaQ
+            
+            # Zero-degree term
+            zeta = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
+            
+            zeta_diff = np.abs(zeta - zeta_old)
+            
+            # Update the converged mask
+            converged = converged | (zeta_diff < tolerance)
+            
+            # If all points have converged, break the loop
+            if np.all(converged):
+                break
+            
+            # Update zeta_old only for points that have not converged
+            zeta_old[~converged] = zeta[~converged]
+        
+        return zeta
     
     def geoid(self, T=None):
         '''
@@ -647,7 +675,7 @@ class GlobalGeopotentialModel():
         -----
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.8, p.288
         '''
-        print('Using Bruns\' method to calculate geoid height...\n')
+        print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
         
         T = self.disturbing_potential() if T is None else T
         gamma0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
