@@ -49,12 +49,17 @@ class GlobalGeopotentialModel():
         self.chunk     = chunk_size
         self.model_dir = model_dir
         
+        # Input validation
+        if self.model_dir is None:
+            self.model_dir = 'downloads'
+            
         if self.chunk is not None:
             try:
                 self.chunk = int(self.chunk)
             except ValueError:
                 print('Invalid chunk_size. Setting chunk_size to 100.')
                 self.chunk = 100
+                # raise ValueError('Invalid chunk_size. Must be an integer.')
         
         if self.chunk is not None and self.chunk <= 0:
             print('Invalid chunk_size. Setting chunk_size to 100.')
@@ -66,8 +71,11 @@ class GlobalGeopotentialModel():
         if self.shc is None and self.model is None:
             raise ValueError('Either shc or model_name must be specified')
         
-        if self.shc is None:
-            self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
+        try:
+            if self.shc is None:
+                self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
+        except Exception as e:
+            raise ValueError(f'Failed to read model file: {e}')
         # Subtract even zonal harmonics
         self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
