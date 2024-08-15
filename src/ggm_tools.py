@@ -76,6 +76,7 @@ class GlobalGeopotentialModel():
                 self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
         except Exception as e:
             raise ValueError(f'Failed to read model file: {e}')
+        
         # Subtract even zonal harmonics
         self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
