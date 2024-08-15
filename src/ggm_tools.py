@@ -691,6 +691,9 @@ class GlobalGeopotentialModel2D():
         self.h            = height
         self.model_dir    = model_dir
         
+        if self.model_dir is None:
+            self.model_dir = 'downloads'
+            
         if self.model.endswith('.gfc'):
             self.model = self.model.split('.gfc')[0]
             
@@ -708,11 +711,6 @@ class GlobalGeopotentialModel2D():
             self.theta   = np.radians(np.arange(0, 180+self.grid_spacing, self.grid_spacing)) # co-latitude
             self.lon     = np.arange(-180, 180+self.grid_spacing, self.grid_spacing)
             self.lat     = np.arange(-90, 90+self.grid_spacing, self.grid_spacing)
-            # print(self.lon.shape, self.lat.shape)
-            # self.r, _ ,_ = co.geodetic2spherical(
-            #     phi=self.lat, lambd=self.lon, 
-            #     height=len(self.lon), ellipsoid=self.ellipsoid
-            # )
         else:
             self.r, self.theta, _ = co.geodetic2spherical(
                 phi=self.lat, lambd=self.lon, 
@@ -738,7 +736,6 @@ class GlobalGeopotentialModel2D():
         Dg     : Gravity anomaly array (2D array)
         '''
         degree_term = self.shc['GM'] / self.shc['a'] ** 2 * (self.n - 1) * 10 ** 5 # mGal
-        # degree_term = self.shc['GM'] / self.r ** 2 * (self.n - 1) *  self.shc['a']/self.r ** self.n * 10 ** 5 # mGal
         # Set degrees 0 and 1 to zero
         degree_term[0:2] = 0
         
