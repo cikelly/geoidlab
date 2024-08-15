@@ -11,6 +11,7 @@ scipy
 numba
 numba-progress
 openpyxl
+gdal>=3.8
 # dask
 # dask[complete]
 # wget
