@@ -22,13 +22,13 @@ from tqdm import tqdm
 class GlobalGeopotentialModel():
     def __init__(
         self, shc=None, model_name=None, 
-        ellipsoid='wgs84', nmax=300, 
-        grav_data=None, chunk_size=100, 
-        split_data=False, zonal_harmonics=True,
+        ellipsoid='wgs84', nmax=90, 
+        grav_data=None, chunk_size=None, 
+        zonal_harmonics=True,
         model_dir='downloads'
     ):
         '''
-        Initialize the GlobalGeopotentialModel class
+        Initialize the GlobalGeopotentialModel class for potential modeling
         
         Parameters
         ----------
@@ -37,6 +37,7 @@ class GlobalGeopotentialModel():
         ellipsoid       : Reference ellipsoid ('wgs84' or 'grs80')
         nmax            : Maximum spherical harmonic degree
         grav_data       : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+        chunk_size      : If provided, data is processed in chunk of length chunk_size
         zonal_harmonics : Whether to subtract even zonal harmonics or not
         model_dir       : Directory where model file is stored
         '''
@@ -46,9 +47,19 @@ class GlobalGeopotentialModel():
         self.nmax      = nmax
         self.grav_data = grav_data
         self.chunk     = chunk_size
-        self.split     = split_data
         self.model_dir = model_dir
         
+        if self.chunk is not None:
+            try:
+                self.chunk = int(self.chunk)
+            except ValueError:
+                print('Invalid chunk_size. Setting chunk_size to 100.')
+                self.chunk = 100
+        
+        if self.chunk is not None and self.chunk <= 0:
+            print('Invalid chunk_size. Setting chunk_size to 100.')
+            self.chunk = 100
+
         if self.model.endswith('.gfc'):
             self.model = self.model.split('.gfc')[0]
             
@@ -166,7 +177,7 @@ class GlobalGeopotentialModel():
         
         Dg = np.zeros(len(self.lon))
         
-        if not self.split:
+        if self.chunk is None or self.chunk >= len(self.lon):
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
             Dg = self.compute_gravity_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Dg)
@@ -187,7 +198,7 @@ class GlobalGeopotentialModel():
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
                 Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
                 
-                Dg_chunk = self.compute_gravity_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, Dg_chunk)
+                Dg_chunk = self.compute_gravity_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, Dg_chunk)
                 Dg[start_idx:end_idx] = Dg_chunk
                 print('\n')
         Dg = GM / self.r ** 2 * Dg * 10**5 # mGal
@@ -265,7 +276,7 @@ class GlobalGeopotentialModel():
         
         dg = np.zeros(len(self.lon))
         
-        if not self.split:
+        if self.chunk is None or self.chunk >= len(self.lon):
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
             dg = self.compute_disturbance_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, dg)
@@ -286,7 +297,7 @@ class GlobalGeopotentialModel():
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
                 Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
                 
-                dg_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, dg_chunk)
+                dg_chunk = self.compute_disturbance_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, dg_chunk)
                 dg[start_idx:end_idx] = dg_chunk
                 print('\n')
         dg = GM / self.r ** 2 * dg * 10**5 # mGal
@@ -413,7 +424,7 @@ class GlobalGeopotentialModel():
         
         Tzz = np.zeros(len(self.lon))
         
-        if not self.split:
+        if self.chunk is None or self.chunk >= len(self.lon):
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
             Tzz = self.compute_radial_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, Tzz)
@@ -552,7 +563,7 @@ class GlobalGeopotentialModel():
         
         T = np.zeros(len(self.lon))
         
-        if not self.split:
+        if self.chunk is None or self.chunk >= len(self.lon):
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
             T = self.compute_disturbing_potential_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, T)
@@ -573,7 +584,7 @@ class GlobalGeopotentialModel():
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
                 Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
                 
-                T_chunk = self.compute_disturbing_potential_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, GM, r_chunk, Pnm_chunk, self.nmax, T_chunk)
+                T_chunk = self.compute_disturbing_potential_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, T_chunk)
                 T[start_idx:end_idx] = T_chunk
                 print('\n')
         T = GM / self.r * T # m2/s2
@@ -642,7 +653,7 @@ class GlobalGeopotentialModel():
 class GlobalGeopotentialModel2D():
     def __init__(
         self, shc=None, model_name=None, 
-        ellipsoid='wgs84', nmax=300, 
+        ellipsoid='wgs84', nmax=90, 
         lon=None, lat=None, 
         height=None, grid_spacing=1,
         zonal_harmonics=True, model_dir='downloads'
