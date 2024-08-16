@@ -10,8 +10,10 @@ import sys
 import warnings
 import netCDF4
 import xarray as xr
+import rioxarray as rxr
 import numpy as np
 from tqdm import tqdm
+from rasterio.enums import Resampling
 
 warnings.simplefilter('ignore')
 
@@ -139,7 +141,11 @@ def fetch_url(bbox):
     raise ValueError('No tile found that contains the bounding box')
 
 
-def dem4geoid(bbox, ncfile=None, bbox_off=2, downloads_dir=None):
+def dem4geoid(
+    bbox, ncfile=None, 
+    bbox_off=2, downloads_dir=None,
+    resolution=None
+):
     '''
     Prepare a DEM for geoid calculation.
     
@@ -151,6 +157,7 @@ def dem4geoid(bbox, ncfile=None, bbox_off=2, downloads_dir=None):
     ncfile        : path to DEM netCDF file
     bbox_off      : offset for bounding box (in degrees)
     downloads_dir : directory to download the file to
+    resolution    : Resolution to resample the DEM
     
     Returns
     -------
@@ -181,9 +188,164 @@ def dem4geoid(bbox, ncfile=None, bbox_off=2, downloads_dir=None):
     ds['z']  = ds['z'].where(ds['z'] != fill_value, np.nan)
     
     # Subset over bbox
-    bbox_subset = [bbox[0] - bbox_off, bbox[1] - bbox_off, bbox[2] + bbox_off, bbox[3] + bbox_off]
-    dem = ds.sel(x=slice(bbox_subset[0], bbox_subset[2]), y=slice(bbox_subset[1], bbox_subset[3]))
+    if resolution:
+        dxdy = resolution/3600
+        bbox_subset = [
+            bbox[0] - bbox_off - dxdy/2,
+            bbox[1] - bbox_off - dxdy/2,
+            bbox[2] + bbox_off + dxdy/2,
+            bbox[3] + bbox_off + dxdy/2
+        ]
+    else:
+        bbox_subset = [
+            bbox[0] - bbox_off,
+            bbox[1] - bbox_off,
+            bbox[2] + bbox_off,
+            bbox[3] + bbox_off
+        ]
+    dem = ds.sel(
+        x=slice(bbox_subset[0], bbox_subset[2]),
+        y=slice(bbox_subset[1], bbox_subset[3])
+    )
     
+    # print('DEM created successfully!\n')
+    
+    if dem.rio.crs is None:
+        dem.rio.write_crs('EPSG:4326', inplace=True)
+    
+    if resolution and resolution != 30:
+        print(f'Resampling DEM to {resolution} arc-seconds...')
+        dem = dem.rio.reproject(dem.rio.crs, resolution=resolution/3600, resampling=Resampling.nearest)
+    return dem
+
+def download_dem_cog(
+    bbox, model='None', cog_url=None,
+    downloads_dir=None,
+    bbox_off=2, resolution=30
+):
+    '''
+    Download DEM using Cloud Optimized GeoTIFF (COG) format
+    from OpenTopography.
+    
+    Parameters
+    ----------
+    bbox          : bbox of the area of interest (W, S, E, N)
+    model         : name of the DEM model
+                     - srtm
+                     - cop
+                     - nasadem
+                     - gebco
+    cog_url       : url of the COG
+    downloads_dir : directory to download the file to
+    bbox_off      : offset for bounding box (in degrees)
+    resolution    : resolution to resample the DEM (in seconds)
+    
+    Returns
+    -------
+    dem           : xarray dataset of the DEM
+    
+    Notes
+    -----
+    1. OpenTopography hosts other DEMs that are not included here. 
+    2. You can see the list of available COG URLs running the following command:
+        `aws s3 ls s3://raster --recursive --endpoint-url https://opentopography.s3.sdsc.edu --no-sign-request > COG_urls.txt`
+    3. References for `aws`:
+        - https://aws.amazon.com/cli/
+        - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+    4. Unless you a strong internet connection, I strongly recommend to use the default SRTM30PLUS
+    '''
+    models_url = {
+        'srtm'   : 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt',
+        'cop'    : 'https://opentopography.s3.sdsc.edu/raster/COP90/COP90_hh.vrt',
+        'nasadem': 'https://opentopography.s3.sdsc.edu/raster/NASADEM/NASADEM_be.vrt',
+        'gebco'  : 'https://opentopography.s3.sdsc.edu/raster/GEBCOIceTopo/GEBCOIceTopo.vrt'
+    }
+    
+    resolution = resolution / 3600 # convert seconds to degrees
+    
+    if model is not None and cog_url is None:
+        try:
+            cog_url = models_url[model.lower()]
+        except KeyError:
+            print('Supported models are:\nsrtm\ncop\netopo\nnasadem')
+            raise ValueError(f'Unsupported model: {model}')
+        
+    # Next three conditions will use SRTM30Plus
+    if model is None and cog_url is None:
+        print('No model or COG URL provided. SRTM30Plus will be downloaded...\n')
+        return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+    
+    if model.lower() == 'srtm' and resolution*3600 == 30:
+        print(f'You have requested SRTM at {resolution * 3600} arc-second resolution. SRTM30Plus will be downloaded...\n')
+        dem = dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+        # if resolution != 30/3600:
+        #     print(f'Resampling SRTM30Plus to {resolution * 3600} arc-second resolution...\n')
+        #     if dem.rio.crs is None:
+        #         dem.rio.write_crs('EPSG:4326', inplace=True)
+        #     dem = dem.rio.reproject(
+        #         dem.rio.crs, resolution=resolution,
+        #         resampling=Resampling.nearest
+        #     )
+        return dem
+    
+    if model is None and cog_url == models_url['srtm']:
+        if resolution == 30/3600:
+            print(f'You have requested 30 arc-second resolution. SRTM30Plus will be downloaded...\n')
+            return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+        else:
+            print(f'You have requested {resolution} arc-second resolution. SRTM30Plus will be downloaded...\n')
+            return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+    
+    # Read the COG
+    ds = rxr.open_rasterio(f'/vsicurl/{cog_url}')
+    
+    # transform = ds.rio.transform()
+    # deltax, deltay = transform[0], transform[4]
+    
+    # Subset over bbox
+    
+    # bbox_subset = [
+    #     bbox[0] - bbox_off - resolution, 
+    #     bbox[1] - bbox_off - resolution, 
+    #     bbox[2] + bbox_off + resolution, 
+    #     bbox[3] + bbox_off + resolution
+    # ]    
+    # bbox_subset = [
+    #     bbox[0] - bbox_off, 
+    #     bbox[1] - bbox_off, 
+    #     bbox[2] + bbox_off, 
+    #     bbox[3] + bbox_off
+    # ]
+
+    bbox_subset = [
+        bbox[0] - bbox_off - resolution/2,
+        bbox[1] - bbox_off - resolution/2,
+        bbox[2] + bbox_off + resolution/2,
+        bbox[3] + bbox_off + resolution/2
+    ]
+    dem = ds.rio.clip_box(minx=bbox_subset[0], maxx=bbox_subset[2], miny=bbox_subset[1], maxy=bbox_subset[3])
+    # dem = ds.sel(x=slice(bbox_subset[0], bbox_subset[2]), y=slice(bbox_subset[1], bbox_subset[3]))
+    
+    # Resample to desired resolution
+    print(f'Resampling DEM to desired resolution: {int(resolution*3600)} arc-seconds...\n')
+    # new_width = int((bbox_subset[2] - bbox_subset[0]) / resolution)
+    # new_height = int((bbox_subset[3] - bbox_subset[1]) / resolution)
+    
+    dem = dem.rio.reproject(
+        dem.rio.crs, resolution=resolution, 
+        resampling=Resampling.nearest
+    )
+    # dem = dem.rio.reproject(
+    #     dem.rio.crs,
+    #     Resampling=Resampling.nearest,
+    #     shape=(new_height, new_width)
+    # )
+    dem = dem.to_dataset(name='z')
+    nodata_value = dem['z'].rio.nodata
+    dem['z'] = dem['z'].where(dem['z'] != nodata_value, np.nan)
     print('DEM created successfully!\n')
     
+    ds = None
+    
     return dem
+        
