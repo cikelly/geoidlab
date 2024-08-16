@@ -12,6 +12,8 @@ numba
 numba-progress
 openpyxl
 gdal>=3.8
+rasterio
+rioxarray
 # dask
 # dask[complete]
 # wget
