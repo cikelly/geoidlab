@@ -8,7 +8,7 @@ from numpy import (
     sin, cos, radians, 
     sqrt
 )
-# import copy
+
 from coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84'):
