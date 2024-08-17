@@ -215,7 +215,6 @@ class DigitalTerrainModel:
         
         degree_term = np.ones(len(self.n))
         # Set degrees 0 and 1 to zero
-        # degree_term[0:2] = 0
         
         H = np.zeros((len(self.theta), len(self.lambda_)))
         
