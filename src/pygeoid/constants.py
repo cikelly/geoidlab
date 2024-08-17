@@ -4,7 +4,7 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 def grs80():
-    """
+    '''
     GRS 1980 reference ellipsoid parameters
     
     Parameters
@@ -31,7 +31,7 @@ def grs80():
         m           : w**2a**2b/(GM)
         gamma_a     : normal gravity at the equator (m s**-2)
         gamma_b     : normal gravity at the pole (m s**-2)
-    """
+    '''
 
     grs80 = {
         'semi_major': 6_378_137,
@@ -63,7 +63,7 @@ def grs80():
 
 
 def wgs84():
-    """
+    '''
     WGS 1984 reference ellipsoid parameters
     
     Parameters
@@ -86,7 +86,7 @@ def wgs84():
         m           : w**2a**2b/(GM)
         gamma_a     : normal gravity at the equator (m s**-2)
         gamma_b     : normal gravity at the pole (m s**-2)
-    """
+    '''
 
     wgs84 = {
         'semi_major': 6_378_137,
