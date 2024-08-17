@@ -252,7 +252,7 @@ def download_dem_cog(
     3. References for `aws`:
         - https://aws.amazon.com/cli/
         - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-    4. Unless you a strong internet connection, I strongly recommend to use the default SRTM30PLUS
+    4. Unless you have a strong internet connection, I strongly recommend to use the default SRTM30PLUS
     '''
     models_url = {
         'srtm'   : 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt',
