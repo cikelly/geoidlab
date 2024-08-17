@@ -9,7 +9,7 @@ from numpy import (
     sqrt, arctan, tan,
     degrees, pi
 )
-# import copy
+
 
 def geodetic2geocentric(phi, ellipsoid='wgs84'):
     '''
