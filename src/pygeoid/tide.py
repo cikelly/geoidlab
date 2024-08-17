@@ -31,10 +31,11 @@ class GravityTideSystemConverter:
     2. Supported file formats: .csv, .txt, .xlsx, .xls
     3. If both path_to_data and data are provided, data will be used
     '''
+    
     def __init__(self, path_to_data=None, data=None):
         self.path_to_data = path_to_data
-        # self.data = data if data is not None else self.read_file()
-        self.data = data
+        self.data = data if data is not None else self.read_file()
+        # self.data = data
     
     def read_file(self):
         '''
