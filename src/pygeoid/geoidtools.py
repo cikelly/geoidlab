@@ -12,7 +12,7 @@ import copy
 from coordinates import geo_lat2geocentric
 
 def mean_tide2zero_tide(N, phi, ellipsoid='wgs84'):
-    """
+    '''
     Convert geoid height from mean-tide system to zero-tide system
 
     Parameters
@@ -23,7 +23,7 @@ def mean_tide2zero_tide(N, phi, ellipsoid='wgs84'):
     Returns
     -------
     Nzero     : numpy array of geoid heights
-    """
+    '''
 
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
     semi_major = ref_ellipsoid['semi_major']
@@ -34,7 +34,7 @@ def mean_tide2zero_tide(N, phi, ellipsoid='wgs84'):
 
 
 def mean_tide2free_tide(N, phi, ellipsoid='wgs84'):
-    """
+    '''
     Convert geoid height from mean-tide system into free-tide system
 
     Parameters
@@ -49,7 +49,7 @@ def mean_tide2free_tide(N, phi, ellipsoid='wgs84'):
     Reference
     ---------
     Rapp 1989  
-    """
+    '''
     k = 0.3 # Love number
 
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
