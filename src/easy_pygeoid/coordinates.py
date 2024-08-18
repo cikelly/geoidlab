@@ -4,11 +4,7 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 from . import constants
-from numpy import (
-    sin, cos, radians, 
-    sqrt, arctan, tan,
-    degrees, pi
-)
+import numpy as np
 
 
 def geodetic2geocentric(phi, ellipsoid='wgs84'):
@@ -17,14 +13,14 @@ def geodetic2geocentric(phi, ellipsoid='wgs84'):
     
     Parameters
     ----------
-    phi       : geodetic latitude (degrees)
+    phi       : geodetic latitude (np.degrees)
     semi_major: semi-major axis (a)
     semi_minor: semi-minor axis (b)
     ellipsoid : reference ellipsoid (wgs84 or grs80)
     
     Returns 
     -------
-    phi_bar   : geocentric latitude (degrees)
+    phi_bar   : geocentric latitude (np.degrees)
     
     References
     ----------
@@ -36,8 +32,8 @@ def geodetic2geocentric(phi, ellipsoid='wgs84'):
     a = ref_ellipsoid['semi_major']
     b = ref_ellipsoid['semi_minor']
     
-    phi_bar = arctan((b/a)**2 * tan(radians(phi)))
-    return degrees(phi_bar)
+    phi_bar = np.arctan((b/a)**2 * np.tan(np.radians(phi)))
+    return np.degrees(phi_bar)
 
 def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     '''
@@ -45,8 +41,8 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     
     Parameters
     ----------
-    phi       : geodetic latitude (degrees)
-    lambd     : geodetic longitude (degrees)
+    phi       : geodetic latitude (np.degrees)
+    lambd     : geodetic longitude (np.degrees)
     height    : height above ellipsoid (m)
     
     Returns
@@ -60,14 +56,14 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0):
     a = ref_ellipsoid['semi_major']
     e2 = ref_ellipsoid['e2']
     
-    phi = radians(phi)
-    lambd = radians(lambd)
+    phi = np.radians(phi)
+    lambd = np.radians(lambd)
     
-    N = a / sqrt( 1 - (e2*sin(phi)**2) )
-    X = (N+height)*cos(phi)*cos(lambd)
-    Y = (N+height)*cos(phi)*sin(lambd)
-    # Z = (N+height)*sin(phi)
-    Z = (N*(1-e2)+height)*sin(phi)
+    N = a / np.sqrt( 1 - (e2*np.sin(phi)**2) )
+    X = (N+height)*np.cos(phi)*np.cos(lambd)
+    Y = (N+height)*np.cos(phi)*np.sin(lambd)
+    # Z = (N+height)*np.sin(phi)
+    Z = (N*(1-e2)+height)*np.sin(phi)
     
     return N, X, Y, Z
     
@@ -77,8 +73,8 @@ def geodetic2spherical(phi, lambd, ellipsoid, height=0):
     
     Parameters
     ----------
-    phi       : geodetic latitude (degrees)
-    lambd     : geodetic longitude (degrees)
+    phi       : geodetic latitude (np.degrees)
+    lambd     : geodetic longitude (np.degrees)
     height    : height above ellipsoid (m)
     
     Returns
@@ -100,8 +96,8 @@ def geodetic2spherical(phi, lambd, ellipsoid, height=0):
     '''
     _, X, Y, Z = geodetic2cartesian(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
     
-    r = sqrt( X**2 + Y**2 + Z**2 )
-    psi = arctan( Z/sqrt(X**2 + Y**2)) # polar angle from the XY-plane to the point (X,Y,Z)
-    vartheta = pi/2 - psi # colatitude
+    r = np.sqrt( X**2 + Y**2 + Z**2 )
+    psi = np.arctan( Z/np.sqrt(X**2 + Y**2)) # polar angle from the XY-plane to the point (X,Y,Z)
+    vartheta = np.pi/2 - psi # colatitude
     
     return r, vartheta, lambd
