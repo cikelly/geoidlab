@@ -555,7 +555,7 @@ class GlobalGeopotentialModel():
         
         return T
     
-    def disturbing_potential(self, r_or_R=None):
+    def disturbing_potential(self, r_or_R='r'):
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
@@ -568,8 +568,11 @@ class GlobalGeopotentialModel():
         -----
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to disturbing_potential()
-        3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r)
+        3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r). See last paragraph on Page 296
         '''
+        if r_or_R == 'R':
+            self.R = constants.earth()['radius'] * np.ones(len(self.lon))
+            
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
         a   = np.array(self.shc['a'])
@@ -580,7 +583,10 @@ class GlobalGeopotentialModel():
         if self.chunk is None or self.chunk >= len(self.lon):
             lon = np.radians(self.lon)
             Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            T = self.compute_disturbing_potential_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, T)
+            if r_or_R == 'r':
+                T = self.compute_disturbing_potential_for_chunk(Cnm, Snm, lon, a, self.r, Pnm, self.nmax, T)
+            else:
+                T = self.compute_disturbing_potential_for_chunk(Cnm, Snm, lon, a, self.R, Pnm, self.nmax, T)
         else:
             n_points = len(self.lon)
             n_chunks = (n_points // self.chunk) + 1
@@ -591,7 +597,7 @@ class GlobalGeopotentialModel():
                 end_idx = min((i + 1) * self.chunk, n_points)
                 
                 lon_chunk = self.lon[start_idx:end_idx]
-                r_chunk = self.r[start_idx:end_idx]
+                r_chunk = self.r[start_idx:end_idx] if r_or_R == 'r' else self.R[start_idx:end_idx]
                 vartheta_chunk = self.vartheta[start_idx:end_idx]
                 T_chunk = np.zeros(len(lon_chunk))
                 
@@ -601,7 +607,10 @@ class GlobalGeopotentialModel():
                 T_chunk = self.compute_disturbing_potential_for_chunk(Cnm, Snm, np.radians(lon_chunk), a, r_chunk, Pnm_chunk, self.nmax, T_chunk)
                 T[start_idx:end_idx] = T_chunk
                 print('\n')
-        T = GM / self.r * T # m2/s2
+        if r_or_R == 'r': 
+            T = GM / self.r * T # m2/s2
+        else:
+            T = GM / self.R * T # m2/s2
         # T = T
         
         return T
@@ -632,7 +641,7 @@ class GlobalGeopotentialModel():
         '''
         print('Using Bruns\' method with zero-degree correction to calculate height anomaly...\n')
         
-        T = self.disturbing_potential() if T is None else T
+        T = self.disturbing_potential(r_or_R='r') if T is None else T
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
         gammaQ = gammaQ * 1e-5  # mgal to m/s2
         zeta_old = T / gammaQ
@@ -686,7 +695,7 @@ class GlobalGeopotentialModel():
         '''
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
         
-        T = self.disturbing_potential() if T is None else T
+        T = self.disturbing_potential(r_or_R='R') if T is None else T
         gamma0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
