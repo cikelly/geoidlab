@@ -8,7 +8,7 @@ from numpy import (
     sin, cos, radians, 
     zeros, sqrt, degrees
 )
-from pygeoid.coordinates import geodetic2spherical
+from easy_pygeoid.coordinates import geodetic2spherical
 from numba import jit
 # from numba import jit
 # import numpy as np

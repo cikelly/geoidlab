@@ -9,7 +9,7 @@ from numpy import (
     sqrt
 )
 
-from pygeoid.coordinates import geodetic2geocentric
+from easy_pygeoid.coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84'):
     r'''

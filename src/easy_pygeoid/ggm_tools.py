@@ -10,7 +10,7 @@ from . import icgem
 from . import shtools
 from . import constants
 from . import gravity
-from pygeoid.legendre import ALFsGravityAnomaly, ALF
+from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
 from numba import jit
 from numba_progress import ProgressBar
 from tqdm import tqdm
