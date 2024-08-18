@@ -8,9 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import os
-from numpy import (
-    zeros
-)
+import numpy as np
 
 def download_ggm(model_name:str='GO_CONS_GCF_2_TIM_R6e', model_dir='downloads'):
     '''
@@ -154,10 +152,10 @@ def read_icgem(icgem_file:str, model_dir='downloads'):
     nmax = values.get('max_degree')
 
     ##### Read Cnm, Snm, sCnm, sSnm
-    Cnm = zeros( (nmax+1, nmax+1) )
-    Snm = zeros( (nmax+1, nmax+1) )
-    sCnm = zeros( (nmax+1, nmax+1) )
-    sSnm = zeros( (nmax+1, nmax+1) )
+    Cnm = np.zeros( (nmax+1, nmax+1) )
+    Snm = np.zeros( (nmax+1, nmax+1) )
+    sCnm = np.zeros( (nmax+1, nmax+1) )
+    sSnm = np.zeros( (nmax+1, nmax+1) )
     for line in data:
         if line.strip().startswith('gfc'):
             line = line.split()
