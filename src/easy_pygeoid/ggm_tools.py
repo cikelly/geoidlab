@@ -19,9 +19,6 @@ import numpy as np
 import pandas as pd
 from . import coordinates as co
 
-
-
-
 class GlobalGeopotentialModel():
     def __init__(
         self, shc=None, model_name=None, 
