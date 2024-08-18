@@ -10,6 +10,8 @@ from . import icgem
 from . import shtools
 from . import constants
 from . import gravity
+from . import coordinates as co
+
 from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
 from numba import jit
 from numba_progress import ProgressBar
@@ -17,7 +19,7 @@ from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
-from . import coordinates as co
+
 
 class GlobalGeopotentialModel():
     def __init__(
@@ -109,7 +111,7 @@ class GlobalGeopotentialModel():
         #     raise ValueError('All elevations are 0. Use GlobalGeopotentialModel2D instead if you have gridded data')
         self.r, self.vartheta, _ = co.geodetic2spherical(phi=self.lat, lambd=self.lon, height=self.h, ellipsoid=self.ellipsoid)
         
-        # Set self.r = self.shc['a'] if all self.h = 0 (Doesn't really matter)
+        # Set self.r = self.shc['a'] if all self.h = 0 (Doesn't really make a big difference)
         if np.all(self.h == 0):
             print('Setting r = R ...')
             self.r = self.shc['a'] * np.ones(len(self.lon))
@@ -350,10 +352,10 @@ class GlobalGeopotentialModel():
         if zeta_or_geoid == 'zeta':
             gamma_0 = gravity.normal_gravity_above_ellipsoid(
                 phi=self.lat, h=self.h, ellipsoid=self.ellipsoid
-            ) # This is actually gamma_Q
+            ) # This is actually gamma_Q, but we use gamma_0 here for convenience
             gamma_0 = gamma_0 / 1e5 # mgal to m/s2
         else:
-            gamma_0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
+            gamma_0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
         
         N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma_0 
         
@@ -458,6 +460,7 @@ class GlobalGeopotentialModel():
                 Tzz[start_idx:end_idx] = Tzz_chunk
                 print('\n')
         Tzz = GM / self.r ** 3 * Tzz * 10 ** 9 # E = Eötvös
+        # Tzz = GM / self.shc['a'] ** 3 * Tzz * 10 ** 9 # E = Eötvös
         
         return Tzz
     
@@ -694,7 +697,7 @@ class GlobalGeopotentialModel():
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
         
         T = self.disturbing_potential(r_or_R='R') if T is None else T
-        gamma0 = gravity.normal_gravity(phi=self.lat, ellipsoid=self.ellipsoid)
+        gamma0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
         
