@@ -112,7 +112,7 @@ class GlobalGeopotentialModel():
         # Set self.r = self.shc['a'] if all self.h = 0 (Doesn't really matter)
         if np.all(self.h == 0):
             print('Setting r = R ...')
-            self.r = self.shc['a']
+            self.r = self.shc['a'] * np.ones(len(self.lon))
             
             
     @staticmethod
@@ -568,7 +568,8 @@ class GlobalGeopotentialModel():
         3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r). See last paragraph on Page 296
         '''
         if r_or_R == 'R':
-            self.R = constants.earth()['radius'] * np.ones(len(self.lon))
+            # self.R = constants.earth()['radius'] * np.ones(len(self.lon))
+            self.R = self.shc['a'] * np.ones(len(self.lon))
             
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
