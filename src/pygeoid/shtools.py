@@ -3,7 +3,7 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-import constants
+from . import constants
 from numpy import (
     zeros, sqrt, ndarray
 )

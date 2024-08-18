@@ -3,12 +3,12 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-import constants
+from . import constants
 from numpy import (
     sin, cos, radians, 
     zeros, sqrt, degrees
 )
-from coordinates import geodetic2spherical
+from pygeoid.coordinates import geodetic2spherical
 from numba import jit
 # from numba import jit
 # import numpy as np

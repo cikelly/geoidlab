@@ -4,20 +4,23 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 
-import icgem
-import shtools
-import constants
-import gravity
 import os
 
-import numpy as np
-import pandas as pd
-import coordinates as co
-
-from legendre import ALFsGravityAnomaly, ALF
+from . import icgem
+from . import shtools
+from . import constants
+from . import gravity
+from pygeoid.legendre import ALFsGravityAnomaly, ALF
 from numba import jit
 from numba_progress import ProgressBar
 from tqdm import tqdm
+
+import numpy as np
+import pandas as pd
+from . import coordinates as co
+
+
+
 
 class GlobalGeopotentialModel():
     def __init__(
@@ -552,18 +555,20 @@ class GlobalGeopotentialModel():
         
         return T
     
-    def disturbing_potential(self):
+    def disturbing_potential(self, r_or_R=None):
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
         Returns
         -------
         T       : Disturbing potential array (m2/s2)
+        r_or_R  : Either 'r' for radial distance or 'R' for reference radius
         
         Notes
         -----
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to disturbing_potential()
+        3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r)
         '''
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
