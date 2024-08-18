@@ -4,15 +4,11 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 from . import constants
-from numpy import (
-    sin, cos, radians, 
-    zeros, sqrt, degrees
-)
 from easy_pygeoid.coordinates import geodetic2spherical
 from numba import jit
-# from numba import jit
-# import numpy as np
 from numba_progress import ProgressBar
+
+import numpy as np
  
 def ALF(phi=None, lambd=None, vartheta=None, height=None, nmax=60, ellipsoid='wgs84'):
     '''
@@ -51,29 +47,29 @@ def ALF(phi=None, lambd=None, vartheta=None, height=None, nmax=60, ellipsoid='wg
         # phi_bar = degrees(phi_bar)
     
     # sine (u) and cosine (t) terms
-    t = cos(phi_bar)
-    u = sin(phi_bar)
+    t = np.cos(phi_bar)
+    u = np.sin(phi_bar)
 
     # Initialize the Pnm array
-    Pnm = zeros((nmax + 1, nmax + 1))
+    Pnm = np.zeros((nmax + 1, nmax + 1))
     Pnm[0, 0] = 1.0
 
     # Initialize first few values
     if nmax >= 1:
-        Pnm[1, 0] = sqrt(3.0) * t
-        Pnm[1, 1] = sqrt(3.0) * u
+        Pnm[1, 0] = np.sqrt(3.0) * t
+        Pnm[1, 1] = np.sqrt(3.0) * u
 
     # Recursive computation of Pnm
     for n in range(2, nmax + 1):
         for m in range(0, n):
-            a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+            a_nm = np.sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
             b_nm = 0.
             if n - m - 1 >= 0:
-                b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+                b_nm = np.sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
             Pnm[n, m] = a_nm * t * Pnm[n - 1, m] - b_nm * Pnm[n - 2, m]
 
         # Sectoral harmonics (n = m)
-        Pnm[n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[n - 1, n - 1]
+        Pnm[n, n] = u * np.sqrt((2. * n + 1.) / (2. * n)) * Pnm[n - 1, n - 1]
 
     return Pnm
     
@@ -101,13 +97,13 @@ def legendre_poly(theta=None, t=None, nmax=60):
     if theta is not None:
         if not -90 <= theta <= 90:
             raise ValueError('theta must be in the range [-90, 90]')
-        t = cos(radians(theta))
+        t = np.cos(np.radians(theta))
     elif t is not None:
         if not -1 <= t <= 1:
             raise ValueError('t must be in the range [-1, 1]')
     
-    # t     = cos(radians(theta))
-    Pn    = zeros((nmax+1,))
+    # t     = np.cos(radians(theta))
+    Pn    = np.zeros((nmax+1,))
     Pn[0] = 1
     Pn[1] = t
 
@@ -133,17 +129,17 @@ def compute_legendre_chunk(vartheta, n, Pnm):
     -------
     Updated Pnm array with computed values for degree n
     '''
-    t = cos(vartheta)
-    u = sin(vartheta)
+    t = np.cos(vartheta)
+    u = np.sin(vartheta)
 
     for m in range(0, n):
-        a_nm = sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+        a_nm = np.sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
         b_nm = 0.
         if n - m - 1 >= 0:
-            b_nm = sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+            b_nm = np.sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
         Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
     # Sectoral harmonics (n = m)
-    Pnm[:, n, n] = u * sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
+    Pnm[:, n, n] = u * np.sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
 
     return Pnm
 
@@ -177,14 +173,14 @@ def ALFsGravityAnomaly(phi=None, lambd=None, height=None, vartheta=None, nmax=60
         _, phi_bar, _ = geodetic2spherical(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
     
     # Initialize Pnm array
-    Pnm = zeros((len(phi_bar), nmax + 1, nmax + 1))
+    Pnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
     Pnm[:, 0, 0] = 1.0
 
     if nmax >= 1:
-        t = cos(phi_bar)
-        u = sin(phi_bar)
-        Pnm[:, 1, 0] = sqrt(3.0) * t
-        Pnm[:, 1, 1] = sqrt(3.0) * u
+        t = np.cos(phi_bar)
+        u = np.sin(phi_bar)
+        Pnm[:, 1, 0] = np.sqrt(3.0) * t
+        Pnm[:, 1, 1] = np.sqrt(3.0) * u
 
     # Initialize progress bar
     with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
