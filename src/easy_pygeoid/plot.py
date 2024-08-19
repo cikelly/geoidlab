@@ -6,9 +6,10 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import gravity as pygrav
-
+import easy_pygeoid.gravity as pygrav
 import scipy.interpolate
+
+from mpl_toolkits.basemap import Basemap
 
 def plot_gravity_anomaly(
     data=None, gravity_data=None,
@@ -136,3 +137,109 @@ def plot_degree_variances():
     
     '''
     pass
+
+
+def drape_over_topography(lons, lats, values, topography, cmap='RdBu', vmin=None, vmax=None, figsize=(10,5)):
+    """
+    Plot variable values over a topography map.
+
+    Parameters:
+    -----------
+    lons : 1D array
+        Longitude coordinates of values.
+    lats : 1D array
+        Latitude coordinates of values.
+    values : 1D array
+        Values to be plotted.
+    topography : 2D array
+        Topography data.
+    cmap : str or colormap, optional, default: 'RdBu'
+        Colormap to use.
+    vmin : float, optional, default: None
+        Minimum value for colorbar.
+    vmax : float, optional, default: None
+        Maximum value for colorbar.
+    figsize : tuple, optional, default: (10,5)
+        Figure size.
+
+    Returns:
+    --------
+    None
+    """
+    # Make a Basemap object
+    m = Basemap(projection='cyl', llcrnrlat=lats.min(), urcrnrlat=lats.max(),
+                llcrnrlon=lons.min(), urcrnrlon=lons.max(), resolution='c')
+
+    # Calculate the grid coordinates
+    x, y = m(lons, lats)
+
+    # Create a mask for the topography
+    mask = np.isnan(topography)
+
+    # Create a figure and axes
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot the topography
+    m.imshow(topography, cmap='terrain', interpolation='nearest',
+             extent=(lons.min(), lons.max(), lats.min(), lats.max()))
+
+    # Plot the values
+    im = m.pcolor(x, y, values, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
+
+    # Set the colorbar
+    cbar = m.colorbar(im, location='right', pad='10%')
+
+    # Set the title
+    ax.set_title('Variable values over topography')
+
+    # Set the extent of the plot
+    m.set_extent([lons.min(), lons.max(), lats.min(), lats.max()])
+
+    # Set the masked area to white
+    m.drawmapboundary(fill_color='white')
+
+    # Draw the coastlines
+    m.drawcoastlines()
+
+    # Draw the parallels
+    m.drawparallels(np.arange(-90, 91, 30))
+
+    # Draw the meridians
+    m.drawmeridians(np.arange(-180, 181, 60))
+
+    # Show the plot
+    plt.show()
+
+# TODO: Add function to drape variable over topography
+
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.basemap import Basemap
+# from mpl_toolkits.mplot3d import Axes3D
+
+# # Load topographic data (example data)
+# topo_data = np.load('topo_data.npy')  # Replace with actual data
+# geoid_data = np.load('geoid_data.npy')  # Replace with actual data
+
+# # Create a map with Gall stereographic cylindrical projection[^2^][2]
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# m = Basemap(projection='gall', lon_0=0, ax=ax)
+
+# # Create meshgrid for topographic and geoid data
+# lon = np.linspace(-180, 180, topo_data.shape[1])
+# lat = np.linspace(-90, 90, topo_data.shape[0])
+# lon, lat = np.meshgrid(lon, lat)
+
+# # Plot geoid data with topographic relief[^1^][1]
+# m.plot_surface(lon, lat, topo_data, facecolors=plt.cm.viridis(geoid_data), rstride=1, cstride=1, antialiased=True)
+
+# # Add coastlines for reference
+# m.drawcoastlines()
+
+# # Set view angle
+# ax.view_init(elev=30, azim=120)
+
+# plt.show()
