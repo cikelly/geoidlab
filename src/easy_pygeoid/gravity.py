@@ -160,9 +160,10 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84'):
     # Free-air and Bouguer gravity
     free_air_gravity = gravity + 0.3086 * elevation
     bouguer_gravity  = free_air_gravity - 0.1119 * elevation
+    # bouguer_gravity = gravity - 0.1119 * elevation + 0.3086 * elevation
     
     # normal gravity
-    gamma_0 = normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    gamma_0 = normal_gravity_somigliana(phi=lat, ellipsoid=ellipsoid)
     gamma_0 = gamma_0 * 1e5 # m/s2 to mgal
     
     # Atmospheric correction
