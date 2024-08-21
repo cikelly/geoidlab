@@ -129,5 +129,7 @@ def earth():
     earth = {
         'W0'        : 62_636_853.40,  # Geoid potential (m2/s2)
         'radius'    : 6_371_000,      # Mean Earth radius (m)
+        'G'         : 6.67259e-11,    # Gravitational constant (m3/kgs2)
+        'rho'       : 2670,           # Density of crust (kg/m3)
     }
     return earth
