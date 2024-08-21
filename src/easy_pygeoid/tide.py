@@ -113,7 +113,7 @@ class GravityTideSystemConverter:
         # Convert elevation data to free tide system
         k = 0.3
         hc = 0.6
-        data['h_free'] = data['h'] + (1 + k - hc) * (-0.198 * (3/2 * np.sin(np.radians(data['lat'])) ** 2 - 1/2)) # m
+        data['height_free'] = data['h'] + (1 + k - hc) * (-0.198 * (3/2 * np.sin(np.radians(data['lat'])) ** 2 - 1/2)) # m
         
         return data
     
