@@ -133,18 +133,18 @@ def ellipsoid_radius(phi, ellipsoid='wgs84'):
     
     return r
 
-def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84'):
+def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False):
     '''
     Free-air and Bouguer gravity anomalies of a point on the Earth's 
     surface
     
     Parameters
     ----------
-    lon              : longitude                (degrees)
     lat              : latitude                 (degrees)
     gravity          : gravity at the point     (m/s2)
     elevation        : height above the geoid   (m)
     ellipsoid        : Reference ellipsoid (wgs84 or grs80)
+    atm              : apply atmospheric correction
     
     Returns
     -------
@@ -165,13 +165,17 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84'):
     # normal gravity
     gamma_0 = normal_gravity_somigliana(phi=lat, ellipsoid=ellipsoid)
     gamma_0 = gamma_0 * 1e5 # m/s2 to mgal
-    
-    # Atmospheric correction
-    atm_corr = 0.874 - 9.9e-5 * elevation + 3.56e-9*elevation**2
 
     # Gravity anomalies
-    free_air_anomaly = free_air_gravity - gamma_0 + atm_corr
-    bouguer_anomaly  = bouguer_gravity - gamma_0 + atm_corr
+    free_air_anomaly = free_air_gravity - gamma_0
+    bouguer_anomaly  = bouguer_gravity - gamma_0
+    
+    # Atmospheric correction
+    if atm:
+        atm_corr = 0.874 - 9.9e-5 * elevation + 3.56e-9*elevation**2
+        free_air_anomaly += atm_corr
+        bouguer_anomaly  += atm_corr
+    
     
     return free_air_anomaly, bouguer_anomaly
 
