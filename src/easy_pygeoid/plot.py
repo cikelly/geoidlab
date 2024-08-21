@@ -49,6 +49,7 @@ def plot_gravity_anomaly(
     
     # Get lon, lat, free_air_anomaly, and bouguer_anomaly
     if data is None:
+        print('Calculating gravity anomalies ...')
         if isinstance(gravity_data, np.ndarray):
             free_air_anomaly, bouguer_anomaly = pygrav.gravity_anomalies(
                 lat=gravity_data[:,1], 
@@ -87,25 +88,32 @@ def plot_gravity_anomaly(
             lon, lat = data[lon_column], data[lat_column]
             free_air_anomaly, bouguer_anomaly = data[free_column], data[bouguer_column]
     
-    points = np.column_stack((lon, lat))
+    # points = np.column_stack((lon, lat))
     step = km2deg(step)
     Lon = np.arange(lon.min(), lon.max()+step, step)
     Lat = np.arange(lat.min(), lat.max()+step, step)
+    
     Lon, Lat = np.meshgrid(Lon,Lat)
-    # Grid free_air_anomaly and bouguer_anomaly
-    freeAir = scipy.interpolate.griddata(points, free_air_anomaly, (Lon, Lat), method=interp)
-    bouguer_G = scipy.interpolate.griddata(points, bouguer_anomaly, (Lon, Lat), method=interp)
+
+    # Interpolate
+    freeAir = scipy.interpolate.Rbf(lon, lat, free_air_anomaly, function='thin_plate')
+    bouguer_G = scipy.interpolate.Rbf(lon, lat, bouguer_anomaly, function='thin_plate')
+    
+    freeAir = freeAir(Lon, Lat)
+    bouguer_G = bouguer_G(Lon, Lat)
     
     # Make maps
     extent = [lon.min(), lon.max(), lat.min(), lat.max()]
     if which == 'both':
         fig, axs = plt.subplots(1, 2, figsize=figsize)
         
-        im = axs[0].imshow(freeAir, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
-        fig.colorbar(im, ax=axs[0], shrink=0.7, label='Gravity anomaly (mGal)')
+        # im = axs[0].imshow(freeAir, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
+        im = axs[0].pcolormesh(Lon, Lat, freeAir, cmap=colormap, vmin=vmin, vmax=vmax)
+        fig.colorbar(im, ax=axs[0], label='Gravity anomaly (mGal)', aspect=25, pad=0.03)
         
-        im = axs[1].imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
-        fig.colorbar(im, ax=axs[1], shrink=0.7, label='Gravity anomaly (mGal)')
+        # im = axs[1].imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
+        im = axs[1].pcolormesh(Lon, Lat, bouguer_G, cmap=colormap, vmin=vmin, vmax=vmax)
+        fig.colorbar(im, ax=axs[1], label='Gravity anomaly (mGal)', aspect=25, pad=0.03)
         titles = ['Free-air', 'Bouguer']
         _ = [axs[i].set_title(titles[i], fontweight='bold') for i in range(2)]
         fig.tight_layout()
@@ -115,18 +123,20 @@ def plot_gravity_anomaly(
     elif which == 'free_air':
         plt.imshow(freeAir, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
         plt.title('Free-air', fontweight='bold')
-        plt.colorbar(shrink=.95, label='Gravity anomaly (mGal)')
+        plt.colorbar(label='Gravity anomaly (mGal)', aspect=25, pad=0.03)
         if save:
             plt.savefig('gravity_anomalies.png', dpi=300, bbox_inches='tight')
         plt.show()
     else:
         plt.imshow(bouguer_G, cmap=colormap, extent=extent, origin=origin, interpolation=plot_interp, vmin=vmin, vmax=vmax)
         plt.title('Bouguer', fontweight='bold')
-        plt.colorbar(shrink=.95, label='Gravity anomaly (mGal)')
+        plt.colorbar(label='Gravity anomaly (mGal)', aspect=25, pad=0.03)
         if save:
             plt.savefig('gravity_anomalies.png', dpi=300, bbox_inches='tight')
         plt.show()
         
+    # return free_air_anomaly
+    
 def km2deg(km):
     '''
     Convert km to degrees
