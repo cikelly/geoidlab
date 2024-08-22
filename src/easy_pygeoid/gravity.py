@@ -22,7 +22,7 @@ def normal_gravity(phi, ellipsoid='wgs84'):
 
     Returns
     -------
-    gamma_0   : normal gravity of the point on the ellipsoid (m/s^2)
+    gamma     : normal gravity of the point on the ellipsoid (m/s^2)
 
     Reference
     ---------
@@ -47,8 +47,8 @@ def normal_gravity(phi, ellipsoid='wgs84'):
     numerator   = 1 + k * sin(radians(phi))**2
     denominator = sqrt(1 - e2 * sin(radians(phi))**2)
     
-    gamma_0     = gamma_a * numerator / denominator
-    return gamma_0
+    gamma       = gamma_a * numerator / denominator
+    return gamma  
 
 def normal_gravity_somigliana(phi, ellipsoid='wgs84'):
     '''
@@ -61,7 +61,7 @@ def normal_gravity_somigliana(phi, ellipsoid='wgs84'):
 
     Returns
     -------
-    gamma_0   : normal gravity of the point on the ellipsoid (m/s^2)
+    gamma     : normal gravity of the point on the ellipsoid (m/s^2)
     
     Reference
     ---------
@@ -82,8 +82,8 @@ def normal_gravity_somigliana(phi, ellipsoid='wgs84'):
     numerator = a*gamma_a*cos(radians(phi))**2 + b*gamma_b*sin(radians(phi))**2
     denominator = sqrt(a**2*cos(radians(phi))**2 + b**2*sin(radians(phi))**2)
     
-    gamma_0 = numerator / denominator
-    return gamma_0
+    gamma   = numerator / denominator
+    return gamma  
 
 
 def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84'):
@@ -103,9 +103,9 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84'):
     f = ref_ellipsoid['f']
     m = ref_ellipsoid['m']
     
-    gamma_0 = normal_gravity(phi=phi, ellipsoid=ellipsoid)
+    gamma   = normal_gravity(phi=phi, ellipsoid=ellipsoid)
     
-    gamma_h = gamma_0 * (1 - 2/a*(1+f+m-2*f*sin(radians(phi))**2)*h + (3/a**2 * h**2))
+    gamma_h = gamma   * (1 - 2/a*(1+f+m-2*f*sin(radians(phi))**2)*h + (3/a**2 * h**2))
     gamma_h = gamma_h * 1e5 # m/s2 to mgal
     return gamma_h
 
@@ -163,12 +163,12 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False):
     # bouguer_gravity = gravity - 0.1119 * elevation + 0.3086 * elevation
     
     # normal gravity
-    gamma_0 = normal_gravity_somigliana(phi=lat, ellipsoid=ellipsoid)
-    gamma_0 = gamma_0 * 1e5 # m/s2 to mgal
+    gamma   = normal_gravity_somigliana(phi=lat, ellipsoid=ellipsoid)
+    gamma   = gamma   * 1e5 # m/s2 to mgal
 
     # Gravity anomalies
-    free_air_anomaly = free_air_gravity - gamma_0
-    bouguer_anomaly  = bouguer_gravity - gamma_0
+    free_air_anomaly = free_air_gravity - gamma  
+    bouguer_anomaly  = bouguer_gravity - gamma  
     
     # Atmospheric correction
     if atm:

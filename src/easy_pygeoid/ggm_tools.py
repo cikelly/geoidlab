@@ -350,14 +350,14 @@ class GlobalGeopotentialModel():
         R = self.r
         
         if zeta_or_geoid == 'zeta':
-            gamma_0 = gravity.normal_gravity_above_ellipsoid(
+            gamma   = gravity.normal_gravity_above_ellipsoid(
                 phi=self.lat, h=self.h, ellipsoid=self.ellipsoid
-            ) # This is actually gamma_Q, but we use gamma_0 here for convenience
-            gamma_0 = gamma_0 / 1e5 # mgal to m/s2
+            ) # This is actually gamma_Q, but we use gamma   here for convenience
+            gamma   = gamma   / 1e5 # mgal to m/s2
         else:
-            gamma_0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
+            gamma   = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
         
-        N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma_0 
+        N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma   
         
         return N
     

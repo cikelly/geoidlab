@@ -4,19 +4,19 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 
-from legendre import ALF, ALFsGravityAnomaly
-from shtools import replace_zonal_harmonics
+from easy_pygeoid.legendre import ALF, ALFsGravityAnomaly
+from easy_pygeoid.shtools import replace_zonal_harmonics
 from numba import jit
 
-import coordinates as co
+import easy_pygeoid.coordinates as co
 import numpy as np
 import pandas as pd
 from numba_progress import ProgressBar
 
-import gravity
-import tide
-import icgem
-import constants
+from easy_pygeoid import gravity
+from easy_pygeoid import tide
+from easy_pygeoid import icgem
+from easy_pygeoid import constants
 
 
 
@@ -52,7 +52,7 @@ def height_anomaly(
         shc = icgem.read_icgem(model_name)
     
     
-    gamma_0 = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    gamma   = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
     gamma_Q = gravity.normal_gravity_above_ellipsoid(phi=lat, h=height, ellipsoid=ellipsoid)
     # r_phi = gravity.ellipsoid_radius(lat, ellipsoid=ellipsoid)
     
@@ -109,7 +109,7 @@ def reference_geoid(
         shc = icgem.read_icgem(model_name)
     
     
-    gamma_0 = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    gamma   = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
     # gamma_Q = gravity.normal_gravity_above_ellipsoid(phi=lat, h=height, ellipsoid=ellipsoid)
     r_phi = gravity.ellipsoid_radius(lat, ellipsoid=ellipsoid)
     
@@ -164,9 +164,9 @@ def zero_degree_term(lat, shc=None, GM=None, geoid=None, ellipsoid='wgs84'):
     W0  = constants.earth('W0')
     R   = constants.earth('R')
     
-    gamma_0 = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
+    gamma   = gravity.normal_gravity(phi=lat, ellipsoid=ellipsoid)
     
-    N = geoid + ( (GM - GMe) / R - (W0 - U0) ) / gamma_0 
+    N = geoid + ( (GM - GMe) / R - (W0 - U0) ) / gamma   
     
     return N
 
