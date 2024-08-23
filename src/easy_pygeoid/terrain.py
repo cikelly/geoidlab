@@ -24,7 +24,7 @@ class TerrainQuantities:
         Parameters
         ----------
         ref_topo  : (2D array) Reference topography
-        sim_topo  : (2D array) Simulation topography
+        sim_topo  : (2D array) Simulated (smooth) topography
         Lon, Lat  : (2D array) Longitude and latitude of ref_topo and sim_topo
         sub_grid  : (4-tuple) Subgrid over which to compute terrain effects
                         - In the form W, E, S, N
