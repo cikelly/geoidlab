@@ -23,6 +23,7 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Automatically downloads [SRTM30PLUS](https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/) over the bounding box of interest
 - Automatically downloads a GGM from [ICGEM](https://icgem.gfz-potsdam.de/tom_longtime)
 - Uses a template file so that users do not have to interact with the scripts
+- Can automatically download other DEMs (e.g., Copernicus DEM, NASADEM, and GEBCO). Default is SRTM30PLUS
 
 ## Installation
 `easy-pygeoid` can be installed using conda/mamba or pip.
