@@ -30,7 +30,7 @@ def get_readme_path():
     readme_path   : absolute path of the README.V11.txt
     '''
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    readme_path = os.path.join(script_dir, '../src/data/README.V11.txt')
+    readme_path = os.path.join(script_dir, '../easy_pygeoid/data/README.V11.txt')
     
     return os.path.abspath(readme_path)
 
