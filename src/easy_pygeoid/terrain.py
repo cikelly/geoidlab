@@ -7,6 +7,8 @@
 from . import constants
 from easy_pygeoid.coordinates import geodetic2cartesian
 
+import numpy as np
+
 class TerrainQuantities:
     '''
     Compute terrain quantities for use in geoid modeling
@@ -57,17 +59,29 @@ class TerrainQuantities:
             self.radius_deg = self.km2deg((self.radius / 1000))
         
         
-        self.rows, self.cols = self.ref_topo.shape
-        min_lon, max_lon, min_lat, max_lat = sub_grid
+        # self.rows, self.cols = self.ref_topo.shape
+        # min_lon, max_lon, min_lat, max_lat = sub_grid
         
         self.sim_topo[self.sim_topo < 0] = 0
     
     @staticmethod
-    def km2deg(km:float) -> float:
+    def km2deg(km:float, radius:float=6371.) -> float:
         '''
         Convert kilometers to degrees
+        
+        Parameters
+        ----------
+        km        : kilometers
+        radius    : radius of the sphere [default: earth radius (km)]
+        
+        Returns
+        -------
+        deg       : degrees
         '''
-        return km / 111.11
+        rad = km / radius
+        deg = rad * 180 / np.pi
+        # km / 111.11
+        return deg
     
     def terrain_correction(self):
         pass
