@@ -143,7 +143,7 @@ def fetch_url(bbox):
 
 def dem4geoid(
     bbox, ncfile=None, 
-    bbox_off=2, downloads_dir=None,
+    bbox_off=1, downloads_dir=None,
     resolution=None
 ):
     '''
