@@ -208,8 +208,6 @@ def dem4geoid(
         y=slice(bbox_subset[1], bbox_subset[3])
     )
     
-    
-    
     if dem.rio.crs is None:
         dem.rio.write_crs('EPSG:4326', inplace=True)
     
