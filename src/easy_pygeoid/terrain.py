@@ -8,6 +8,8 @@ from . import constants
 from easy_pygeoid.coordinates import geodetic2cartesian
 
 import numpy as np
+import xarray as xr
+import rioxarray as rxr
 
 class TerrainQuantities:
     '''
@@ -49,6 +51,7 @@ class TerrainQuantities:
         self.G                 = constants.earth()['G']
         self.ref_topo          = ref_topo
         self.sim_topo          = sim_topo
+        # self.ellipsoid         = constants.grs80() if ellipsoid == 'grs80' else constants.wgs84()
         self.ellipsoid         = ellipsoid
         self.sub_grid          = sub_grid
         self.nrows, self.ncols = ref_topo.shape
@@ -56,7 +59,9 @@ class TerrainQuantities:
         
         # Define sub-grid
         if self.sub_grid is None:
+            print(f'Defining sub-grid based on integration radius: {radius} km')
             self.radius_deg = self.km2deg((self.radius / 1000))
+            
         
         
         # self.rows, self.cols = self.ref_topo.shape
