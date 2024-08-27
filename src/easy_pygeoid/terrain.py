@@ -74,9 +74,7 @@ class TerrainQuantities:
         # Set ocean areas to zero
         if self.sim_topo is not None:
             self.sim_topo['z'] = self.sim_topo['z'].where(self.sim_topo['z'] >= 0, 0)
-        # if self.ref_topo is not None:
         self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
-        # self.ref_topo[self.ref_topo < 0] = 0
 
         # Define sub-grid and extract data
         if self.sub_grid is None:
@@ -88,12 +86,41 @@ class TerrainQuantities:
             max_lat = round(max(lat) - self.radius_deg)
             min_lon = round(min(lon) + self.radius_deg)
             max_lon = round(max(lon) - self.radius_deg)
-
             self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
         
-        self.ref_topoP = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
+        self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
+        self.sim_P = self.sim_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.sim_topo else None
+
+        # Grid size in x and y
+        self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
+        self.dphi = (max(lat) - min(lat)) / (self.nrows - 1)
+        self.dx = TerrainQuantities.deg2km(self.dlam) * 1000 # meters
+        self.dy = TerrainQuantities.deg2km(self.dphi) * 1000 # meters
+        
+        # Get cartesian coordinates of the original and subg-rid
+        Lon, Lat = np.meshgrid(lon, lat)
+        _, self.X, self.Y, self.Z = geodetic2cartesian(phi=Lat.flatten(), lambd=Lon.flatten(), ellipsoid=self.ellipsoid)
+        self.X = self.X.reshape(self.nrows, self.ncols)
+        self.Y = self.Y.reshape(self.nrows, self.ncols)
+        self.Z = self.Z.reshape(self.nrows, self.ncols)
+        
+        LonP, LatP = np.meshgrid(self.ref_P['x'].values, self.ref_P['y'].values)
+        _, self.Xp, self.Yp, self.Zp = geodetic2cartesian(phi=LatP.flatten(), lambd=LonP.flatten(), ellipsoid=self.ellipsoid)
+        self.Xp = self.Xp.reshape(LonP.shape)
+        self.Yp = self.Yp.reshape(LonP.shape)
+        self.Zp = self.Zp.reshape(LonP.shape)
+
 
         
+    def terrain_correction(self):
+        pass
+    
+    def rtm_anomaly(self):
+        pass
+    
+    def rtm_zeta(self):
+        pass
+    
     @staticmethod
     def rename_variables(ds):
         coord_names = {
@@ -162,12 +189,3 @@ class TerrainQuantities:
         km = rad * radius
         
         return km
-        
-    def terrain_correction(self):
-        pass
-    
-    def rtm_anomaly(self):
-        pass
-    
-    def rtm_zeta(self):
-        pass
