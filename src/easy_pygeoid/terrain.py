@@ -7,6 +7,7 @@
 from . import constants
 from easy_pygeoid.coordinates import geodetic2cartesian
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import xarray as xr
@@ -237,3 +238,65 @@ class TerrainQuantities:
         km = rad * radius
         
         return km
+    
+
+
+    def compute_terrain_correction(self, i, j, n1, n2, m1, m2):
+        smallH = self.ref_topo['z'].values[n1:n2, m1:m2]
+        smallX = self.X[n1:n2, m1:m2]
+        smallY = self.Y[n1:n2, m1:m2]
+        smallZ = self.Z[n1:n2, m1:m2]
+
+        # local coordinates (x,y)
+        x = np.cos(np.radians(self.LonP[i, j])) * (smallY.flatten() - self.Yp[i, j]) - \
+            np.sin(np.radians(self.LonP[i, j])) * (smallX.flatten() - self.Xp[i, j])
+        y = np.cos(np.radians(self.LatP[i, j])) * (smallZ.flatten() - self.Zp[i, j]) - \
+            np.cos(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallX.flatten() - self.Xp[i, j]) - \
+            np.sin(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallY.flatten() - self.Yp[i, j])
+
+        # Distances
+        d = np.sqrt(x**2 + y**2)
+        d[d > self.radius] = np.nan
+        d3 = d**3
+        d5 = d**5
+        d7 = d**7
+
+        # Terrain effect in mGal
+        DH2 = (smallH.flatten() - self.ref_P['z'].values[i, j]) ** 2
+        c1 = 1/2 * self.G * self.rho * np.nansum(DH2 * 1/d3) * self.dx * self.dy
+        c2 = -3/8 * self.G * self.rho * np.nansum(DH2 ** 2 * 1/d5) * self.dx * self.dy
+        c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
+        return i, j, (c1 + c2 + c3) * 1e5  # mGal
+
+    def terrain_correction1(self):
+        '''
+        Compute terrain correction
+        
+        Returns
+        -------
+        tc    : terrain correction
+        '''
+        nrows, ncols = self.Xp.shape
+        dm = round(self.nrows - nrows) + 1
+        dn = round(self.ncols - ncols) + 1
+        tc = np.zeros((nrows, ncols))
+        n1 = 0
+        n2 = dn
+
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for i in tqdm(range(nrows), desc="Computing terrain correction"):
+                m1 = 0
+                m2 = dm
+                for j in range(ncols):
+                    futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
+                    m1 += 1
+                    m2 += 1
+                n1 += 1
+                n2 += 1
+
+            for future in tqdm(futures, desc="Processing results"):
+                i, j, result = future.result()
+                tc[i, j] = result
+
+        return tc
