@@ -209,7 +209,7 @@ def dem4geoid(
     dem = ds.interp(
         x=np.linspace(minx, maxx, num_x_points),
         y=np.linspace(miny, maxy, num_y_points),
-        method='nearest'
+        method='slinear'
     )
     
     if dem.rio.crs is None:
