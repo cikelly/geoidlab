@@ -181,7 +181,7 @@ def dem4geoid(
         
     filepath = os.path.join(downloads_dir, ncfile) if downloads_dir else ncfile
     
-    print(f'Creating xarray dataset of DEM over area of interest with buffer of {bbox_off} degrees\n')    
+    print(f'Creating xarray dataset of DEM with buffer of {bbox_off} degree(s)\n')    
     
     nc = netCDF4.Dataset(filepath)
     fill_value = nc.variables['z']._FillValue
