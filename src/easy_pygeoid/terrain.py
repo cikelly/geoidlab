@@ -20,10 +20,8 @@ class TerrainQuantities:
     '''
     def __init__(
         self, 
-        Lon: float, 
-        Lat: float,
-        ref_topo: float=None, 
-        sim_topo: float=None, 
+        ref_topo: xr.Dataset, 
+        sim_topo: xr.Dataset=None, 
         radius: float=100.,
         sub_grid=None,
         ellipsoid: str='wgs84'
@@ -35,7 +33,6 @@ class TerrainQuantities:
         ----------
         ref_topo  : (2D array) Reference topography
         sim_topo  : (2D array) Simulated (smooth) topography
-        Lon, Lat  : (2D array) Longitude and latitude of ref_topo and sim_topo
         radius    : Integration radius in kilometers
         sub_grid  : (4-tuple) Subgrid over which to compute terrain effects
                         - In the form W, E, S, N
@@ -58,35 +55,64 @@ class TerrainQuantities:
         self.R                 = constants.earth()['radius']
         self.rho               = constants.earth()['rho']
         self.G                 = constants.earth()['G']
-        self.ref_topo          = ref_topo
-        self.sim_topo          = sim_topo
         # self.ellipsoid         = constants.grs80() if ellipsoid == 'grs80' else constants.wgs84()
         self.ellipsoid         = ellipsoid
         self.sub_grid          = sub_grid
-        self.nrows, self.ncols = ref_topo.shape
         self.radius            = radius * 1000 # meters
         
-        if self.ref_topo is None and self.sim_topo is None:
+        if ref_topo is None and sim_topo is None:
             raise ValueError('Either ref_topo and sim_topo must be provided')
         
-        # Define sub-grid
-        if self.sub_grid is None:
-            print(f'Defining sub-grid based on integration radius: {radius} km')
-            self.radius_deg = self.km2deg((self.radius / 1000))
-            min_lat = np.round(np.min(Lat) + self.radius_deg)
-            max_lat = np.round(np.max(Lat) - self.radius_deg)
-            min_lon = np.round(np.min(Lon) + self.radius_deg)
-            max_lon = np.round(np.max(Lon) - self.radius_deg)
-            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
+        # Rename coordinates and data variables if necessary
+        ref_topo = TerrainQuantities.rename_variables(ref_topo)
+        sim_topo = TerrainQuantities.rename_variables(sim_topo) if sim_topo is not None else None
+        
+        self.ref_topo = ref_topo
+        self.sim_topo = sim_topo
+        self.nrows, self.ncols = self.ref_topo['z'].shape
         
         # Set ocean areas to zero
         if self.sim_topo is not None:
-            self.sim_topo[self.sim_topo < 0] = 0
-        if self.ref_topo is not None:
-            self.ref_topo[self.ref_topo < 0] = 0
+            self.sim_topo['z'] = self.sim_topo['z'].where(self.sim_topo['z'] >= 0, 0)
+        # if self.ref_topo is not None:
+        self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
+        # self.ref_topo[self.ref_topo < 0] = 0
+
+        # Define sub-grid and extract data
+        if self.sub_grid is None:
+            lon = self.ref_topo['x'].values
+            lat = self.ref_topo['y'].values
+            print(f'Defining sub-grid based on integration radius: {radius} km')
+            self.radius_deg = self.km2deg((self.radius / 1000))
+            min_lat = round(min(lat) + self.radius_deg)
+            max_lat = round(max(lat) - self.radius_deg)
+            min_lon = round(min(lon) + self.radius_deg)
+            max_lon = round(max(lon) - self.radius_deg)
+
+            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
+        
+        self.ref_topoP = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
 
         
+    @staticmethod
+    def rename_variables(ds):
+        coord_names = {
+            'x': ['lon'],
+            'y': ['lat'],
+            'z': ['elevation', 'elev', 'height', 'h', 'dem']
+        }
         
+        rename_dict = {}
+        
+        for name in ds.coords.keys() | ds.data_vars.keys():
+            lower_name = name.lower()
+            for standard_name, possible_names in coord_names.items():
+                if any(possible_name in lower_name for possible_name in possible_names):
+                    rename_dict[name] = standard_name
+                    break
+        
+        return ds.rename(rename_dict)
+            
     @staticmethod
     def km2deg(km:float, radius:float=6371.) -> float:
         '''
