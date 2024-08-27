@@ -112,6 +112,31 @@ class TerrainQuantities:
         # km / 111.11
         return deg
     
+    @staticmethod
+    def deg2km(deg, radius=6371.) -> float:
+        '''
+        Convert degrees to kilometers
+        
+        Parameters
+        ----------
+        deg       : degrees
+        radius    : radius of the sphere [default: earth radius (km)]
+        
+        Returns
+        -------
+        km        : kilometers
+        
+        Notes
+        -----
+        1. Using the radius of the sphere is more accurate than 2.
+        2. deg * 111.11 is a reasonable approximation, and works well in practice.
+        3. The approach used here is the same as MATLAB's deg2km function
+        '''
+        rad = deg * np.pi / 180
+        km = rad * radius
+        
+        return km
+        
     def terrain_correction(self):
         pass
     
