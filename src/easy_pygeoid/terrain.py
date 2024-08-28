@@ -26,7 +26,8 @@ class TerrainQuantities:
         sim_topo: xr.Dataset=None, 
         radius: float=100.,
         sub_grid=None,
-        ellipsoid: str='wgs84'
+        ellipsoid: str='wgs84',
+        bbox_off: float=1.
     ) -> None:
         '''
         Initialize the TerrainQuantities class for terrain modeling
@@ -39,6 +40,7 @@ class TerrainQuantities:
         sub_grid  : (4-tuple) Subgrid over which to compute terrain effects
                         - In the form W, E, S, N
         ellipsoid : Reference ellipsoid
+        bbox_off  : Offset in degrees for bounding box
 
         Returns
         -------
@@ -61,6 +63,7 @@ class TerrainQuantities:
         self.ellipsoid         = ellipsoid
         self.sub_grid          = sub_grid
         self.radius            = radius * 1000 # meters
+        self.bbox_off          = bbox_off
         
         if ref_topo is None and sim_topo is None:
             raise ValueError('Either ref_topo and sim_topo must be provided')
@@ -88,8 +91,19 @@ class TerrainQuantities:
             max_lat = round(max(lat) - self.radius_deg)
             min_lon = round(min(lon) + self.radius_deg)
             max_lon = round(max(lon) - self.radius_deg)
-            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
-        
+            
+            # Check if any of the conditions are not met
+            if min_lat >= min(lat) or max_lat >= max(lat) or min_lon >= min(lon) or max_lon <= max(lon):
+                self.sub_grid = (
+                    min(lon)+self.bbox_off, 
+                    max(lon)-self.bbox_off, 
+                    min(lat)+self.bbox_off, 
+                    max(lat)-self.bbox_off
+                )
+            else:
+                self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
+                
+            
         self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
         self.sim_P = self.sim_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.sim_topo else None
 
@@ -114,6 +128,33 @@ class TerrainQuantities:
         self.LonP = LonP
         self.LatP = LatP
 
+    def compute_terrain_correction(self, i, j, n1, n2, m1, m2):
+        smallH = self.ref_topo['z'].values[n1:n2, m1:m2]
+        smallX = self.X[n1:n2, m1:m2]
+        smallY = self.Y[n1:n2, m1:m2]
+        smallZ = self.Z[n1:n2, m1:m2]
+
+        # local coordinates (x,y)
+        x = np.cos(np.radians(self.LonP[i, j])) * (smallY.flatten() - self.Yp[i, j]) - \
+            np.sin(np.radians(self.LonP[i, j])) * (smallX.flatten() - self.Xp[i, j])
+        y = np.cos(np.radians(self.LatP[i, j])) * (smallZ.flatten() - self.Zp[i, j]) - \
+            np.cos(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallX.flatten() - self.Xp[i, j]) - \
+            np.sin(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallY.flatten() - self.Yp[i, j])
+
+        # Distances
+        d = np.sqrt(x**2 + y**2)
+        d[d > self.radius] = np.nan        
+        d3 = d**3
+        d5 = d**5
+        d7 = d**7
+
+        # Terrain effect in mGal
+        DH2 = (smallH.flatten() - self.ref_P['z'].values[i, j]) ** 2
+        c1 = 1/2 * self.G * self.rho * np.nansum(DH2 * 1/d3) * self.dx * self.dy
+        c2 = -3/8 * self.G * self.rho * np.nansum(DH2 ** 2 * 1/d5) * self.dx * self.dy
+        c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
+        return i, j, (c1 + c2 + c3) * 1e5  # mGal
+
     def terrain_correction(self):
         '''
         Compute terrain correction
@@ -128,40 +169,23 @@ class TerrainQuantities:
         tc = np.zeros((nrows, ncols))
         n1 = 0
         n2 = dn
-        
-        for i in tqdm(range(nrows), desc="Computing terrain correction"):
-            m1 = 0
-            m2 = dm
-            for j in range(ncols):
-                # 
-                smallH = self.ref_topo['z'].values[n1:n2, m1:m2]
-                smallX = self.X[n1:n2, m1:m2]
-                smallY = self.Y[n1:n2, m1:m2]
-                smallZ = self.Z[n1:n2, m1:m2]
-                
-                # local coordinates (x,y)
-                x = np.cos(np.radians(self.LonP[i,j])) * (smallY.flatten() - self.Yp[i,j]) - \
-                    np.sin(np.radians(self.LonP[i,j])) * (smallX.flatten() - self.Xp[i,j])
-                y = np.cos(np.radians(self.LatP[i,j])) * (smallZ.flatten() - self.Zp[i,j]) - np.cos(np.radians(self.LonP[i,j])) * \
-                    np.sin(np.radians(self.LatP[i,j])) * (smallX.flatten() - self.Xp[i,j]) - np.sin(np.radians(self.LonP[i,j])) * \
-                    np.sin(np.radians(self.LatP[i,j])) * (smallY.flatten() - self.Yp[i,j])
-                # Distances
-                d = np.sqrt(x**2 + y**2)
-                d[d>self.radius] = np.nan
-                d3 = d**3
-                d5 = d**5
-                d7 = d**7
-                
-                # Terrain effect in mGal
-                DH2 = (smallH.flatten() - self.ref_P['z'].values[i,j]) ** 2 #(smallH.flatten() - self.ref_P[i,j])
-                c1 = 1/2 * self.G * self.rho * np.nansum(DH2 * 1/d3) * self.dx * self.dy
-                c2 = -3/8 * self.G * self.rho * np.nansum(DH2 ** 2 * 1/d5) * self.dx * self.dy
-                c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
-                tc[i,j] = (c1 + c2 + c3) * 1e5 # mGal
-                m1 += 1
-                m2 += 1
-            n1 += 1
-            n2 += 1
+
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for i in tqdm(range(nrows), desc="Computing terrain correction"):
+                m1 = 0
+                m2 = dm
+                for j in range(ncols):
+                    futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
+                    m1 += 1
+                    m2 += 1
+                n1 += 1
+                n2 += 1
+
+            for future in tqdm(futures, desc="Processing results"):
+                i, j, result = future.result()
+                tc[i, j] = result
+
         return tc
     
     def rtm_anomaly(self):
@@ -241,62 +265,3 @@ class TerrainQuantities:
     
 
 
-    def compute_terrain_correction(self, i, j, n1, n2, m1, m2):
-        smallH = self.ref_topo['z'].values[n1:n2, m1:m2]
-        smallX = self.X[n1:n2, m1:m2]
-        smallY = self.Y[n1:n2, m1:m2]
-        smallZ = self.Z[n1:n2, m1:m2]
-
-        # local coordinates (x,y)
-        x = np.cos(np.radians(self.LonP[i, j])) * (smallY.flatten() - self.Yp[i, j]) - \
-            np.sin(np.radians(self.LonP[i, j])) * (smallX.flatten() - self.Xp[i, j])
-        y = np.cos(np.radians(self.LatP[i, j])) * (smallZ.flatten() - self.Zp[i, j]) - \
-            np.cos(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallX.flatten() - self.Xp[i, j]) - \
-            np.sin(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallY.flatten() - self.Yp[i, j])
-
-        # Distances
-        d = np.sqrt(x**2 + y**2)
-        d[d > self.radius] = np.nan
-        d3 = d**3
-        d5 = d**5
-        d7 = d**7
-
-        # Terrain effect in mGal
-        DH2 = (smallH.flatten() - self.ref_P['z'].values[i, j]) ** 2
-        c1 = 1/2 * self.G * self.rho * np.nansum(DH2 * 1/d3) * self.dx * self.dy
-        c2 = -3/8 * self.G * self.rho * np.nansum(DH2 ** 2 * 1/d5) * self.dx * self.dy
-        c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
-        return i, j, (c1 + c2 + c3) * 1e5  # mGal
-
-    def terrain_correction1(self):
-        '''
-        Compute terrain correction
-        
-        Returns
-        -------
-        tc    : terrain correction
-        '''
-        nrows, ncols = self.Xp.shape
-        dm = round(self.nrows - nrows) + 1
-        dn = round(self.ncols - ncols) + 1
-        tc = np.zeros((nrows, ncols))
-        n1 = 0
-        n2 = dn
-
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for i in tqdm(range(nrows), desc="Computing terrain correction"):
-                m1 = 0
-                m2 = dm
-                for j in range(ncols):
-                    futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
-                    m1 += 1
-                    m2 += 1
-                n1 += 1
-                n2 += 1
-
-            for future in tqdm(futures, desc="Processing results"):
-                i, j, result = future.result()
-                tc[i, j] = result
-
-        return tc
