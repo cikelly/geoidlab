@@ -144,7 +144,7 @@ def fetch_url(bbox):
 def dem4geoid(
     bbox, ncfile=None, 
     bbox_off=1, downloads_dir=None,
-    resolution=None
+    resolution=30
 ):
     '''
     Prepare a DEM for geoid calculation.
@@ -215,9 +215,9 @@ def dem4geoid(
     if dem.rio.crs is None:
         dem.rio.write_crs('EPSG:4326', inplace=True)
     
-    if resolution and resolution != 30:
-        print(f'Resampling DEM to {resolution} arc-seconds...')
-        dem = dem.rio.reproject(dem.rio.crs, resolution=resolution/3600, resampling=Resampling.nearest)
+    # if resolution and resolution != 30:
+    #     print(f'Resampling DEM to {resolution} arc-seconds...')
+    #     dem = dem.rio.reproject(dem.rio.crs, resolution=resolution/3600, resampling=Resampling.nearest)
     return dem
 
 def download_dem_cog(
