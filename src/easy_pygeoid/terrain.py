@@ -182,7 +182,7 @@ class TerrainQuantities:
                 n1 += 1
                 n2 += 1
 
-            for future in tqdm(futures, desc="Processing results"):
+            for future in tqdm(futures, desc="Retrieving TC from workers"):
                 i, j, result = future.result()
                 tc[i, j] = result
 
