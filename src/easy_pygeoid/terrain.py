@@ -155,7 +155,7 @@ class TerrainQuantities:
         c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
         return i, j, (c1 + c2 + c3) * 1e5  # mGal
 
-    def terrain_correction(self):
+    def terrain_correction(self, progress=True):
         '''
         Compute terrain correction
         
@@ -172,19 +172,37 @@ class TerrainQuantities:
 
         with ThreadPoolExecutor() as executor:
             futures = []
-            for i in tqdm(range(nrows), desc="Computing terrain correction"):
-                m1 = 0
-                m2 = dm
-                for j in range(ncols):
-                    futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
-                    m1 += 1
-                    m2 += 1
-                n1 += 1
-                n2 += 1
+            if progress:
+                for i in tqdm(range(nrows), desc="Computing terrain correction"):
+                    m1 = 0
+                    m2 = dm
+                    for j in range(ncols):
+                        futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
+                        m1 += 1
+                        m2 += 1
+                    n1 += 1
+                    n2 += 1
+            else:
+                print('Computing terrain correction...')
+                for i in range(nrows):
+                    m1 = 0
+                    m2 = dm
+                    for j in range(ncols):
+                        futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
+                        m1 += 1
+                        m2 += 1
+                    n1 += 1
+                    n2 += 1
 
-            for future in tqdm(futures, desc="Retrieving TC from workers"):
-                i, j, result = future.result()
-                tc[i, j] = result
+            if progress:
+                for future in tqdm(futures, desc="Retrieving TC from workers"):
+                    i, j, result = future.result()
+                    tc[i, j] = result
+            else:
+                print('Retrieving TC from workers...')
+                for future in futures:
+                    i, j, result = future.result()
+                    tc[i, j] = result
 
         return tc
     
