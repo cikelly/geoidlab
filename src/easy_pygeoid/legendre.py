@@ -143,7 +143,12 @@ def compute_legendre_chunk(vartheta, n, Pnm):
 
     return Pnm
 
-def ALFsGravityAnomaly(phi=None, lambd=None, height=None, vartheta=None, nmax=60, ellipsoid='wgs84'):
+def ALFsGravityAnomaly(
+    phi=None, lambd=None, 
+    height=None, vartheta=None, 
+    nmax=60, ellipsoid='wgs84',
+    show_progress=True
+):
     '''
     Wrapper function to handle data and call the Numba-optimized function
 
@@ -183,10 +188,15 @@ def ALFsGravityAnomaly(phi=None, lambd=None, height=None, vartheta=None, nmax=60
         Pnm[:, 1, 1] = np.sqrt(3.0) * u
 
     # Initialize progress bar
-    with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+    if show_progress:
+        with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+            for n in range(2, nmax + 1):
+                Pnm = compute_legendre_chunk(phi_bar, n, Pnm)
+                pbar.update(1)
+    else:
+        # print('Computing Legendre Functions...')
         for n in range(2, nmax + 1):
             Pnm = compute_legendre_chunk(phi_bar, n, Pnm)
-            pbar.update(1)
     
     return Pnm
 
