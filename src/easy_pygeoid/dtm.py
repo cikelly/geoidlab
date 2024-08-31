@@ -6,19 +6,23 @@
 
 import lzma
 import os
+
 import numpy as np
 import pandas as pd
+
 from numba import jit
 from numba_progress import ProgressBar
-from legendre import ALFsGravityAnomaly, ALF
-import coordinates as co
 from tqdm import tqdm
+
+from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
+import easy_pygeoid.coordinates as co
 
 class DigitalTerrainModel:
     def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84'):
         self.name = model_name
         self.nmax = nmax
         self.ellipsoid = ellipsoid
+        # self.progress = show_progress
 
         if self.name is None:
             script_dir = os.path.dirname(__file__)
@@ -74,7 +78,7 @@ class DigitalTerrainModel:
             H += (HCnm[n, m] * np.cos(m * lon) + HSnm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
         return H
     
-    def calculate_height_chunk(self, lon, lat, Pnm):
+    def calculate_height_chunk(self, lon, lat, Pnm, progress=True):
         '''
         Calculate height for a chunk of data
 
@@ -97,14 +101,19 @@ class DigitalTerrainModel:
 
         H_chunk = np.zeros(len(lon))
 
-        with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
+        if progress:
+            with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
+                for n in range(self.nmax + 1):
+                    H_chunk += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                    pbar.update(1)
+        else:
+            print('Computing heights...')
             for n in range(self.nmax + 1):
-                H_chunk += self.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
-                pbar.update(1)
-
+                H_chunk += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                
         return H_chunk
 
-    def calculate_height(self, lon, lat, Pnm=None, chunk_size=100, split_data=False):
+    def calculate_height(self, lon, lat, Pnm=None, chunk_size=100, split_data=False, progress=True, leg_progress=False):
         '''
         Wrapper function to handle data and call the Numba-optimized function
 
@@ -137,7 +146,7 @@ class DigitalTerrainModel:
 
         if not split_data:
             if Pnm is None:
-                Pnm = ALFsGravityAnomaly(phi=lat, lambd=lon, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                Pnm = ALFsGravityAnomaly(phi=lat, lambd=lon, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
             
             lon = np.radians(lon)
             lat = np.radians(lat)
@@ -146,10 +155,15 @@ class DigitalTerrainModel:
 
             H = np.zeros(len(lon))
 
-            with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
+            if progress:
+                with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
+                    for n in range(self.nmax + 1):
+                        H += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                        pbar.update(1)
+            else:
+                print('Computing heights...')
                 for n in range(self.nmax + 1):
-                    H += self.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
-                    pbar.update(1)
+                    H += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
         else:
             n_points = len(lon)
             n_chunks = (n_points // chunk_size) + 1
@@ -165,15 +179,15 @@ class DigitalTerrainModel:
                 lat_chunk = lat[start_idx:end_idx]
 
                 print(f'Processing chunk {i + 1} of {n_chunks}...')
-                Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
 
-                H[start_idx:end_idx] = self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk)
+                H[start_idx:end_idx] = self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk, progress=progress)
                 print('\n')
 
                 Pnm_chunk = None
         return H
     
-    def calculate_height_2D(self, lon=None, lat=None, grid_spacing=1):
+    def calculate_height_2D(self, lon=None, lat=None, grid_spacing=1, progress=True):
         '''
         Vectorized computations of height on a grid
         
@@ -200,7 +214,7 @@ class DigitalTerrainModel:
         else:
             self.r, self.theta, _ = co.geodetic2spherical(
                 phi=self.lat, lambd=self.lon, 
-                height=len(self.lon), ellipsoid=self.ellipsoid
+                height=np.zeros(len(self.lon)), ellipsoid=self.ellipsoid
             )
             self.lambda_ = np.radians(self.lon)
         
@@ -218,8 +232,14 @@ class DigitalTerrainModel:
         
         H = np.zeros((len(self.theta), len(self.lambda_)))
         
-        for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing heights'):
-            Pnm = ALF(vartheta=theta_, nmax=self.nmax, ellipsoid=self.ellipsoid)
-            H[i,:] = degree_term @ ((self.HCnm * Pnm) @ self.cosm + (self.HSnm * Pnm) @ self.sinm)
+        if progress:
+            for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing heights'):
+                Pnm = ALF(vartheta=theta_, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                H[i,:] = degree_term @ ((self.HCnm * Pnm) @ self.cosm + (self.HSnm * Pnm) @ self.sinm)
+        else:
+            print('Computing heights...')
+            for i, theta_ in enumerate(self.theta):
+                Pnm = ALF(vartheta=theta_, nmax=self.nmax, ellipsoid=self.ellipsoid)
+                H[i,:] = degree_term @ ((self.HCnm * Pnm) @ self.cosm + (self.HSnm * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, H
