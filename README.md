@@ -21,6 +21,7 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 `easy-pygeoid` uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
 
 - Automatically downloads [SRTM30PLUS](https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/) over the bounding box of interest
+- Downloads multiple SRTM30PLUS tiles if bounding box extends over multiple tiles
 - Automatically downloads a GGM from [ICGEM](https://icgem.gfz-potsdam.de/tom_longtime)
 - Uses a template file so that users do not have to interact with the scripts
 - Can automatically download other DEMs (e.g., Copernicus DEM, NASADEM, and GEBCO). Default is SRTM30PLUS
