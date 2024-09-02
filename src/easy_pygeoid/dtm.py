@@ -102,10 +102,13 @@ class DigitalTerrainModel:
         H_chunk = np.zeros(len(lon))
 
         if progress:
-            with ProgressBar(total=self.nmax + 1, desc='Synthesizing heights from DTM') as pbar:
-                for n in range(self.nmax + 1):
-                    H_chunk += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
-                    pbar.update(1)
+            # with ProgressBar(
+            #         total=self.nmax + 1, leave=bool(chunk_num == n_chunk - 1),
+            #         desc=f'Synthesizing heights from DTM: {chunk_num+1}/{n_chunk}'
+            #     ) as pbar:
+            for n in range(self.nmax + 1):
+                H_chunk += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
+                # pbar.update(1)
         else:
             print('Computing heights...')
             for n in range(self.nmax + 1):
@@ -170,21 +173,21 @@ class DigitalTerrainModel:
             print(f'Data will be processed in {n_chunks} chunks...\n')
             
             H = np.zeros(n_points)
+            
+            with tqdm(total=n_chunks, desc='Processing chunks') as pbar:
+                for i in range(n_chunks):
+                    start_idx = i * chunk_size
+                    end_idx = min((i + 1) * chunk_size, n_points)
 
-            for i in range(n_chunks):
-                start_idx = i * chunk_size
-                end_idx = min((i + 1) * chunk_size, n_points)
+                    lon_chunk = lon[start_idx:end_idx]
+                    lat_chunk = lat[start_idx:end_idx]
 
-                lon_chunk = lon[start_idx:end_idx]
-                lat_chunk = lat[start_idx:end_idx]
+                    Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
 
-                print(f'Processing chunk {i + 1} of {n_chunks}...')
-                Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
+                    H[start_idx:end_idx] = self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk, progress=progress)
+                    pbar.update(1)
 
-                H[start_idx:end_idx] = self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk, progress=progress)
-                print('\n')
-
-                Pnm_chunk = None
+                    Pnm_chunk = None
         return H
     
     def calculate_height_2D(self, lon=None, lat=None, grid_spacing=1, progress=True):
