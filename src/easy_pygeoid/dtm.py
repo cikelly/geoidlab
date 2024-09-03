@@ -17,6 +17,10 @@ from tqdm import tqdm
 from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
 import easy_pygeoid.coordinates as co
 
+import dask.array as da
+from dask import delayed, compute
+from dask.diagnostics import ProgressBar as DaskProgressBar
+
 class DigitalTerrainModel:
     def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84'):
         self.name = model_name
@@ -115,6 +119,41 @@ class DigitalTerrainModel:
                 H_chunk += DigitalTerrainModel.compute_height_chunk(HCnm, HSnm, lon, n, Pnm)
                 
         return H_chunk
+    
+    def calculate_height_dask(self, lon, lat, Pnm=None, chunk_size=100, split_data=False, progress=True, leg_progress=False):
+        # Convert to numpy arrays if they're Pandas Series
+        if isinstance(lon, pd.Series):
+            lon = lon.values
+        if isinstance(lat, pd.Series):
+            lat = lat.values
+        # Convert lon, lat to radians and initialize outputs
+        # lon = np.radians(lon)
+        # lat = np.radians(lat)
+        
+        # HCnm = self.HCnm
+        # HSnm = self.HSnm
+        
+        # if Pnm is None:
+        #     Pnm = ALFsGravityAnomaly(phi=lat, lambd=lon, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
+
+        def compute_chunk(start_idx, end_idx):
+            lon_chunk = lon[start_idx:end_idx]
+            lat_chunk = lat[start_idx:end_idx]
+            Pnm_chunk = ALFsGravityAnomaly(phi=lat_chunk, lambd=lon_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=leg_progress)
+            return self.calculate_height_chunk(lon_chunk, lat_chunk, Pnm_chunk, progress=False)
+        
+        n_points = len(lon)
+        indices = [(i * chunk_size, min((i + 1) * chunk_size, n_points)) for i in range((n_points // chunk_size) + 1)]
+        
+        # Use a delayed computation for each chunk and save the intermediate results to disk
+        results = [delayed(compute_chunk)(start_idx, end_idx) for start_idx, end_idx in indices]
+
+        # Compute the results using Dask's disk cache to limit memory usage
+        with DaskProgressBar():
+            results = compute(*results, scheduler='threads')
+
+        # Concatenate results into the final array
+        return np.concatenate(results)
 
     def calculate_height(self, lon, lat, Pnm=None, chunk_size=100, split_data=False, progress=True, leg_progress=False):
         '''
