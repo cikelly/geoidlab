@@ -285,3 +285,23 @@ class DigitalTerrainModel:
                 H[i,:] = degree_term @ ((self.HCnm * Pnm) @ self.cosm + (self.HSnm * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, H
+
+# TODO: Implement function for chunking data into manageble square/rectangular sizes that can then be passed to workers
+def auto_chunk(self, chunk_size: int = 1000):
+    """
+    Automatically chunk data into manageable square/rectangular sizes that can then be passed to workers
+    
+    Parameters
+    ----------
+    chunk_size : int
+        Size of the chunk in terms of number of lat/lon points. Default is 1000.
+    """
+    data_size = len(self.lon)
+    n_chunks = int(np.ceil(data_size / chunk_size))
+    chunk_indices = np.array_split(np.arange(data_size), n_chunks)
+    chunks = []
+    for start, end in chunk_indices:
+        lon_chunk = self.lon[start:end]
+        lat_chunk = self.lat[start:end]
+        chunks.append((lon_chunk, lat_chunk))
+    return chunks
