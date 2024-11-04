@@ -19,7 +19,7 @@ from rasterio.enums import Resampling
 
 warnings.simplefilter('ignore')
 
-def get_readme_path():
+def get_readme_path() -> str:
     '''
     Function to get the path of README.V11.txt, which is required for automatic DEM download.
     
@@ -36,7 +36,7 @@ def get_readme_path():
     
     return os.path.abspath(readme_path)
 
-def parse_readme(readme_path):
+def parse_readme(readme_path) -> list:
     '''
     Parse the README file to extract tile boundary information.
 
@@ -68,7 +68,7 @@ def parse_readme(readme_path):
 
     return tiles
 
-def identify_relevant_tiles(bbox, tiles):
+def identify_relevant_tiles(bbox, tiles) -> list:
     '''
     Identify the tiles that intersect with the given bounding box.
 
@@ -91,7 +91,7 @@ def identify_relevant_tiles(bbox, tiles):
 
     return relevant_tiles
 
-def download_srtm30plus(url=None, downloads_dir=None, bbox=None):
+def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     '''
     Download SRTM30PLUS from https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/
     
