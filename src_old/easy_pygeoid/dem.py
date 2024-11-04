@@ -6,6 +6,7 @@
 
 import requests
 import os
+from pathlib import Path
 import sys
 import warnings
 import netCDF4
@@ -31,10 +32,30 @@ def get_readme_path() -> str:
     -------
     readme_path   : absolute path to the README.V11.txt file
     '''
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    readme_path = os.path.join(script_dir, '../easy_pygeoid/data/README.V11.txt')
+    print('Function called')
+    script_dir = Path(__file__).resolve().parent
+    print(f'Type: {type(script_dir)}')
+    readme_path = script_dir / '../easy_pygeoid/data/README.V11.txt'
+    print(type(readme_path))
     
-    return os.path.abspath(readme_path)
+    return readme_path.resolve()
+
+# def get_readme_path() -> str:
+#     '''
+#     Function to get the path of README.V11.txt, which is required for automatic DEM download.
+    
+#     Parameters
+#     ----------
+#     None
+    
+#     Returns
+#     -------
+#     readme_path   : absolute path to the README.V11.txt file
+#     '''
+#     script_dir = os.path.dirname(os.path.abspath(__file__))
+#     readme_path = os.path.join(script_dir, '../easy_pygeoid/data/README.V11.txt')
+    
+#     return os.path.abspath(readme_path)
 
 def parse_readme(readme_path) -> list:
     '''
