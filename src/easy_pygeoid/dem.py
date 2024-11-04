@@ -5,7 +5,7 @@
 ############################################################
 import requests
 import os
-from pathlib import Path
+from pathlib import Path, PosixPath
 import sys
 import warnings
 import netCDF4
@@ -19,7 +19,7 @@ from rasterio.enums import Resampling
 
 warnings.simplefilter('ignore')
 
-def get_readme_path() -> str:
+def get_readme_path() -> PosixPath:
     '''
     Function to get the path of README.V11.txt, which is required for automatic DEM download.
     
@@ -31,10 +31,9 @@ def get_readme_path() -> str:
     -------
     readme_path   : absolute path to the README.V11.txt file
     '''
-    script_dir: str = os.path.dirname(os.path.abspath(__file__))
-    readme_path: str = os.path.join(script_dir, '../easy_pygeoid/data/README.V11.txt')
-    
-    return os.path.abspath(readme_path)
+    script_dir: PosixPath = Path(__file__).resolve().parent
+    readme_path: PosixPath = script_dir / '../easy_pygeoid/data/README.V11.txt'
+    return readme_path.resolve()
 
 def parse_readme(readme_path) -> list:
     '''
@@ -48,16 +47,16 @@ def parse_readme(readme_path) -> list:
     -------
     tiles       : list of dictionaries containing tile name and boundary info.
     '''
-    tiles = []
+    tiles: list = []
     with open(readme_path, 'r') as file:
-        readme_content = file.read()
-
+        readme_content: str = file.read()
+    
     # Regular expression to match the tile information
-    tile_pattern = re.compile(r'(?P<tile>\w+)\s+(?P<min_lat>-?\d+)\s+(?P<max_lat>-?\d+)\s+(?P<min_lon>-?\d+)\s+(?P<max_lon>-?\d+)')
-    matches = tile_pattern.findall(readme_content)
-
+    tile_pattern: re.Pattern = re.compile(r'(?P<tile>\w+)\s+(?P<min_lat>-?\d+)\s+(?P<max_lat>-?\d+)\s+(?P<min_lon>-?\d+)\s+(?P<max_lon>-?\d+)')
+    matches: list = tile_pattern.findall(readme_content)
+    
     for match in matches:
-        tile_info = {
+        tile_info: dict[str, int] = {
             'tile': match[0],
             'min_lat': int(match[1]),
             'max_lat': int(match[2]),
@@ -65,7 +64,7 @@ def parse_readme(readme_path) -> list:
             'max_lon': int(match[4])
         }
         tiles.append(tile_info)
-
+    
     return tiles
 
 def identify_relevant_tiles(bbox, tiles) -> list:
@@ -82,7 +81,7 @@ def identify_relevant_tiles(bbox, tiles) -> list:
     relevant_tiles : list of tile names that intersect with the bounding box.
     '''
     min_lon, min_lat, max_lon, max_lat = bbox
-    relevant_tiles = []
+    relevant_tiles: list = []
 
     for tile in tiles:
         if not (tile['max_lat'] < min_lat or tile['min_lat'] > max_lat or
@@ -110,9 +109,9 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         raise ValueError('Either bbox or url must be provided.')
     
     if not url:
-        urls = fetch_url(bbox=bbox)
+        urls: list[str] = fetch_url(bbox=bbox)
     else:
-        urls = [url]
+        urls: list[str] = [url]
 
     if len(urls) > 1:
         if os.path.exists(downloads_dir+'/'+'merged_dem.nc'):
@@ -124,16 +123,16 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                 os.remove(downloads_dir+'/'+'merged_dem.nc')
                 print(f'Downloading and merging {len(urls)} tiles ...\n')
         
-    filepaths = []
+    filepaths: list = []
     for url in urls:
-        filename = url.split('/')[-1]
-        filepath = os.path.join(downloads_dir, filename) if downloads_dir else filename
+        filename: str = url.split('/')[-1]
+        filepath: str = os.path.join(downloads_dir, filename) if downloads_dir else filename
 
         # Check if the file already exists
         if os.path.exists(filepath):
             try:
-                response_head = requests.head(url, verify=False)
-                total_size = int(response_head.headers.get('content-length', 0))
+                response_head: requests.Response = requests.head(url, verify=False)
+                total_size: int = int(response_head.headers.get('content-length', 0))
                 # Check if the existing file size matches the expected size
                 if os.path.getsize(filepath) == total_size:
                     print(f'{filename} already exists and is complete. Skip download\n')
@@ -155,7 +154,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
 
         # Download NetCDF file
         try:
-            response = requests.get(url, verify=False, stream=True)
+            response: requests.Response = requests.get(url, verify=False, stream=True)
             total_size = int(response.headers.get('content-length', 0))
 
             with tqdm(
@@ -166,7 +165,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             ) as pbar:
                 with open(filepath, 'wb') as f:
                     for data in response.iter_content(chunk_size=1024):
-                        size = f.write(data)
+                        size: int = f.write(data)
                         pbar.update(len(data))
                         pbar.refresh()
                         f.flush()
@@ -180,26 +179,17 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     # If multiple files were downloaded, merge them
     if len(filepaths) > 1:
         print('Merging downloaded tiles...')
-        datasets = [xr.open_dataset(fp) for fp in filepaths]
+        datasets: list[xr.Dataset] = [xr.open_dataset(fp) for fp in filepaths]
         # Resolve attribute conflicts
         merged_dataset = xr.combine_by_coords(datasets, combine_attrs='drop_conflicts')
         merged_filepath = os.path.join(downloads_dir, 'merged_dem.nc')
         merged_dataset.to_netcdf(merged_filepath)
-        # if os.path.exists(merged_filepath):
-        #     existing_ds = xr.open_dataset(merged_filepath)
-        #     if existing_ds.equals(merged_dataset):
-        #         print(f'{merged_filepath} already exists and is complete. Skip merging\n')
-        #     else:
-        #         os.remove(merged_filepath)
-        #         merged_dataset.to_netcdf(merged_filepath)
-        # else:
-        #     merged_dataset.to_netcdf(merged_filepath)
         return merged_filepath.split('/')[-1]
     else:
         return filepaths[0].split('/')[-1]
 
 
-def fetch_url(bbox):
+def fetch_url(bbox) -> list[str]:
     '''
     Fetch the URLs of all relevant tiles based on the given bounding box.
 
@@ -213,15 +203,15 @@ def fetch_url(bbox):
     -------
     urls      : url of the srtm30plus tiles
     '''
-    readme_path = get_readme_path()  # Assuming get_readme_path() is already defined
-    tiles = parse_readme(readme_path)  # Assuming parse_readme() is already defined
+    readme_path: PosixPath = get_readme_path()  # Assuming get_readme_path() is already defined
+    tiles: list = parse_readme(readme_path)  # Assuming parse_readme() is already defined
 
     # Identify relevant tiles for the given bbox
-    relevant_tiles = identify_relevant_tiles(bbox, tiles)  # Assuming identify_relevant_tiles() is already defined
+    relevant_tiles: list = identify_relevant_tiles(bbox, tiles)  # Assuming identify_relevant_tiles() is already defined
 
     # Construct the URLs
     base_url = 'https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/'
-    urls = [f'{base_url}{tile}.nc' for tile in relevant_tiles]
+    urls: list[str] = [f'{base_url}{tile}.nc' for tile in relevant_tiles]
 
     return urls
 
@@ -229,7 +219,7 @@ def dem4geoid(
     bbox, ncfile=None, 
     bbox_off=1, downloads_dir=None,
     resolution=30
-):
+) -> xr.Dataset:
     '''
     Prepare a DEM for geoid calculation.
     
@@ -308,7 +298,7 @@ def download_dem_cog(
     bbox, model='None', cog_url=None,
     downloads_dir=None,
     bbox_off=2, resolution=30
-):
+) -> xr.Dataset:
     '''
     Download DEM using Cloud Optimized GeoTIFF (COG) format
     from OpenTopography.
@@ -427,7 +417,7 @@ def download_dem_cog(
     
     return dem
         
-def check_bbox_contains(netcdf_file, bbox):
+def check_bbox_contains(netcdf_file, bbox) -> bool:
     # Load the NetCDF file
     ds = xr.open_dataset(netcdf_file)
     
