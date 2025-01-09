@@ -6,11 +6,13 @@
 
 import os
 
-from . import icgem
-from . import shtools
-from . import constants
-from . import gravity
-from . import coordinates as co
+from . import (
+    icgem,
+    shtools,
+    constants,
+    gravity,
+    coordinates as co
+)
 
 from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
 from numba import jit
@@ -28,7 +30,7 @@ class GlobalGeopotentialModel():
         grav_data=None, chunk_size=None, 
         zonal_harmonics=True,
         model_dir='downloads'
-    ):
+    ) -> None:
         '''
         Initialize the GlobalGeopotentialModel class for potential modeling
         
@@ -119,7 +121,7 @@ class GlobalGeopotentialModel():
             
     @staticmethod
     @jit(nopython=True)
-    def compute_gravity_chunk(Cnm, Snm, lon, a, r, Pnm, n, Dg):
+    def compute_gravity_chunk(Cnm, Snm, lon, a, r, Pnm, n, Dg) -> np.ndarray:
         '''
         Compute a chunk of gravity anomaly for a specific degree using Numba optimization
         Parameters
@@ -143,7 +145,7 @@ class GlobalGeopotentialModel():
         
         return Dg
     
-    def compute_gravity_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Dg):
+    def compute_gravity_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Dg) -> np.ndarray:
         '''
         Compute gravity anomaly for a chunk of data
         
@@ -168,7 +170,7 @@ class GlobalGeopotentialModel():
         
         return Dg
     
-    def gravity_anomaly(self):
+    def gravity_anomaly(self) -> np.ndarray:
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
@@ -218,7 +220,7 @@ class GlobalGeopotentialModel():
             
     @staticmethod
     @jit(nopython=True)
-    def compute_disturbance_chunk(Cnm, Snm, lon, a, r, Pnm, n, dg):
+    def compute_disturbance_chunk(Cnm, Snm, lon, a, r, Pnm, n, dg) -> np.ndarray:
         '''
         Compute a chunk of gravity disturbances for a specific degree using Numba optimization
         Parameters
@@ -242,7 +244,7 @@ class GlobalGeopotentialModel():
         
         return dg
     
-    def compute_disturbance_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, dg):
+    def compute_disturbance_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, dg) -> np.ndarray:
         '''
         Compute disturbance for a chunk of data
         
@@ -267,7 +269,7 @@ class GlobalGeopotentialModel():
         
         return dg
     
-    def gravity_disturbance(self):
+    def gravity_disturbance(self) -> np.ndarray:
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
@@ -315,7 +317,7 @@ class GlobalGeopotentialModel():
         
         return dg
 
-    def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid'):
+    def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid') -> np.ndarray:
         '''
         Add zero-degree term to the GGM geoid
         
@@ -364,7 +366,7 @@ class GlobalGeopotentialModel():
         
     @staticmethod
     @jit(nopython=True)
-    def compute_radial_chunk(Cnm, Snm, lon, a, r, Pnm, n, Tzz):
+    def compute_radial_chunk(Cnm, Snm, lon, a, r, Pnm, n, Tzz) -> np.ndarray:
         '''
         Compute a chunk of second radial derivative of the disturbing potential 
         for a specific degree using Numba optimization -- vertical gravity gradient
@@ -390,7 +392,7 @@ class GlobalGeopotentialModel():
         
         return Tzz
     
-    def compute_radial_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Tzz):
+    def compute_radial_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, Tzz) -> np.ndarray:
         '''
         Compute radial for a chunk of data
         
