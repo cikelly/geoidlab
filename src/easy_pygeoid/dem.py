@@ -4,7 +4,6 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 import requests
-# import os
 from pathlib import Path
 import sys
 import warnings
@@ -134,7 +133,6 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     filepaths: list[str] = []
     for url in urls:
         filename: str = url.split('/')[-1]
-        # filepath: str = os.path.join(downloads_dir, filename) if downloads_dir else filename
         filepath: str = downloads_dir / filename 
 
         # Check if the file already exists
@@ -144,13 +142,11 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                 total_size: int = int(response_head.headers.get('content-length', 0))
                 # Check if the existing file size matches the expected size
                 if filepath.stat().st_size == total_size:
-                # if os.path.getsize(filepath) == total_size:
                     print(f'{filename} already exists and is complete. Skip download\n')
                     filepaths.append(str(filepath))
                     continue
                 else:
                     print(f'{filename} already exists but is incomplete. Redownloading ...\n')
-                    # os.remove(filepath)
                     filepath.unlink()
             except requests.exceptions.RequestException:
                 print(f'Unable to check if {filename} is complete. {filename} in {downloads_dir} will be used ...\n')
