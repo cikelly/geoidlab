@@ -4,8 +4,8 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 import requests
-import os
-from pathlib import Path, PosixPath
+# import os
+from pathlib import Path
 import sys
 import warnings
 import netCDF4
@@ -19,7 +19,7 @@ from rasterio.enums import Resampling
 
 warnings.simplefilter('ignore')
 
-def get_readme_path() -> PosixPath:
+def get_readme_path() -> Path:
     '''
     Function to get the path of README.V11.txt, which is required for automatic DEM download.
     
@@ -31,8 +31,8 @@ def get_readme_path() -> PosixPath:
     -------
     readme_path   : absolute path to the README.V11.txt file
     '''
-    script_dir: PosixPath = Path(__file__).resolve().parent
-    readme_path: PosixPath = script_dir / '../easy_pygeoid/data/README.V11.txt'
+    script_dir: Path = Path(__file__).resolve().parent
+    readme_path: Path = script_dir / '../easy_pygeoid/data/README.V11.txt'
     return readme_path.resolve()
 
 def parse_readme(readme_path) -> list:
@@ -113,45 +113,51 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     else:
         urls: list[str] = [url]
 
+    if downloads_dir:
+        downloads_dir = Path(downloads_dir)
+    else:
+        downloads_dir = Path.cwd() / 'downloads'
+    downloads_dir = downloads_dir.resolve()
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    
+            
     if len(urls) > 1:
-        if os.path.exists(downloads_dir+'/'+'merged_dem.nc'):
+        if (downloads_dir / 'merged_dem.nc').resolve().exists():
             if check_bbox_contains(downloads_dir+'/'+'merged_dem.nc', bbox):
                 print(f'{downloads_dir}/merged_dem.nc exists and covers bbox. Skip download\n')
                 return 'merged_dem.nc'
             else:
                 print(f'{downloads_dir}/merged_dem.nc exists but does not cover bbox. Deleting ...\n')
-                os.remove(downloads_dir+'/'+'merged_dem.nc')
+                (downloads_dir / 'merged_dem.nc').unlink()
                 print(f'Downloading and merging {len(urls)} tiles ...\n')
         
-    filepaths: list = []
+    filepaths: list[str] = []
     for url in urls:
         filename: str = url.split('/')[-1]
-        filepath: str = os.path.join(downloads_dir, filename) if downloads_dir else filename
+        # filepath: str = os.path.join(downloads_dir, filename) if downloads_dir else filename
+        filepath: str = downloads_dir / filename 
 
         # Check if the file already exists
-        if os.path.exists(filepath):
+        if filepath.exists():
             try:
                 response_head: requests.Response = requests.head(url, verify=False)
                 total_size: int = int(response_head.headers.get('content-length', 0))
                 # Check if the existing file size matches the expected size
-                if os.path.getsize(filepath) == total_size:
+                if filepath.stat().st_size == total_size:
+                # if os.path.getsize(filepath) == total_size:
                     print(f'{filename} already exists and is complete. Skip download\n')
-                    filepaths.append(filepath)
+                    filepaths.append(str(filepath))
                     continue
                 else:
                     print(f'{filename} already exists but is incomplete. Redownloading ...\n')
-                    os.remove(filepath)
+                    # os.remove(filepath)
+                    filepath.unlink()
             except requests.exceptions.RequestException:
                 print(f'Unable to check if {filename} is complete. {filename} in {downloads_dir} will be used ...\n')
                 filepaths.append(filepath)
                 continue
                 
-        if downloads_dir:
-            os.makedirs(downloads_dir, exist_ok=True)
-            print(f'Downloading {filename} to {downloads_dir} ...')
-        else:
-            print(f'Downloading {filename} to {os.getcwd()} ...')
-
+        print(f'Downloading {filename} to: \n\t{downloads_dir} ...')
         # Download NetCDF file
         try:
             response: requests.Response = requests.get(url, verify=False, stream=True)
@@ -182,7 +188,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         datasets: list[xr.Dataset] = [xr.open_dataset(fp) for fp in filepaths]
         # Resolve attribute conflicts
         merged_dataset = xr.combine_by_coords(datasets, combine_attrs='drop_conflicts')
-        merged_filepath = os.path.join(downloads_dir, 'merged_dem.nc')
+        merged_filepath = downloads_dir / 'merged_dem.nc'
         merged_dataset.to_netcdf(merged_filepath)
         return merged_filepath.split('/')[-1]
     else:
@@ -203,7 +209,7 @@ def fetch_url(bbox) -> list[str]:
     -------
     urls      : url of the srtm30plus tiles
     '''
-    readme_path: PosixPath = get_readme_path()  # Assuming get_readme_path() is already defined
+    readme_path: Path = get_readme_path()  # Assuming get_readme_path() is already defined
     tiles: list = parse_readme(readme_path)  # Assuming parse_readme() is already defined
 
     # Identify relevant tiles for the given bbox
@@ -216,8 +222,10 @@ def fetch_url(bbox) -> list[str]:
     return urls
 
 def dem4geoid(
-    bbox, ncfile=None, 
-    bbox_off=1, downloads_dir=None,
+    bbox, 
+    ncfile=None, 
+    bbox_off=1, 
+    downloads_dir=None,
     resolution=30
 ) -> xr.Dataset:
     '''
@@ -252,8 +260,15 @@ def dem4geoid(
     
     if not ncfile:
         ncfile = download_srtm30plus(bbox=bbox, downloads_dir=downloads_dir)
+    
+    if downloads_dir:
+        downloads_dir = Path(downloads_dir)
+    else:
+        downloads_dir = Path.cwd() / 'downloads'
+    
+    downloads_dir.mkdir(parents=True, exist_ok=True)
         
-    filepath = os.path.join(downloads_dir, ncfile) if downloads_dir else ncfile
+    filepath = downloads_dir / ncfile
     
     print(f'Creating xarray dataset of DEM with buffer of {bbox_off} degree(s)\n')    
     
