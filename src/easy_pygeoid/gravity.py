@@ -3,13 +3,13 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-from . import constants
+import constants
 from numpy import (
     sin, cos, radians, 
     sqrt
 )
 
-from easy_pygeoid.coordinates import geodetic2geocentric
+from coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84') -> float:
     r'''
