@@ -14,6 +14,7 @@ openpyxl
 gdal>=3.8
 rasterio
 rioxarray
+bottleneck
 # dask
 # dask[complete]
 # wget
