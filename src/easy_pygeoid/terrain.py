@@ -129,33 +129,48 @@ class TerrainQuantities:
         self.LatP = LatP
 
     def compute_terrain_correction(self, i, j, n1, n2, m1, m2) -> tuple:
+        # Extract small grids
         smallH = self.ref_topo['z'].values[n1:n2, m1:m2]
         smallX = self.X[n1:n2, m1:m2]
         smallY = self.Y[n1:n2, m1:m2]
         smallZ = self.Z[n1:n2, m1:m2]
 
-        # local coordinates (x,y)
-        x = np.cos(np.radians(self.LonP[i, j])) * (smallY.flatten() - self.Yp[i, j]) - \
-            np.sin(np.radians(self.LonP[i, j])) * (smallX.flatten() - self.Xp[i, j])
-        y = np.cos(np.radians(self.LatP[i, j])) * (smallZ.flatten() - self.Zp[i, j]) - \
-            np.cos(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallX.flatten() - self.Xp[i, j]) - \
-            np.sin(np.radians(self.LonP[i, j])) * np.sin(np.radians(self.LatP[i, j])) * (smallY.flatten() - self.Yp[i, j])
+        # Precompute radians
+        lon_rad = np.radians(self.LonP[i, j])
+        lat_rad = np.radians(self.LatP[i, j])
+
+        # Local coordinates (x, y)
+        x = np.cos(lon_rad) * (smallY - self.Yp[i, j]) - \
+            np.sin(lon_rad) * (smallX - self.Xp[i, j])
+        y = np.cos(lat_rad) * (smallZ - self.Zp[i, j]) - \
+            np.cos(lon_rad) * np.sin(lat_rad) * (smallX - self.Xp[i, j]) - \
+            np.sin(lon_rad) * np.sin(lat_rad) * (smallY - self.Yp[i, j])
 
         # Distances
-        d = np.sqrt(x**2 + y**2)
-        d[d > self.radius] = np.nan        
-        d3 = d**3
-        d5 = d**5
-        d7 = d**7
-
+        d = np.hypot(x, y)
+        # d_masked = np.where(d <= self.radius, d, np.nan)
+        d[d > self.radius] = np.nan 
+        d3 = d * d * d
+        d5 = d3 * d * d
+        d7 = d5 * d * d
+        
         # Terrain effect in mGal
-        DH2 = (smallH.flatten() - self.ref_P['z'].values[i, j]) ** 2
-        c1 = 1/2 * self.G * self.rho * np.nansum(DH2 * 1/d3) * self.dx * self.dy
-        c2 = -3/8 * self.G * self.rho * np.nansum(DH2 ** 2 * 1/d5) * self.dx * self.dy
-        c3 = 5/16 * self.G * self.rho * np.nansum(DH2 ** 3 * 1/d7) * self.dx * self.dy
-        return i, j, (c1 + c2 + c3) * 1e5  # mGal
+        DH2 = (smallH - self.ref_P['z'].values[i, j]) ** 2
+        dxdy = self.dx * self.dy
+        G_rho_dxdy = self.G * self.rho * dxdy
+        
+        DH22 = DH2 * DH2
+        DH23 = DH22 * DH2
+        
+        c1 = 1/2 * G_rho_dxdy * np.nansum(DH2 / d3)
+        c2 = -3/8 * G_rho_dxdy * np.nansum(DH22 / d5)
+        c3 = 5/16 * G_rho_dxdy * np.nansum(DH23 / d7)
+        
+        result = (c1 + c2 + c3) * 1e5  # mGal
+        return i, j, result
 
-    def terrain_correction(self, progress=True) -> np.ndarray:
+
+    def terrain_correction(self, progress=True, batch_size=10) -> np.ndarray:
         '''
         Compute terrain correction
         
@@ -170,39 +185,40 @@ class TerrainQuantities:
         n1 = 0
         n2 = dn
 
+        def process_row(i, n1, n2) -> tuple:
+            m1 = 0
+            m2 = dm
+            row_results = np.zeros(ncols)
+            for j in range(ncols):
+                _, _, result = self.compute_terrain_correction(i, j, n1, n2, m1, m2)
+                row_results[j] = result
+                m1 += 1
+                m2 += 1
+            return i, row_results
+
         with ThreadPoolExecutor() as executor:
             futures = []
             if progress:
                 for i in tqdm(range(nrows), desc="Computing terrain correction"):
-                    m1 = 0
-                    m2 = dm
-                    for j in range(ncols):
-                        futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
-                        m1 += 1
-                        m2 += 1
+                    futures.append(executor.submit(process_row, i, n1, n2))
                     n1 += 1
                     n2 += 1
             else:
                 print('Computing terrain correction...')
                 for i in range(nrows):
-                    m1 = 0
-                    m2 = dm
-                    for j in range(ncols):
-                        futures.append(executor.submit(self.compute_terrain_correction, i, j, n1, n2, m1, m2))
-                        m1 += 1
-                        m2 += 1
+                    futures.append(executor.submit(process_row, i, n1, n2))
                     n1 += 1
                     n2 += 1
 
             if progress:
                 for future in tqdm(futures, desc="Retrieving TC from workers"):
-                    i, j, result = future.result()
-                    tc[i, j] = result
+                    i, row_results = future.result()
+                    tc[i, :] = row_results
             else:
                 print('Retrieving TC from workers...')
                 for future in futures:
-                    i, j, result = future.result()
-                    tc[i, j] = result
+                    i, row_results = future.result()
+                    tc[i, :] = row_results
 
         return tc
     
