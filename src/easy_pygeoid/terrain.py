@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import xarray as xr
 import rioxarray as rxr
+import bottleneck as bn
 
 class TerrainQuantities:
     '''
@@ -140,11 +141,18 @@ class TerrainQuantities:
         lat_rad = np.radians(self.LatP[i, j])
 
         # Local coordinates (x, y)
-        x = np.cos(lon_rad) * (smallY - self.Yp[i, j]) - \
-            np.sin(lon_rad) * (smallX - self.Xp[i, j])
-        y = np.cos(lat_rad) * (smallZ - self.Zp[i, j]) - \
-            np.cos(lon_rad) * np.sin(lat_rad) * (smallX - self.Xp[i, j]) - \
-            np.sin(lon_rad) * np.sin(lat_rad) * (smallY - self.Yp[i, j])
+        cos_lon = np.cos(lon_rad)
+        sin_lon = np.sin(lon_rad)
+        cos_lat = np.cos(lat_rad)
+        sin_lat = np.sin(lat_rad)
+        x = cos_lon * (smallY - self.Yp[i, j]) - sin_lon * (smallX - self.Xp[i, j])
+        y = cos_lat * (smallZ - self.Zp[i, j]) - cos_lon * sin_lat * (smallX - self.Xp[i, j]) - sin_lon * sin_lat * (smallY - self.Yp[i, j])
+
+        # x = np.cos(lon_rad) * (smallY - self.Yp[i, j]) - \
+        #     np.sin(lon_rad) * (smallX - self.Xp[i, j])
+        # y = np.cos(lat_rad) * (smallZ - self.Zp[i, j]) - \
+        #     np.cos(lon_rad) * np.sin(lat_rad) * (smallX - self.Xp[i, j]) - \
+        #     np.sin(lon_rad) * np.sin(lat_rad) * (smallY - self.Yp[i, j])
 
         # Distances
         d = np.hypot(x, y)
@@ -162,9 +170,12 @@ class TerrainQuantities:
         DH22 = DH2 * DH2
         DH23 = DH22 * DH2
         
-        c1 = 1/2 * G_rho_dxdy * np.nansum(DH2 / d3)
-        c2 = -3/8 * G_rho_dxdy * np.nansum(DH22 / d5)
-        c3 = 5/16 * G_rho_dxdy * np.nansum(DH23 / d7)
+        # c1 = 1/2 * G_rho_dxdy * np.nansum(DH2 / d3)
+        # c2 = -3/8 * G_rho_dxdy * np.nansum(DH22 / d5)
+        # c3 = 5/16 * G_rho_dxdy * np.nansum(DH23 / d7)
+        c1 = 1/2 * G_rho_dxdy * bn.nansum(DH2 / d3)
+        c2 = -3/8 * G_rho_dxdy * bn.nansum(DH22 / d5)
+        c3 = 5/16 * G_rho_dxdy * bn.nansum(DH23 / d7)
         
         result = (c1 + c2 + c3) * 1e5  # mGal
         return i, j, result
