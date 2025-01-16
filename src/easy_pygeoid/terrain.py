@@ -151,12 +151,6 @@ class TerrainQuantities:
             cos_lon * sin_lat * (smallX - self.Xp[i, j]) - \
             sin_lon * sin_lat * (smallY - self.Yp[i, j])
 
-        # x = np.cos(lon_rad) * (smallY - self.Yp[i, j]) - \
-        #     np.sin(lon_rad) * (smallX - self.Xp[i, j])
-        # y = np.cos(lat_rad) * (smallZ - self.Zp[i, j]) - \
-        #     np.cos(lon_rad) * np.sin(lat_rad) * (smallX - self.Xp[i, j]) - \
-        #     np.sin(lon_rad) * np.sin(lat_rad) * (smallY - self.Yp[i, j])
-
         # Distances
         d = np.hypot(x, y)
         # d_masked = np.where(d <= self.radius, d, np.nan)
@@ -177,9 +171,6 @@ class TerrainQuantities:
         result = (c1 + c2 + c3) * 1e5  # mGal
         return i, j, result
 
-
-
-    
     def terrain_correction(self, progress=True, batch_size=20) -> np.ndarray:
         '''
         Compute terrain correction
