@@ -145,8 +145,11 @@ class TerrainQuantities:
         sin_lon = np.sin(lon_rad)
         cos_lat = np.cos(lat_rad)
         sin_lat = np.sin(lat_rad)
-        x = cos_lon * (smallY - self.Yp[i, j]) - sin_lon * (smallX - self.Xp[i, j])
-        y = cos_lat * (smallZ - self.Zp[i, j]) - cos_lon * sin_lat * (smallX - self.Xp[i, j]) - sin_lon * sin_lat * (smallY - self.Yp[i, j])
+        x = cos_lon * (smallY - self.Yp[i, j]) - \
+            sin_lon * (smallX - self.Xp[i, j])
+        y = cos_lat * (smallZ - self.Zp[i, j]) - \
+            cos_lon * sin_lat * (smallX - self.Xp[i, j]) - \
+            sin_lon * sin_lat * (smallY - self.Yp[i, j])
 
         # x = np.cos(lon_rad) * (smallY - self.Yp[i, j]) - \
         #     np.sin(lon_rad) * (smallX - self.Xp[i, j])
@@ -167,21 +170,17 @@ class TerrainQuantities:
         dxdy = self.dx * self.dy
         G_rho_dxdy = self.G * self.rho * dxdy
         
-        DH22 = DH2 * DH2
-        DH23 = DH22 * DH2
-        
-        # c1 = 1/2 * G_rho_dxdy * np.nansum(DH2 / d3)
-        # c2 = -3/8 * G_rho_dxdy * np.nansum(DH22 / d5)
-        # c3 = 5/16 * G_rho_dxdy * np.nansum(DH23 / d7)
         c1 = 1/2 * G_rho_dxdy * bn.nansum(DH2 / d3)
-        c2 = -3/8 * G_rho_dxdy * bn.nansum(DH22 / d5)
-        c3 = 5/16 * G_rho_dxdy * bn.nansum(DH23 / d7)
+        c2 = -3/8 * G_rho_dxdy * bn.nansum((DH2 * DH2) / d5)
+        c3 = 5/16 * G_rho_dxdy * bn.nansum((DH2 * DH2 * DH2) / d7)
         
         result = (c1 + c2 + c3) * 1e5  # mGal
         return i, j, result
 
 
-    def terrain_correction(self, progress=True, batch_size=10) -> np.ndarray:
+
+    
+    def terrain_correction(self, progress=True, batch_size=20) -> np.ndarray:
         '''
         Compute terrain correction
         
@@ -193,46 +192,49 @@ class TerrainQuantities:
         dm = round(self.nrows - nrows) + 1
         dn = round(self.ncols - ncols) + 1
         tc = np.zeros((nrows, ncols))
-        n1 = 0
-        n2 = dn
 
-        def process_row(i, n1, n2) -> tuple:
-            m1 = 0
-            m2 = dm
-            row_results = np.zeros(ncols)
-            for j in range(ncols):
-                _, _, result = self.compute_terrain_correction(i, j, n1, n2, m1, m2)
-                row_results[j] = result
-                m1 += 1
-                m2 += 1
-            return i, row_results
+        def process_batch(start_row, end_row) -> list:
+            results = []
+            for i in range(start_row, end_row):
+                n1 = i
+                n2 = i + dn
+                m1 = 0
+                m2 = dm
+                row_results = np.zeros(ncols)
+                for j in range(ncols):
+                    _, _, result = self.compute_terrain_correction(i, j, n1, n2, m1, m2)
+                    row_results[j] = result
+                    m1 += 1
+                    m2 += 1
+                results.append((i, row_results))
+            return results
 
         with ThreadPoolExecutor() as executor:
             futures = []
             if progress:
-                for i in tqdm(range(nrows), desc="Computing terrain correction"):
-                    futures.append(executor.submit(process_row, i, n1, n2))
-                    n1 += 1
-                    n2 += 1
+                for start_row in tqdm(range(0, nrows, batch_size), desc='Submitting TC tasks to workers'):
+                    end_row = min(start_row + batch_size, nrows)
+                    futures.append(executor.submit(process_batch, start_row, end_row))
             else:
-                print('Computing terrain correction...')
-                for i in range(nrows):
-                    futures.append(executor.submit(process_row, i, n1, n2))
-                    n1 += 1
-                    n2 += 1
+                print('Submitting TC tasks to workers')
+                for start_row in range(0, nrows, batch_size):
+                    end_row = min(start_row + batch_size, nrows)
+                    futures.append(executor.submit(process_batch, start_row, end_row))
 
             if progress:
-                for future in tqdm(futures, desc="Retrieving TC from workers"):
-                    i, row_results = future.result()
-                    tc[i, :] = row_results
+                for future in tqdm(futures, desc='Retrieving TC from workers'):
+                    batch_results = future.result()
+                    for i, row_results in batch_results:
+                        tc[i, :] = row_results
             else:
                 print('Retrieving TC from workers...')
                 for future in futures:
-                    i, row_results = future.result()
-                    tc[i, :] = row_results
+                    batch_results = future.result()
+                    for i, row_results in batch_results:
+                        tc[i, :] = row_results
 
         return tc
-    
+
     def rtm_anomaly(self) -> np.ndarray:
         pass
     
