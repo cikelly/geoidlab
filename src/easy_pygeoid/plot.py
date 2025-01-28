@@ -137,11 +137,35 @@ def plot_gravity_anomaly(
         
     # return free_air_anomaly
     
-def km2deg(km) -> float:
-    '''
-    Convert km to degrees
-    '''
-    return km / 111.11
+# def km2deg(km) -> float:
+#     '''
+#     Convert km to degrees
+#     '''
+#     return km / 111.11
+
+def km2deg(km:float, radius:float=6371.) -> float:
+        '''
+        Convert kilometers to degrees
+        
+        Parameters
+        ----------
+        km        : kilometers
+        radius    : radius of the sphere [default: earth radius (km)]
+        
+        Returns
+        -------
+        deg       : degrees
+        
+        Notes
+        -----
+        1. Using the radius of the sphere is more accurate than 2.
+        2. km / 111.11 is a reasonable approximation, and works well in practice.
+        3. The approach used here is the same as MATLAB's km2deg function
+        '''
+        rad = km / radius
+        deg = rad * 180 / np.pi
+        # km / 111.11
+        return deg
 
 def plot_degree_variances() -> None:
     '''
