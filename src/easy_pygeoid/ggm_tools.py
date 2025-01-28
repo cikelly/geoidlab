@@ -419,7 +419,7 @@ class GlobalGeopotentialModel():
         
         return Tzz
     
-    def second_radial_derivative(self):
+    def second_radial_derivative(self) -> np.ndarray:
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
@@ -468,7 +468,7 @@ class GlobalGeopotentialModel():
         
         return Tzz
     
-    def read_file(self):
+    def read_file(self) -> pd.DataFrame:
         '''
         Read file containing gravity data (or lat/lon data)
         
@@ -510,7 +510,7 @@ class GlobalGeopotentialModel():
     
     @staticmethod
     @jit(nopython=True)
-    def compute_disturbing_potential_chunk(Cnm, Snm, lon, a, r, Pnm, n, T):
+    def compute_disturbing_potential_chunk(Cnm, Snm, lon, a, r, Pnm, n, T) -> np.ndarray:
         '''
         Compute a chunk of anomalous potential for a specific degree using Numba optimization
         Parameters
@@ -534,7 +534,7 @@ class GlobalGeopotentialModel():
         
         return T
     
-    def compute_disturbing_potential_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, T):
+    def compute_disturbing_potential_for_chunk(self, Cnm, Snm, lon, a, r, Pnm, nmax, T) -> np.ndarray:
         '''
         Compute gravity anomaly for a chunk of data
         
@@ -559,7 +559,7 @@ class GlobalGeopotentialModel():
         
         return T
     
-    def disturbing_potential(self, r_or_R='r'):
+    def disturbing_potential(self, r_or_R='r') -> np.ndarray:
         '''
         Wrapper function to handle data and call the Numba-optimized function
         
@@ -620,7 +620,7 @@ class GlobalGeopotentialModel():
         
         return T
 
-    def height_anomaly(self, T=None, tolerance=5e-3, max_iter=5):
+    def height_anomaly(self, T=None, tolerance=5e-3, max_iter=5) -> np.ndarray:
         '''
         Height anomaly based on Bruns' method
         
@@ -682,7 +682,7 @@ class GlobalGeopotentialModel():
         
         return zeta
     
-    def geoid(self, T=None):
+    def geoid(self, T=None) -> np.ndarray:
         '''
         Geoid heights based on Bruns' method
         
@@ -712,12 +712,18 @@ class GlobalGeopotentialModel():
     
 class GlobalGeopotentialModel2D():
     def __init__(
-        self, shc=None, model_name=None, 
-        ellipsoid='wgs84', nmax=90, 
-        lon=None, lat=None, 
-        height=None, grid_spacing=1,
-        zonal_harmonics=True, model_dir='downloads'
-    ):
+        self, 
+        shc=None, 
+        model_name=None, 
+        ellipsoid='wgs84', 
+        nmax=90, 
+        lon=None, 
+        lat=None, 
+        height=None, 
+        grid_spacing=1,
+        zonal_harmonics=True, 
+        model_dir='downloads'
+    ) -> None:
         '''
         Initialize the GlobalGeopotentialModel2D class
         
@@ -780,7 +786,7 @@ class GlobalGeopotentialModel2D():
         self.sinm = np.sin(np.arange(0, self.shc['nmax']+1)[:, np.newaxis] * self.lambda_)
  
 
-    def gravity_anomaly_2D(self):
+    def gravity_anomaly_2D(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Vectorized computations of gravity anomalies on a grid
         
@@ -800,7 +806,7 @@ class GlobalGeopotentialModel2D():
             
         return self.Lon, self.Lat, Dg
     
-    def gravity_disturbance_2D(self):
+    def gravity_disturbance_2D(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Vectorized computations of gravity disturbances on a grid
         
@@ -820,7 +826,7 @@ class GlobalGeopotentialModel2D():
             
         return self.Lon, self.Lat, dg
     
-    def second_radial_derivative_2D(self):
+    def second_radial_derivative_2D(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Vectorized computations of second radial derivative on a grid
         
@@ -840,7 +846,7 @@ class GlobalGeopotentialModel2D():
             
         return self.Lon, self.Lat, Tzz
     
-    def geoid_2D(self):
+    def geoid_2D(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Vectorized computations of geoid on a grid
         
@@ -860,7 +866,7 @@ class GlobalGeopotentialModel2D():
             
         return self.Lon, self.Lat, N
 
-    def disturbing_potential_2D(self):
+    def disturbing_potential_2D(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Vectorized computations of anomalous potential on a grid
         
