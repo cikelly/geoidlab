@@ -228,14 +228,14 @@ class TerrainQuantities:
         return tc
     
     
-    def terrain_correction(self, parallel: bool = False) -> np.ndarray:
+    def terrain_correction(self, parallel: bool=True) -> np.ndarray:
         '''
         Compute terrain correction.
 
         Parameters
         ----------
         parallel : True/False
-                    If True, use the parallelized version. Default is False.
+                    If True, use the parallelized version. Default: True.
         
         Return
         ------
