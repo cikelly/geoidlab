@@ -242,10 +242,7 @@ class TerrainQuantities:
         tc       : Terrain Correction
         '''
         return self.terrain_correction_parallel() if parallel else self.terrain_correction_sequential()
-        # if parallel:
-        #     return self._terrain_correction_parallel()
-        # else:
-        #     return self._terrain_correction_sequential()
+
     
     def rtm_anomaly(self) -> np.ndarray:
         pass
