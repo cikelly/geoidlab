@@ -1,17 +1,24 @@
-import numpy as np
+############################################################
+# Utilities for modeling terrain quantities                #
+# Copyright (c) 2025, Caleb Kelly                          #
+# Author: Caleb Kelly  (2025)                              #
+############################################################
 
-def compute_tc_row(
-    i, ncols_P, dm, lamp, 
-    phip, Hp, ori_topo, 
-    X, Y, Z, Xp, Yp, Zp, 
+import numpy as np
+import bottleneck as bn
+
+def compute_tc_chunk(
+    row_start, row_end, ncols_P, dm, dn, lamp, 
+    phip, Hp, ori_topo, X, Y, Z, Xp, Yp, Zp, 
     radius, G, rho, dx, dy
-) -> np.ndarray:
+) -> tuple[int, int, np.ndarray]:
     '''
-    Compute a single row of the terrain correction matrix.
+    Compute a chunk of rows for the terrain correction matrix.
     
     Parameters
     ----------
-    i         : row index
+    row_start : starting row index (inclusive)
+    row_end   : ending row index (exclusive)
     ncols_P   : number of columns in the sub-grid
     dm        : number of rows in the moving window
     lamp      : longitude of the computation points
@@ -27,47 +34,54 @@ def compute_tc_row(
     
     Returns
     -------
-    tc_row    : 1D array of terrain correction values
+    row_start : starting row index
+    row_end   : ending row index
+    tc_chunk  : 2D array of terrain correction values for the chunk
     '''
-    tc_row = np.zeros(ncols_P)
-    m1 = 1
-    m2 = dm
+    tc_chunk = np.zeros((row_end - row_start, ncols_P))
     
-    coslamp = np.cos(lamp[i, :])
-    sinlamp = np.sin(lamp[i, :])
-    cosphip = np.cos(phip[i, :])
-    sinphip = np.sin(phip[i, :])
-    
-    for j in range(ncols_P):
-        smallH = ori_topo['z'].values[i:i+dm, m1:m2]
-        smallX = X[i:i+dm, m1:m2]
-        smallY = Y[i:i+dm, m1:m2]
-        smallZ = Z[i:i+dm, m1:m2]
-
-        # Local coordinates (x, y)
-        x = coslamp[j] * (smallY - Yp[i, j]) - \
-            sinlamp[j] * (smallX - Xp[i, j])
-        y = cosphip[j] * (smallZ - Zp[i, j]) - \
-            coslamp[j] * sinphip[j] * (smallX - Xp[i, j]) - \
-            sinlamp[j] * sinphip[j] * (smallY - Yp[i, j])
-
-        # Distances
-        d = np.hypot(x, y)
-        d = np.where(d <= radius, d, np.nan)
-        d3 = d * d * d
-        d5 = d3 * d * d
-        d7 = d5 * d * d
+    for i in range(row_start, row_end):
+        m1 = 1
+        m2 = dm
         
-        # Integrate the terrain correction
-        DH2 = (smallH - Hp[i, j]) * (smallH - Hp[i, j])
-        DH4 = DH2 * DH2
-        c1  = 1/2 * G * rho * dx * dy * np.nansum(DH2 / d3)
-        c2  = -3/8 * G * rho * dx * dy * np.nansum(DH4 / d5)
-        c3  = 5/16 * G * rho * dx * dy * np.nansum(DH2 * DH2 * DH2 / d7)
-        tc_row[j] = (c1 + c2 + c3) * 1e5  # [mGal]
+        coslamp = np.cos(lamp[i, :])
+        sinlamp = np.sin(lamp[i, :])
+        cosphip = np.cos(phip[i, :])
+        sinphip = np.sin(phip[i, :])
         
-        # Moving window
-        m1 += 1
-        m2 += 1
+        for j in range(ncols_P):
+            smallH = ori_topo['z'].values[i:i+dn, m1:m2]
+            smallX = X[i:i+dn, m1:m2]
+            smallY = Y[i:i+dn, m1:m2]
+            smallZ = Z[i:i+dn, m1:m2]
+
+            # Local coordinates (x, y)
+            x = coslamp[j] * (smallY - Yp[i, j]) - \
+                sinlamp[j] * (smallX - Xp[i, j])
+            y = cosphip[j] * (smallZ - Zp[i, j]) - \
+                coslamp[j] * sinphip[j] * (smallX - Xp[i, j]) - \
+                sinlamp[j] * sinphip[j] * (smallY - Yp[i, j])
+
+            # Distances
+            d = np.hypot(x, y)
+            d[d > radius] = np.nan
+            d[d == 0] = np.nan
+            d3 = d * d * d
+            d5 = d3 * d * d
+            d7 = d5 * d * d
+            
+            # Integrate the terrain correction
+            DH2 = (smallH - Hp[i, j]) ** 2 
+            DH4 = DH2 * DH2
+            DH6 = DH4 * DH2
+            G_rho_dxdy = G * rho * dx * dy
+            c1  = 0.5 *  G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
+            c2  = -0.375 * G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
+            c3  = 0.3125 * G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
+            tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
+            
+            # Moving window
+            m1 += 1
+            m2 += 1
     
-    return i, tc_row
+    return row_start, row_end, tc_chunk

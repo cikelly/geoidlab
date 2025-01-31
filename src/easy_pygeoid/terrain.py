@@ -10,7 +10,7 @@ from tqdm import tqdm
 import numpy as np
 import xarray as xr
 import concurrent.futures
-from .utils.parallel_utils import compute_tc_row
+from .utils.parallel_utils import compute_tc_chunk
 
 
 class TerrainQuantities:
@@ -23,7 +23,7 @@ class TerrainQuantities:
     def __init__(
         self, 
         ori_topo: xr.Dataset, 
-        sim_topo: xr.Dataset=None, 
+        ref_topo: xr.Dataset=None, 
         radius: float=110.,
         ellipsoid: str='wgs84',
         bbox_off: float=1.
@@ -33,8 +33,8 @@ class TerrainQuantities:
         
         Parameters
         ----------
-        ori_topo  : (2D array) Reference topography
-        sim_topo  : (2D array) Simulated (smooth) topography
+        ori_topo  : (2D array) Original topography
+        ref_topo  : (2D array) Reference (smooth) topography
         radius    : Integration radius in kilometers
         ellipsoid : Reference ellipsoid
         bbox_off  : Offset in degrees for bounding box
@@ -51,7 +51,7 @@ class TerrainQuantities:
         Notes
         -----
         1. ori_topo is the original topography from a digital elevation model
-        2. sim_topo is the smoothed topography at the same resolution as the GGM (e.g., DTM2006.0)
+        2. ref_topo is the smoothed topography at the same resolution as the GGM (e.g., DTM2006.0)
         3. sub_grid represents the study area (computation points)
         4. radius is the maximum distance beyond which cells are excluded from the TC computation
            from the computation point. Beyond this distance (usually 1 degree), the contribution of
@@ -64,20 +64,20 @@ class TerrainQuantities:
         self.radius            = radius * 1000 # meters
         self.bbox_off          = bbox_off
         
-        if ori_topo is None and sim_topo is None:
+        if ori_topo is None and ref_topo is None:
             raise ValueError('At least ori_topo must be provided')
         
         # Rename coordinates and data variables if necessary
         ori_topo = TerrainQuantities.rename_variables(ori_topo)
-        sim_topo = TerrainQuantities.rename_variables(sim_topo) if sim_topo is not None else None
+        ref_topo = TerrainQuantities.rename_variables(ref_topo) if ref_topo is not None else None
         
         self.ori_topo = ori_topo
-        self.sim_topo = sim_topo
+        self.ref_topo = ref_topo
         self.nrows, self.ncols = self.ori_topo['z'].shape
         
         # Set ocean areas to zero
-        if self.sim_topo is not None:
-            self.sim_topo['z'] = self.sim_topo['z'].where(self.sim_topo['z'] >= 0, 0)
+        if self.ref_topo is not None:
+            self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
         self.ori_topo['z'] = self.ori_topo['z'].where(self.ori_topo['z'] >= 0, 0)
 
         # Define sub-grid and extract data
@@ -103,7 +103,7 @@ class TerrainQuantities:
                 
         # Extract sub-grid topography
         self.ori_P = self.ori_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
-        self.sim_P = self.sim_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.sim_topo else None
+        self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
 
         # Grid size in x and y
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
@@ -141,7 +141,7 @@ class TerrainQuantities:
         dm = np.round(self.nrows - nrows_P) + 1
         
         n1 = 1
-        n2 = dm
+        n2 = dn
         
         lamp = np.radians(self.ori_P['x'].values)
         phip = np.radians(self.ori_P['y'].values)
@@ -191,13 +191,17 @@ class TerrainQuantities:
             n2 += 1
         return tc
 
-    def terrain_correction_parallel(self) -> np.ndarray:
+    def terrain_correction_parallel(self, chunk_size: int = 10) -> np.ndarray:
         '''
-        Compute terrain correction (parallelized).
+        Compute terrain correction (parallelized with chunking).
+        
+        Parameters
+        ----------
+        chunk_size : number of rows to process in each chunk
         
         Returns
         -------
-        tc     : Terrain Correction
+        tc         : Terrain Correction
         '''
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
@@ -209,26 +213,32 @@ class TerrainQuantities:
         lamp, phip = np.meshgrid(lamp, phip)
         Hp = self.ori_P['z'].values
         
+        # Divide rows into chunks
+        chunks = [
+            (i, min(i + chunk_size, nrows_P)) 
+            for i in range(0, nrows_P, chunk_size)
+        ]
+        
         # Use ThreadPoolExecutor for I/O-bound tasks or ProcessPoolExecutor for CPU-bound tasks
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Submit tasks for each row
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Submit tasks for each chunk
             futures = {
                 executor.submit(
-                    compute_tc_row, i, ncols_P, dm, lamp, phip, Hp,
+                    compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
                     self.ori_topo, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
                     self.radius, self.G, self.rho, self.dx, self.dy
-                ): i for i in range(nrows_P)
+                ): (row_start, row_end) for row_start, row_end in chunks
             }
             
             # Collect results as they complete
-            for future in tqdm(concurrent.futures.as_completed(futures), total=nrows_P, desc='Computing terrain correction'):
-                i, tc_row = future.result()
-                tc[i, :] = tc_row
+            for future in tqdm(concurrent.futures.as_completed(futures), total=len(chunks), desc='Computing terrain correction'):
+                row_start, row_end, tc_chunk = future.result()
+                tc[row_start:row_end, :] = tc_chunk
         
         return tc
     
     
-    def terrain_correction(self, parallel: bool=True) -> np.ndarray:
+    def terrain_correction(self, parallel: bool=True, chunk_size: int = 10) -> np.ndarray:
         '''
         Compute terrain correction.
 
@@ -241,12 +251,40 @@ class TerrainQuantities:
         ------
         tc       : Terrain Correction
         '''
-        return self.terrain_correction_parallel() if parallel else self.terrain_correction_sequential()
+        return self.terrain_correction_parallel(chunk_size=chunk_size) if parallel else self.terrain_correction_sequential()
 
     
-    def rtm_anomaly(self) -> np.ndarray:
-        pass
-    
+    def rtm_anomaly(self, tc=None, parallel: bool=True) -> tuple[np.ndarray, np.ndarray]:
+        '''
+        Compute residual terrain (RTM) gravity anomalies
+        
+        Parameters
+        ----------
+        tc       : Terrain Correction
+        
+        Returns
+        -------
+        Dg_RTM   : Residual terrain (RTM) gravity anomalies
+        tc       : Terrain Correction
+        Notes
+        -----
+        1. Dg = 2 * pi * G * rho * (H - Href) - tc
+        2. Strongly recommended that if you have already calculated TC, pass it to the function to speed up
+           RTM gravity anomalies computation
+        3. Forsberg (1984): A Study of Terrain Reductions, Density Anomalies and Geophysical Inversion Methods in Gravity Field Modelling
+           (Equation 7.5)
+        '''
+        if tc is None:
+            tc = self.terrain_correction(parallel=parallel)
+        # Check of shape of tc is consistent with ori_P - In case `tc` is passed
+        if tc.shape != self.ori_P['z'].shape:
+            raise ValueError(f'The shape of tc ({tc.shape}) is not consistent with the computation grid ({self.ori_P["z"].shape})')
+        # Compute residual terrain gravity anomalies
+        dg_rtm = 2 * np.pi * self.G * self.rho * (self.ori_P['z'] - self.ref_P['z']) - tc
+        
+        return dg_rtm, tc
+
+
     def rtm_zeta(self) -> np.ndarray:
         pass
     
