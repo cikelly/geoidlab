@@ -11,7 +11,8 @@ import numpy as np
 import xarray as xr
 import concurrent.futures
 from .utils.parallel_utils import compute_tc_chunk
-
+from numpy.lib.stride_tricks import sliding_window_view
+import bottleneck as bn
 
 class TerrainQuantities:
     '''
@@ -153,6 +154,12 @@ class TerrainQuantities:
         cosphip = np.cos(phip)
         sinphip = np.sin(phip)
         
+        # # Create sliding window views for the arrays
+        # H_view = sliding_window_view(self.ori_topo['z'].values, (dn, dm))
+        # X_view = sliding_window_view(self.X, (dn, dm))
+        # Y_view = sliding_window_view(self.Y, (dn, dm))
+        # Z_view = sliding_window_view(self.Z, (dn, dm))
+        G_rho_dxdy = self.G * self.rho * self.dx * self.dy
         for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
             m1 = 1
             m2 = dm
@@ -161,6 +168,11 @@ class TerrainQuantities:
                 smallX = self.X[n1:n2, m1:m2]
                 smallY = self.Y[n1:n2, m1:m2]
                 smallZ = self.Z[n1:n2, m1:m2]
+                # Extract subarrays using sliding window views
+                # smallH = H_view[i, j]
+                # smallX = X_view[i, j]
+                # smallY = Y_view[i, j]
+                # smallZ = Z_view[i, j]
 
                 # Local coordinates (x, y)
                 x = coslamp[i, j] * (smallY - self.Yp[i, j]) - \
@@ -178,11 +190,12 @@ class TerrainQuantities:
                 d7 = d5 * d * d
                 
                 # Integrate the terrain correction
-                DH2 = (smallH - Hp[i, j]) * (smallH - Hp[i, j])
+                DH2 = (smallH - Hp[i, j]) ** 2 #* (smallH - Hp[i, j])
                 DH4 = DH2 * DH2
-                c1  = 1/2 * self.G * self.rho * self.dx * self.dy * np.nansum(DH2 / d3)
-                c2  = -3/8 * self.G * self.rho * self.dx * self.dy * np.nansum(DH4 / d5)
-                c3  = 5/16 * self.G * self.rho * self.dx * self.dy * np.nansum(DH2 * DH2 * DH2 / d7)
+                DH6 = DH4 * DH2
+                c1  = 0.5 *  G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
+                c2  = -0.375 * G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
+                c3  = 0.3125 * G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
                 tc[i, j] = (c1 + c2 + c3) * 1e5 # [mGal]
                 # moving window
                 m1 += 1
