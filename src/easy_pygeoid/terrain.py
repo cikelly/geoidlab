@@ -279,6 +279,7 @@ class TerrainQuantities:
         -------
         Dg_RTM   : Residual terrain (RTM) gravity anomalies
         tc       : Terrain Correction
+        
         Notes
         -----
         1. Dg = 2 * pi * G * rho * (H - Href) - tc
