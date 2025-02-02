@@ -5,13 +5,15 @@
 ############################################################
 import numpy as np
 import bottleneck as bn
+from numba import njit
 
 from numpy.lib.stride_tricks import sliding_window_view
 
+@njit
 def compute_tc_chunk(
-    row_start, row_end, ncols_P, dm, dn, lamp, 
-    phip, Hp, ori_topo, X, Y, Z, Xp, Yp, Zp, 
-    radius, G_rho_dxdy
+    row_start: int, row_end: int, ncols_P: int, dm: int, dn: int, lamp: np.ndarray, 
+    phip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
+    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_rho_dxdy: float
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the terrain correction matrix.
@@ -43,10 +45,11 @@ def compute_tc_chunk(
     # G_rho_dxdy = G * rho * dx * dy
     
     # Create sliding window views for the arrays
-    H_view = sliding_window_view(ori_topo['z'].values, (dn, dm))
-    X_view = sliding_window_view(X, (dn, dm))
-    Y_view = sliding_window_view(Y, (dn, dm))
-    Z_view = sliding_window_view(Z, (dn, dm))
+    ## H_view = sliding_window_view(ori_topo['z'].values, (dn, dm))
+    # H_view = sliding_window_view(ori_topo, (dn, dm))
+    # X_view = sliding_window_view(X, (dn, dm))
+    # Y_view = sliding_window_view(Y, (dn, dm))
+    # Z_view = sliding_window_view(Z, (dn, dm))
     
     for i in range(row_start, row_end):
         m1 = 1
@@ -59,15 +62,16 @@ def compute_tc_chunk(
         
         for j in range(ncols_P):
             # smallH = ori_topo['z'].values[i:i+dn, m1:m2]
-            # smallX = X[i:i+dn, m1:m2]
-            # smallY = Y[i:i+dn, m1:m2]
-            # smallZ = Z[i:i+dn, m1:m2]
+            smallH = ori_topo[i:i+dn, m1:m2]
+            smallX = X[i:i+dn, m1:m2]
+            smallY = Y[i:i+dn, m1:m2]
+            smallZ = Z[i:i+dn, m1:m2]
             
             # Extract subarrays using sliding window views
-            smallH = H_view[i, j]
-            smallX = X_view[i, j]
-            smallY = Y_view[i, j]
-            smallZ = Z_view[i, j]
+            # smallH = H_view[i, j]
+            # smallX = X_view[i, j]
+            # smallY = Y_view[i, j]
+            # smallZ = Z_view[i, j]
 
             # Local coordinates (x, y)
             x = coslamp[j] * (smallY - Yp[i, j]) - \
@@ -78,8 +82,14 @@ def compute_tc_chunk(
 
             # Distances
             d = np.hypot(x, y)
-            d[d > radius] = np.nan
-            d[d == 0] = np.nan
+            # d[d > radius] = np.nan
+            # d[d == 0] = np.nan
+            # Numba compliant masking
+            for k in range(d.shape[0]):
+                for l in range(d.shape[1]):
+                    if d[k, l] > radius or d[k, l] == 0:
+                        d[k, l] = np.nan
+            
             d3 = d * d * d
             d5 = d3 * d * d
             d7 = d5 * d * d
@@ -89,9 +99,9 @@ def compute_tc_chunk(
             DH4 = DH2 * DH2
             DH6 = DH4 * DH2
             
-            c1  = 0.5 *  G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
-            c2  = -0.375 * G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
-            c3  = 0.3125 * G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
+            c1  = 0.5 *  G_rho_dxdy * np.nansum(DH2 / d3)      # 1/2
+            c2  = -0.375 * G_rho_dxdy * np.nansum(DH4 / d5)    # 3/8
+            c3  = 0.3125 * G_rho_dxdy * np.nansum(DH6 / d7)    # 5/16
             tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
             
             # Moving window

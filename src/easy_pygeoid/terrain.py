@@ -241,7 +241,7 @@ class TerrainQuantities:
             futures = {
                 executor.submit(
                     compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
-                    self.ori_topo, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
+                    self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
                     self.radius, G_rho_dxdy
                 ): (row_start, row_end) for row_start, row_end in chunks
             }
