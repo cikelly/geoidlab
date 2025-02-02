@@ -11,7 +11,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 def compute_tc_chunk(
     row_start, row_end, ncols_P, dm, dn, lamp, 
     phip, Hp, ori_topo, X, Y, Z, Xp, Yp, Zp, 
-    radius, G, rho, dx, dy
+    radius, G_rho_dxdy
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the terrain correction matrix.
@@ -40,7 +40,7 @@ def compute_tc_chunk(
     tc_chunk  : 2D array of terrain correction values for the chunk
     '''
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
-    G_rho_dxdy = G * rho * dx * dy
+    # G_rho_dxdy = G * rho * dx * dy
     
     # Create sliding window views for the arrays
     H_view = sliding_window_view(ori_topo['z'].values, (dn, dm))

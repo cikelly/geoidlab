@@ -232,6 +232,9 @@ class TerrainQuantities:
             for i in range(0, nrows_P, chunk_size)
         ]
         
+        # Precompute G_rho_dxdy
+        G_rho_dxdy = self.G * self.rho * self.dx * self.dy
+        
         # Use ThreadPoolExecutor for I/O-bound tasks or ProcessPoolExecutor for CPU-bound tasks
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Submit tasks for each chunk
@@ -239,7 +242,7 @@ class TerrainQuantities:
                 executor.submit(
                     compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
                     self.ori_topo, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
-                    self.radius, self.G, self.rho, self.dx, self.dy
+                    self.radius, G_rho_dxdy
                 ): (row_start, row_end) for row_start, row_end in chunks
             }
             
