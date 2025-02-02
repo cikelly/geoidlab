@@ -122,7 +122,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             
     if len(urls) > 1:
         if (downloads_dir / 'merged_dem.nc').resolve().exists():
-            if check_bbox_contains(downloads_dir+'/'+'merged_dem.nc', bbox):
+            if check_bbox_contains(downloads_dir / 'merged_dem.nc', bbox):
                 print(f'{downloads_dir}/merged_dem.nc exists and covers bbox. Skip download\n')
                 return 'merged_dem.nc'
             else:
@@ -134,7 +134,6 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     for url in urls:
         filename: str = url.split('/')[-1]
         filepath: str = downloads_dir / filename 
-
         # Check if the file already exists
         if filepath.exists():
             try:
@@ -143,7 +142,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                 # Check if the existing file size matches the expected size
                 if filepath.stat().st_size == total_size:
                     print(f'{filename} already exists and is complete. Skip download\n')
-                    filepaths.append(str(filepath))
+                    filepaths.append(filepath)
                     continue
                 else:
                     print(f'{filename} already exists but is incomplete. Redownloading ...\n')
@@ -177,7 +176,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             raise RuntimeError(f'Download failed: {e}. Are you connected to the internet?')
 
         filepaths.append(filepath)
-    
+
     # If multiple files were downloaded, merge them
     if len(filepaths) > 1:
         print('Merging downloaded tiles...')
@@ -186,9 +185,9 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         merged_dataset = xr.combine_by_coords(datasets, combine_attrs='drop_conflicts')
         merged_filepath = downloads_dir / 'merged_dem.nc'
         merged_dataset.to_netcdf(merged_filepath)
-        return merged_filepath.split('/')[-1]
+        return merged_filepath.parts[-1]
     else:
-        return filepaths[0].split('/')[-1]
+        return filepaths[0].parts[-1]
 
 
 def fetch_url(bbox) -> list[str]:
@@ -399,7 +398,19 @@ def download_dem_cog(
     )
 
     dem = dem.to_dataset(name='z')
-    nodata_value = dem['z'].rio.nodata
+    
+    # Intercept the nodata value before accessing it
+    try:
+        nodata_value = dem['z'].rio.nodata
+    except OverflowError:
+        nodata_value = np.finfo(np.float32).max
+        dem['z'].rio.write_nodata(nodata_value, inplace=True)
+    
+    # Convert the nodata value to a manageable value
+    if nodata_value is None and nodata_value > np.finfo(np.float32).max:
+        nodata_value = np.finfo(np.float32).max
+        dem['z'].rio.write_nodata(nodata_value, inplace=True)
+        
     dem['z'] = dem['z'].where(dem['z'] != nodata_value, np.nan)
     dem = dem.squeeze(dim='band')
     # dem = dem.drop_vars('band')
