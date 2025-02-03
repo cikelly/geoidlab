@@ -13,6 +13,10 @@ import concurrent.futures
 from .utils.parallel_utils import compute_tc_chunk
 from numpy.lib.stride_tricks import sliding_window_view
 import bottleneck as bn
+from joblib import Parallel, delayed
+import time
+import sys
+import threading
 
 class TerrainQuantities:
     '''
@@ -204,7 +208,7 @@ class TerrainQuantities:
             n2 += 1
         return tc
 
-    def terrain_correction_parallel(self, chunk_size: int = 10) -> np.ndarray:
+    def terrain_correction_parallel(self, chunk_size: int = 10, progress=True) -> np.ndarray:
         '''
         Compute terrain correction (parallelized with chunking).
         
@@ -216,6 +220,16 @@ class TerrainQuantities:
         -------
         tc         : Terrain Correction
         '''
+        if progress:
+            def print_progress(stop_signal) -> None:
+                '''
+                Prints '#' every second to indicate progress.
+                '''
+                while not stop_signal.is_set():
+                    sys.stdout.write("#")
+                    sys.stdout.flush()
+                    time.sleep(1.5)  # Adjust the frequency as needed
+                
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
         dn = np.round(self.ncols - ncols_P) + 1
@@ -235,26 +249,50 @@ class TerrainQuantities:
         # Precompute G_rho_dxdy
         G_rho_dxdy = self.G * self.rho * self.dx * self.dy
         
-        # Use ThreadPoolExecutor for I/O-bound tasks or ProcessPoolExecutor for CPU-bound tasks
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            # Submit tasks for each chunk
-            futures = {
-                executor.submit(
-                    compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
-                    self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
-                    self.radius, G_rho_dxdy
-                ): (row_start, row_end) for row_start, row_end in chunks
-            }
+        # ThreadPoolExecutor for I/O-bound tasks / ProcessPoolExecutor for CPU-bound tasks
+        # with concurrent.futures.ProcessPoolExecutor() as executor:
+        #     # Submit tasks for each chunk
+        #     futures = {
+        #         executor.submit(
+        #             compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
+        #             self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
+        #             self.radius, G_rho_dxdy
+        #         ): (row_start, row_end) for row_start, row_end in chunks
+        #     }
             
-            # Collect results as they complete
-            for future in tqdm(concurrent.futures.as_completed(futures), total=len(chunks), desc='Computing terrain correction'):
-                row_start, row_end, tc_chunk = future.result()
-                tc[row_start:row_end, :] = tc_chunk
+        #     # Collect results as they complete
+        #     for future in tqdm(concurrent.futures.as_completed(futures), total=len(chunks), desc='Computing terrain correction'):
+        #         row_start, row_end, tc_chunk = future.result()
+        #         tc[row_start:row_end, :] = tc_chunk
         
+        print('Computing terrain correction...')
+        
+        if progress:
+            stop_signal = threading.Event()
+            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
+            progress_thread.start()
+            
+        # Submit tasks for each chunk
+        results = Parallel(n_jobs=-1)(
+            delayed(compute_tc_chunk)(
+                row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
+                self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
+                self.radius, G_rho_dxdy
+            ) for row_start, row_end in chunks
+        )
+        
+        if progress:
+            stop_signal.set()
+            progress_thread.join()
+            print('\nCompleted.')
+        
+        # Collect results
+        for row_start, row_end, tc_chunk in results:
+            tc[row_start:row_end, :] = tc_chunk
         return tc
+
     
-    
-    def terrain_correction(self, parallel: bool=True, chunk_size: int = 10) -> np.ndarray:
+    def terrain_correction(self, parallel: bool=True, chunk_size: int = 10, progress=True) -> np.ndarray:
         '''
         Compute terrain correction.
 
@@ -267,7 +305,7 @@ class TerrainQuantities:
         ------
         tc       : Terrain Correction
         '''
-        return self.terrain_correction_parallel(chunk_size=chunk_size) if parallel else self.terrain_correction_sequential()
+        return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_correction_sequential()
 
     
     def rtm_anomaly(self, tc=None, parallel: bool=True) -> tuple[np.ndarray, np.ndarray]:
