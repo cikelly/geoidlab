@@ -70,9 +70,6 @@ class TerrainQuantities:
         self.radius            = radius * 1000 # meters
         self.bbox_off          = bbox_off
 
-        # Precompute G_rho_dxdy
-        self.G_rho_dxdy = self.G * self.rho * self.dx * self.dy
-
         if ori_topo is None and ref_topo is None:
             raise ValueError('At least ori_topo must be provided')
 
@@ -124,8 +121,11 @@ class TerrainQuantities:
         # Grid size in x and y
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
         self.dphi = (max(lat) - min(lat)) / (self.nrows - 1)
-        self.dx = TerrainQuantities.deg2km(self.dlam) * 1000 # meters
-        self.dy = TerrainQuantities.deg2km(self.dphi) * 1000 # meters
+        dx = TerrainQuantities.deg2km(self.dlam) * 1000 # meters
+        dy = TerrainQuantities.deg2km(self.dphi) * 1000 # meters
+        
+        # Precompute G_rho_dxdy
+        self.G_rho_dxdy = self.G * self.rho * dx * dy
         
         # Get cartesian coordinates of the original topography (running point)
         Lon, Lat = np.meshgrid(lon, lat)
@@ -173,7 +173,7 @@ class TerrainQuantities:
         n2 = dn
 
         Hp   = self.ori_P['z'].values if effect == 'tc' else self.res_P['z'].values
-        # G_rho_dxdy = self.G * self.rho * self.dx * self.dy
+
         tqdm_desc = 'Computing terrain correction' if effect == 'tc' else 'Computing residual terrain'
 
         for i in tqdm(range(nrows_P), desc=tqdm_desc):

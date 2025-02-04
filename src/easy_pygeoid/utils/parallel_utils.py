@@ -17,7 +17,7 @@ def compute_tc_chunk(
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the terrain correction matrix.
-    
+
     Parameters
     ----------
     row_start : starting row index (inclusive)
@@ -34,7 +34,7 @@ def compute_tc_chunk(
     G         : gravitational constant
     rho       : density of the Earth
     dx, dy    : grid size in x and y directions
-    
+
     Returns
     -------
     row_start : starting row index
@@ -42,7 +42,7 @@ def compute_tc_chunk(
     tc_chunk  : 2D array of terrain correction values for the chunk
     '''
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
-    
+
     for i in range(row_start, row_end):
         m1 = 1
         m2 = dm
@@ -51,7 +51,7 @@ def compute_tc_chunk(
         sinlamp_i = sinlamp[i, :]
         cosphip_i = cosphip[i, :]
         sinphip_i = sinphip[i, :]
-        
+
         for j in range(ncols_P):
             # smallH = ori_topo['z'].values[i:i+dn, m1:m2]
             smallH = ori_topo[i:i+dn, m1:m2]
@@ -75,23 +75,23 @@ def compute_tc_chunk(
                 for l in range(d.shape[1]):
                     if d[k, l] > radius or d[k, l] == 0:
                         d[k, l] = np.nan
-            
+
             d3 = d * d * d
             d5 = d3 * d * d
             d7 = d5 * d * d
-            
+
             # Integrate the terrain correction
             DH2 = (smallH - Hp[i, j]) ** 2 
             DH4 = DH2 * DH2
             DH6 = DH4 * DH2
-            
+
             c1  = 0.5 *  G_rho_dxdy * np.nansum(DH2 / d3)      # 1/2
             c2  = -0.375 * G_rho_dxdy * np.nansum(DH4 / d5)    # 3/8
             c3  = 0.3125 * G_rho_dxdy * np.nansum(DH6 / d7)    # 5/16
             tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
-            
+
             # Moving window
             m1 += 1
             m2 += 1
-    
+
     return row_start, row_end, tc_chunk
