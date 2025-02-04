@@ -4,19 +4,20 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 
-from . import constants
-from easy_pygeoid.coordinates import geodetic2cartesian
-from tqdm import tqdm
 import numpy as np
 import xarray as xr
-import concurrent.futures
-from .utils.parallel_utils import compute_tc_chunk
-from numpy.lib.stride_tricks import sliding_window_view
 import bottleneck as bn
-from joblib import Parallel, delayed
+
 import time
 import sys
 import threading
+
+from . import constants
+from .coordinates import geodetic2cartesian
+from .utils.parallel_utils import compute_tc_chunk
+
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
 class TerrainQuantities:
     '''
@@ -35,7 +36,7 @@ class TerrainQuantities:
     ) -> None:
         '''
         Initialize the TerrainQuantities class for terrain modeling
-        
+
         Parameters
         ----------
         ori_topo  : (2D array) Original topography
@@ -47,12 +48,12 @@ class TerrainQuantities:
         Returns
         -------
         None
-        
+
         Reference
         ---------
         Wichiencharoen (1982): The Indirect Effects On The Computation of Geoid Undulations
         https://ntrs.nasa.gov/citations/19830016735
-        
+
         Notes
         -----
         1. ori_topo is the original topography from a digital elevation model
@@ -68,22 +69,32 @@ class TerrainQuantities:
         self.ellipsoid         = ellipsoid
         self.radius            = radius * 1000 # meters
         self.bbox_off          = bbox_off
-        
+
+        # Precompute G_rho_dxdy
+        self.G_rho_dxdy = self.G * self.rho * self.dx * self.dy
+
         if ori_topo is None and ref_topo is None:
             raise ValueError('At least ori_topo must be provided')
-        
+
         # Rename coordinates and data variables if necessary
         ori_topo = TerrainQuantities.rename_variables(ori_topo)
         ref_topo = TerrainQuantities.rename_variables(ref_topo) if ref_topo is not None else None
-        
+
         self.ori_topo = ori_topo
         self.ref_topo = ref_topo
         self.nrows, self.ncols = self.ori_topo['z'].shape
-        
+
         # Set ocean areas to zero
         if self.ref_topo is not None:
             self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
         self.ori_topo['z'] = self.ori_topo['z'].where(self.ori_topo['z'] >= 0, 0)
+
+        # Calculate residual topography
+        # if self.ref_topo is not None:
+        #     self.res_topo = self.ori_topo['z'] - self.ref_topo['z']
+        #     self.res_topo = self.res_topo.to_dataset(name='z')
+        # else:
+        #     self.res_topo = None
 
         # Define sub-grid and extract data
         lon = self.ori_topo['x'].values
@@ -105,10 +116,10 @@ class TerrainQuantities:
             )
         else:
             self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
-                
+            
         # Extract sub-grid topography
         self.ori_P = self.ori_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
-        self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
+        self.res_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
 
         # Grid size in x and y
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
@@ -122,7 +133,7 @@ class TerrainQuantities:
         self.X = self.X.reshape(self.nrows, self.ncols)
         self.Y = self.Y.reshape(self.nrows, self.ncols)
         self.Z = self.Z.reshape(self.nrows, self.ncols)
-        
+
         # Get cartesian coordinates of the sub-grid (computation points)
         LonP, LatP = np.meshgrid(self.ori_P['x'].values, self.ori_P['y'].values)
         _, self.Xp, self.Yp, self.Zp = geodetic2cartesian(phi=LatP.flatten(), lambd=LonP.flatten(), ellipsoid=self.ellipsoid)
@@ -132,10 +143,23 @@ class TerrainQuantities:
         self.LonP = LonP
         self.LatP = LatP
 
-    def terrain_correction_sequential(self) -> np.ndarray:
+        lamp = np.radians(self.ori_P['x'].values)
+        phip = np.radians(self.ori_P['y'].values)
+        lamp, phip = np.meshgrid(lamp, phip)
+        
+        self.coslamp = np.cos(lamp)
+        self.sinlamp = np.sin(lamp)
+        self.cosphip = np.cos(phip)
+        self.sinphip = np.sin(phip)
+
+    def terrain_effect_sequential(self, effect='tc') -> np.ndarray:
         '''
         Compute terrain correction
-        
+
+        Parameters
+        ----------
+        effect : Terrain correction or RTM. Options: 'tc' or 'rtm'
+
         Returns
         -------
         tc     : Terrain Correction
@@ -144,46 +168,29 @@ class TerrainQuantities:
         tc = np.zeros((nrows_P, ncols_P))
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
-        
+
         n1 = 1
         n2 = dn
-        
-        lamp = np.radians(self.ori_P['x'].values)
-        phip = np.radians(self.ori_P['y'].values)
-        lamp, phip = np.meshgrid(lamp, phip)
-        Hp   = self.ori_P['z'].values
-        
-        coslamp = np.cos(lamp)
-        sinlamp = np.sin(lamp)
-        cosphip = np.cos(phip)
-        sinphip = np.sin(phip)
-        
-        # # Create sliding window views for the arrays
-        # H_view = sliding_window_view(self.ori_topo['z'].values, (dn, dm))
-        # X_view = sliding_window_view(self.X, (dn, dm))
-        # Y_view = sliding_window_view(self.Y, (dn, dm))
-        # Z_view = sliding_window_view(self.Z, (dn, dm))
-        G_rho_dxdy = self.G * self.rho * self.dx * self.dy
-        for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
+
+        Hp   = self.ori_P['z'].values if effect == 'tc' else self.res_P['z'].values
+        # G_rho_dxdy = self.G * self.rho * self.dx * self.dy
+        tqdm_desc = 'Computing terrain correction' if effect == 'tc' else 'Computing residual terrain'
+
+        for i in tqdm(range(nrows_P), desc=tqdm_desc):
             m1 = 1
             m2 = dm
             for j in range(ncols_P):
-                smallH = self.ori_topo['z'].values[n1:n2, m1:m2]
+                smallH = self.ori_topo['z'].values[n1:n2, m1:m2] if effect == 'tc' else self.ref_topo['z'].values[n1:n2, m1:m2]
                 smallX = self.X[n1:n2, m1:m2]
                 smallY = self.Y[n1:n2, m1:m2]
                 smallZ = self.Z[n1:n2, m1:m2]
-                # Extract subarrays using sliding window views
-                # smallH = H_view[i, j]
-                # smallX = X_view[i, j]
-                # smallY = Y_view[i, j]
-                # smallZ = Z_view[i, j]
 
                 # Local coordinates (x, y)
-                x = coslamp[i, j] * (smallY - self.Yp[i, j]) - \
-                    sinlamp[i, j] * (smallX - self.Xp[i, j])
-                y = cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
-                    coslamp[i, j] * sinphip[i, j] * (smallX - self.Xp[i, j]) - \
-                    sinlamp[i, j] * sinphip[i, j] * (smallY - self.Yp[i, j])
+                x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
+                    self.sinlamp[i, j] * (smallX - self.Xp[i, j])
+                y = self.cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
+                    self.coslamp[i, j] * self.sinphip[i, j] * (smallX - self.Xp[i, j]) - \
+                    self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
 
                 # Distances
                 d = np.hypot(x, y)
@@ -192,14 +199,14 @@ class TerrainQuantities:
                 d3 = d * d * d
                 d5 = d3 * d * d
                 d7 = d5 * d * d
-                
+
                 # Integrate the terrain correction
                 DH2 = (smallH - Hp[i, j]) ** 2 #* (smallH - Hp[i, j])
                 DH4 = DH2 * DH2
                 DH6 = DH4 * DH2
-                c1  = 0.5 *  G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
-                c2  = -0.375 * G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
-                c3  = 0.3125 * G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
+                c1  = 0.5 *  self.G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
+                c2  = -0.375 * self.G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
+                c3  = 0.3125 * self.G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
                 tc[i, j] = (c1 + c2 + c3) * 1e5 # [mGal]
                 # moving window
                 m1 += 1
@@ -208,17 +215,26 @@ class TerrainQuantities:
             n2 += 1
         return tc
 
-    def terrain_correction_parallel(self, chunk_size: int = 10, progress=True) -> np.ndarray:
+    def terrain_effect_parallel(
+        self, 
+        chunk_size: int = 10, 
+        progress=True, 
+        effect='tc'
+    ) -> np.ndarray:
         '''
         Compute terrain correction (parallelized with chunking).
         
         Parameters
         ----------
         chunk_size : number of rows to process in each chunk
+        progress   : Progress bar display
+        effect     : Terrain correction or RTM. Options: 'tc' or 'rtm'
         
         Returns
         -------
         tc         : Terrain Correction
+        or
+        Dg_RTM     : Residual terrain (RTM) gravity anomalies
         '''
         if progress:
             def print_progress(stop_signal) -> None:
@@ -229,43 +245,24 @@ class TerrainQuantities:
                     sys.stdout.write("#")
                     sys.stdout.flush()
                     time.sleep(1.5)  # Adjust the frequency as needed
-                
+
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
-        
-        lamp = np.radians(self.ori_P['x'].values)
-        phip = np.radians(self.ori_P['y'].values)
-        lamp, phip = np.meshgrid(lamp, phip)
-        Hp = self.ori_P['z'].values
-        
+
+        Hp = self.ori_P['z'].values if effect == 'tc' else self.ref_topo['z'].values
+
         # Divide rows into chunks
         chunks = [
             (i, min(i + chunk_size, nrows_P)) 
             for i in range(0, nrows_P, chunk_size)
         ]
+
+
+        H_ori_res = self.ori_topo['z'].values if effect == 'tc' else self.ref_topo['z'].values
         
-        # Precompute G_rho_dxdy
-        G_rho_dxdy = self.G * self.rho * self.dx * self.dy
-        
-        # ThreadPoolExecutor for I/O-bound tasks / ProcessPoolExecutor for CPU-bound tasks
-        # with concurrent.futures.ProcessPoolExecutor() as executor:
-        #     # Submit tasks for each chunk
-        #     futures = {
-        #         executor.submit(
-        #             compute_tc_chunk, row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
-        #             self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
-        #             self.radius, G_rho_dxdy
-        #         ): (row_start, row_end) for row_start, row_end in chunks
-        #     }
-            
-        #     # Collect results as they complete
-        #     for future in tqdm(concurrent.futures.as_completed(futures), total=len(chunks), desc='Computing terrain correction'):
-        #         row_start, row_end, tc_chunk = future.result()
-        #         tc[row_start:row_end, :] = tc_chunk
-        
-        print('Computing terrain correction...')
+        print('Computing terrain correction...') if effect == 'tc' else print('Computing RTM gravity anomalies...')
         
         if progress:
             stop_signal = threading.Event()
@@ -273,11 +270,12 @@ class TerrainQuantities:
             progress_thread.start()
             
         # Submit tasks for each chunk
+
         results = Parallel(n_jobs=-1)(
             delayed(compute_tc_chunk)(
-                row_start, row_end, ncols_P, dm, dn, lamp, phip, Hp,
-                self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
-                self.radius, G_rho_dxdy
+                row_start, row_end, ncols_P, dm, dn, self.coslamp, self.sinlamp, self.cosphip, 
+                self.sinphip, Hp, H_ori_res, self.X, self.Y, self.Z, self.Xp, self.Yp, self.Zp,
+                self.radius, self.G_rho_dxdy
             ) for row_start, row_end in chunks
         )
         
@@ -292,52 +290,71 @@ class TerrainQuantities:
         return tc
 
     
-    def terrain_correction(self, parallel: bool=True, chunk_size: int = 10, progress=True) -> np.ndarray:
+    def terrain_correction(
+        self,
+        parallel: bool=True,
+        chunk_size: int=10,
+        progress: bool=True,
+    ) -> np.ndarray:
         '''
         Compute terrain correction.
 
         Parameters
         ----------
-        parallel : True/False
+        parallel   : True/False
                     If True, use the parallelized version. Default: True.
+        chunk_size : int
+                    Size of the chunk in terms of number of rows. Default is 10.
+        progress   : True/False
+                    If True, display a progress bar. Default: True.
         
         Return
         ------
         tc       : Terrain Correction
         '''
-        return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_correction_sequential()
+        if parallel:
+            return self.terrain_effect_parallel(chunk_size=chunk_size, progress=progress, effect='tc')
+        else:
+            return self.terrain_effect_sequential(effect='tc')
+        # return self.terrain_effect_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_effect_sequential()
 
     
-    def rtm_anomaly(self, tc=None, parallel: bool=True) -> tuple[np.ndarray, np.ndarray]:
+    def rtm_anomaly(
+        self, 
+        parallel: bool=True, 
+        chunk_size: int=10, 
+        progress: bool=True
+    ) -> tuple[np.ndarray, np.ndarray]:
         '''
         Compute residual terrain (RTM) gravity anomalies
         
         Parameters
         ----------
-        tc       : Terrain Correction
+        parallel  : Terrain Correction
+        chunk_size: int
+                    Size of the chunk in terms of number of rows. Default is 10.
+        progress  : True/False
+                    If True, display a progress bar. Default: True.
         
         Returns
         -------
-        Dg_RTM   : Residual terrain (RTM) gravity anomalies
-        tc       : Terrain Correction
+        Dg_RTM   : Residual terrain (RTM) gravity anomalies [mgal]
+        
+        Reference
+        ---------
+        1. Forsberg & Tscherning (1984): Topographic effects in gravity field modelling for BVP
+           Equation 19
         
         Notes
         -----
-        1. Dg = 2 * pi * G * rho * (H - Href) - tc
-        2. Strongly recommended that if you have already calculated TC, pass it to the function to speed up
-           RTM gravity anomalies computation
-        3. Forsberg (1984): A Study of Terrain Reductions, Density Anomalies and Geophysical Inversion Methods in Gravity Field Modelling
-           (Equation 7.5)
+        1. Dg_RTM has the same equation as terrain correction, with the difference being that
+           the residual terrain (H - H_ref) is used instead of the original terrain
         '''
-        if tc is None:
-            tc = self.terrain_correction(parallel=parallel)
-        # Check of shape of tc is consistent with ori_P - In case `tc` is passed
-        if tc.shape != self.ori_P['z'].shape:
-            raise ValueError(f'The shape of tc ({tc.shape}) is not consistent with the computation grid ({self.ori_P["z"].shape})')
-        # Compute residual terrain gravity anomalies
-        dg_rtm = 2 * np.pi * self.G * self.rho * (self.ori_P['z'] - self.ref_P['z']) - tc
         
-        return dg_rtm, tc
+        if parallel:
+            return self.terrain_effect_parallel(chunk_size=chunk_size, progress=progress, effect='rtm')
+        else:
+            return self.terrain_effect_sequential(effect='rtm')
 
 
     def rtm_zeta(self) -> np.ndarray:

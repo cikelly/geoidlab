@@ -11,8 +11,8 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 @njit
 def compute_tc_chunk(
-    row_start: int, row_end: int, ncols_P: int, dm: int, dn: int, lamp: np.ndarray, 
-    phip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
+    row_start: int, row_end: int, ncols_P: int, dm: int, dn: int, coslamp: np.ndarray, sinlamp: np.ndarray, 
+    cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
     Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_rho_dxdy: float
 ) -> tuple[int, int, np.ndarray]:
     '''
@@ -42,7 +42,6 @@ def compute_tc_chunk(
     tc_chunk  : 2D array of terrain correction values for the chunk
     '''
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
-    # G_rho_dxdy = G * rho * dx * dy
     
     # Create sliding window views for the arrays
     ## H_view = sliding_window_view(ori_topo['z'].values, (dn, dm))
@@ -55,10 +54,10 @@ def compute_tc_chunk(
         m1 = 1
         m2 = dm
         
-        coslamp = np.cos(lamp[i, :])
-        sinlamp = np.sin(lamp[i, :])
-        cosphip = np.cos(phip[i, :])
-        sinphip = np.sin(phip[i, :])
+        coslamp_i = coslamp[i, :]
+        sinlamp_i = sinlamp[i, :]
+        cosphip_i = cosphip[i, :]
+        sinphip_i = sinphip[i, :]
         
         for j in range(ncols_P):
             # smallH = ori_topo['z'].values[i:i+dn, m1:m2]
@@ -74,11 +73,11 @@ def compute_tc_chunk(
             # smallZ = Z_view[i, j]
 
             # Local coordinates (x, y)
-            x = coslamp[j] * (smallY - Yp[i, j]) - \
-                sinlamp[j] * (smallX - Xp[i, j])
-            y = cosphip[j] * (smallZ - Zp[i, j]) - \
-                coslamp[j] * sinphip[j] * (smallX - Xp[i, j]) - \
-                sinlamp[j] * sinphip[j] * (smallY - Yp[i, j])
+            x = coslamp_i[j] * (smallY - Yp[i, j]) - \
+                sinlamp_i[j] * (smallX - Xp[i, j])
+            y = cosphip_i[j] * (smallZ - Zp[i, j]) - \
+                coslamp_i[j] * sinphip_i[j] * (smallX - Xp[i, j]) - \
+                sinlamp_i[j] * sinphip_i[j] * (smallY - Yp[i, j])
 
             # Distances
             d = np.hypot(x, y)
