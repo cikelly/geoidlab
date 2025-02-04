@@ -43,13 +43,6 @@ def compute_tc_chunk(
     '''
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
     
-    # Create sliding window views for the arrays
-    ## H_view = sliding_window_view(ori_topo['z'].values, (dn, dm))
-    # H_view = sliding_window_view(ori_topo, (dn, dm))
-    # X_view = sliding_window_view(X, (dn, dm))
-    # Y_view = sliding_window_view(Y, (dn, dm))
-    # Z_view = sliding_window_view(Z, (dn, dm))
-    
     for i in range(row_start, row_end):
         m1 = 1
         m2 = dm
@@ -65,12 +58,6 @@ def compute_tc_chunk(
             smallX = X[i:i+dn, m1:m2]
             smallY = Y[i:i+dn, m1:m2]
             smallZ = Z[i:i+dn, m1:m2]
-            
-            # Extract subarrays using sliding window views
-            # smallH = H_view[i, j]
-            # smallX = X_view[i, j]
-            # smallY = Y_view[i, j]
-            # smallZ = Z_view[i, j]
 
             # Local coordinates (x, y)
             x = coslamp_i[j] * (smallY - Yp[i, j]) - \
