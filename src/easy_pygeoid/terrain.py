@@ -345,12 +345,7 @@ class TerrainQuantities:
     ) -> tuple[np.ndarray, np.ndarray]:
         
         pass
-    
-    
-    def rtm_anomaly(self, parallel: bool=True) -> np.ndarray:
-        pass
 
-    
     def rtm_anomaly_approximation(self, tc=None) -> tuple[np.ndarray, np.ndarray]:
         '''
         Compute RTM gravity anomalies using the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
@@ -366,12 +361,38 @@ class TerrainQuantities:
         
         Reference
         ---------
-        1. Forsberg & Tscherning (1984): A Study of Terrain Reductions, Density Anomalies and Geophysical Inversion Methods in Gravity Field Modelling (Equation 7)
+        1. Forsberg & Tscherning (1984): A Study of Terrain Reductions, Density Anomalies and Geophysical Inversion 
+                                         Methods in Gravity Field Modelling (Equation 7)
         '''
         if tc is None:
             tc = self.terrain_correction()
         print('Computing RTM gravity anomalies...')
         return (2 * np.pi * self.G * self.rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
+
+
+    def rtm_anomaly(self, parallel: bool=True, approximation: bool=False, tc=None) -> np.ndarray:
+        '''
+
+        Parameters
+        ----------
+        approximation : True/False
+                        If True, use the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
+        parallel      : True/False
+                        If True, use the parallelized version. Default: True.
+
+        Returns
+        -------
+        Dg_RTM        : Residual terrain Model (RTM) gravity anomalies
+        '''
+        if approximation and tc is None:
+            return self.rtm_anomaly_approximation()[0]
+        elif approximation and tc is not None:
+            return self.rtm_anomaly_approximation(tc=tc)[0]
+        elif parallel:
+            return self.rtm_anomaly_parallel()
+        else:
+            return self.rtm_anomaly_sequential()
+    
     
     def rtm_zeta(self) -> np.ndarray:
         pass
