@@ -351,7 +351,7 @@ class TerrainQuantities:
         pass
 
     
-    def rtm_anomaly_approximation(self, tc=None) -> np.ndarray:
+    def rtm_anomaly_approximation(self, tc=None) -> tuple[np.ndarray, np.ndarray]:
         '''
         Compute RTM gravity anomalies using the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
         
@@ -362,6 +362,7 @@ class TerrainQuantities:
         Returns
         -------
         Dg_RTM   : Residual terrain (RTM) gravity anomalies
+        tc       : Terrain Correction
         
         Reference
         ---------
@@ -369,7 +370,8 @@ class TerrainQuantities:
         '''
         if tc is None:
             tc = self.terrain_correction()
-        return 2 * np.pi * self.G * self.rho * (self.ori_P['z'] - self.ref_P['z']) - tc
+        print('Computing RTM gravity anomalies...')
+        return (2 * np.pi * self.G * self.rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
     
     def rtm_zeta(self) -> np.ndarray:
         pass
