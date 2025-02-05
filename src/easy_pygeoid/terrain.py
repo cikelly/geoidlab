@@ -51,8 +51,10 @@ class TerrainQuantities:
 
         Reference
         ---------
-        Wichiencharoen (1982): The Indirect Effects On The Computation of Geoid Undulations
-        https://ntrs.nasa.gov/citations/19830016735
+        1. Wichiencharoen (1982): The Indirect Effects On The Computation of Geoid Undulations
+           https://ntrs.nasa.gov/citations/19830016735
+        2. Forsberg & Tscherning (1984): Topographic effects in gravity field modelling for BVP
+           Equation 19
 
         Notes
         -----
@@ -301,7 +303,7 @@ class TerrainQuantities:
         # return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_correction_sequential()
 
     
-    def rtm_anomaly(
+    def rtm_anomaly_sequential(
         self, 
         parallel: bool=True, 
         chunk_size: int=10, 
@@ -333,12 +335,42 @@ class TerrainQuantities:
            the residual terrain (H - H_ref) is used instead of the original terrain
         '''
         
-        if parallel:
-            return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress, effect='rtm')
-        else:
-            return self.terrain_correction_sequential(effect='rtm')
+        pass
+    
+    def rtm_anomaly_parallel(
+        self, 
+        parallel: bool=True, 
+        chunk_size: int=10, 
+        progress: bool=True
+    ) -> tuple[np.ndarray, np.ndarray]:
+        
+        pass
+    
+    
+    def rtm_anomaly(self, parallel: bool=True) -> np.ndarray:
+        pass
 
-
+    
+    def rtm_anomaly_approximation(self, tc=None) -> np.ndarray:
+        '''
+        Compute RTM gravity anomalies using the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
+        
+        Parameters
+        ----------
+        tc       : Terrain Correction
+        
+        Returns
+        -------
+        Dg_RTM   : Residual terrain (RTM) gravity anomalies
+        
+        Reference
+        ---------
+        1. Forsberg & Tscherning (1984): A Study of Terrain Reductions, Density Anomalies and Geophysical Inversion Methods in Gravity Field Modelling (Equation 7)
+        '''
+        if tc is None:
+            tc = self.terrain_correction()
+        return 2 * np.pi * self.G * self.rho * (self.ori_P['z'] - self.ref_P['z']) - tc
+    
     def rtm_zeta(self) -> np.ndarray:
         pass
     
