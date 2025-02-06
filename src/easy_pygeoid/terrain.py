@@ -488,9 +488,14 @@ class TerrainQuantities:
         return (2 * np.pi * self.G * self.rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
 
 
-    def rtm_anomaly(self, parallel: bool=True, approximation: bool=False, tc=None) -> np.ndarray:
+    def rtm_anomaly(
+        self, 
+        parallel: bool=True, 
+        chunk_size: int=10,
+        approximation: bool=False, 
+        tc=None
+    ) -> np.ndarray:
         '''
-
         Parameters
         ----------
         approximation : True/False
@@ -507,7 +512,7 @@ class TerrainQuantities:
         elif approximation and tc is not None:
             return self.rtm_anomaly_approximation(tc=tc)[0]
         elif parallel:
-            return self.rtm_anomaly_parallel()
+            return self.rtm_anomaly_parallel(chunk_size=chunk_size)
         else:
             return self.rtm_anomaly_sequential()
 
