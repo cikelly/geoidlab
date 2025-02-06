@@ -14,7 +14,7 @@ import threading
 
 from . import constants
 from .coordinates import geodetic2cartesian
-from .utils.parallel_utils import compute_tc_chunk
+from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -207,21 +207,19 @@ class TerrainQuantities:
     def terrain_correction_parallel(
         self, 
         chunk_size: int=10, 
-        progress=True, 
+        progress: bool=True, 
     ) -> np.ndarray:
         '''
         Compute terrain correction (parallelized with chunking).
-        
+
         Parameters
         ----------
         chunk_size : number of rows to process in each chunk
         progress   : Progress bar display
-        
+
         Returns
         -------
         tc         : Terrain Correction
-        or
-        Dg_RTM     : Residual terrain (RTM) gravity anomalies
         '''
         if progress:
             def print_progress(stop_signal) -> None:
@@ -303,12 +301,7 @@ class TerrainQuantities:
         # return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_correction_sequential()
 
     
-    def rtm_anomaly_sequential(
-        self, 
-        parallel: bool=True, 
-        chunk_size: int=10, 
-        progress: bool=True
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def rtm_anomaly_sequential(self) -> np.ndarray:
         '''
         Compute residual terrain (RTM) gravity anomalies
         
@@ -322,33 +315,158 @@ class TerrainQuantities:
         
         Returns
         -------
-        Dg_RTM   : Residual terrain (RTM) gravity anomalies [mgal]
+        dg_RTM   : Residual terrain (RTM) gravity anomalies [mgal]
         
         Reference
         ---------
         1. Forsberg & Tscherning (1984): Topographic effects in gravity field modelling for BVP
            Equation 19
+        2. Märdla et al. (2017): From Discrete Gravity Survey Data to a High-resolution Gravity Field Representation in the Nordic-Baltic Region
+           Equation 7
         
         Notes
         -----
-        1. Dg_RTM has the same equation as terrain correction, with the difference being that
-           the residual terrain (H - H_ref) is used instead of the original terrain
+        1. dg_RTM = 2 * pi * G * rho * (Hp - HrefP) + tc(Href - HrefP) - tc(H - HP)
         '''
+        nrows_P, ncols_P = self.ori_P['z'].shape
+        tc_rtm = np.zeros((nrows_P, ncols_P))
+        dn = np.round(self.ncols - ncols_P) + 1
+        dm = np.round(self.nrows - nrows_P) + 1
+
+        n1 = 1
+        n2 = dn
         
-        pass
+        Hp     = self.ori_P['z'].values
+        Hp_ref = self.ref_P['z'].values
+
+        for i in tqdm(range(nrows_P), desc='Computing RTM terrain correction'):
+            m1 = 1
+            m2 = dm
+            for j in range(ncols_P):
+                smallH     = self.ori_topo['z'].values[n1:n2, m1:m2]
+                smallH_ref = self.ref_topo['z'].values[n1:n2, m1:m2]
+                smallX     = self.X[n1:n2, m1:m2]
+                smallY     = self.Y[n1:n2, m1:m2]
+                smallZ     = self.Z[n1:n2, m1:m2]
+
+                # Local coordinates (x, y)
+                x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
+                    self.sinlamp[i, j] * (smallX - self.Xp[i, j])
+                y = self.cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
+                    self.coslamp[i, j] * self.sinphip[i, j] * (smallX - self.Xp[i, j]) - \
+                    self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
+
+                # Distances
+                d = np.hypot(x, y)
+                d[d > self.radius] = np.nan
+                d3 = d * d * d
+                d5 = d3 * d * d
+                d7 = d5 * d * d
+
+                # Height differences
+                DH     = smallH - Hp[i, j]
+                DH_ref = smallH_ref - Hp_ref[i, j]
+
+                # Powers of height differences
+                DH2 = DH ** 2
+                DH4 = DH2 * DH2
+                DH6 = DH4 * DH2
+
+                DH_ref2 = DH_ref ** 2
+                DH_ref4 = DH_ref2 * DH_ref2
+                DH_ref6 = DH_ref4 * DH_ref2
+
+                # Integrate the RTM terrain correction
+                c1 = 0.5 * self.G_rho_dxdy * bn.nansum((DH_ref2 - DH2) / d3)      # 1/2
+                c2 = -0.375 * self.G_rho_dxdy * bn.nansum((DH_ref4 - DH4) / d5)  # 3/8
+                c3 = 0.3125 * self.G_rho_dxdy * bn.nansum((DH_ref6 - DH6) / d7)  # 5/16
+                tc_rtm[i, j] = (c1 + c2 + c3) * 1e5  # [mGal]
+
+                # Moving window
+                m1 += 1
+                m2 += 1
+            n1 += 1
+            n2 += 1
+        # Calculate RTM gravity anomalies
+        dg_RTM = 2 * np.pi * self.G * self.rho * (Hp - Hp_ref) * 1e5 + tc_rtm
+        return dg_RTM    
+
     
     def rtm_anomaly_parallel(
         self, 
-        parallel: bool=True, 
         chunk_size: int=10, 
         progress: bool=True
-    ) -> tuple[np.ndarray, np.ndarray]:
-        
-        pass
+    ) -> np.ndarray:
+        '''
+        Compute RTM gravity anomalies (parallelized with chunking).
 
+        Parameters
+        ----------
+        chunk_size : Chunk size for parallelization
+        progress   : Show progress bar
+
+        Returns
+        -------
+        dg_RTM     : Residual terrain (RTM) gravity anomalies
+        '''
+        TWOPIGRHO = 2 * np.pi * self.G * self.rho
+        if progress:
+            def print_progress(stop_signal) -> None:
+                '''
+                Prints '#' every second to indicate progress.
+                '''
+                while not stop_signal.is_set():
+                    sys.stdout.write("#")
+                    sys.stdout.flush()
+                    time.sleep(1.5)  # Adjust the frequency as needed
+        
+        nrows_P, ncols_P = self.ori_P['z'].shape
+        dg_RTM = np.zeros((nrows_P, ncols_P))
+        dn     = np.round(self.ncols - ncols_P) + 1
+        dm     = np.round(self.nrows - nrows_P) + 1
+
+        Hp     = self.ori_P['z'].values
+        Hp_ref = self.ref_P['z'].values
+        
+        # Divide rows into chunks
+        chunks = [
+            (i, min(i + chunk_size, nrows_P)) 
+            for i in range(0, nrows_P, chunk_size)
+        ]
+        
+        print('Computing RMT terrain correction...')
+        
+        if progress:
+            stop_signal = threading.Event()
+            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
+            progress_thread.start()
+        
+        # Submit tasks for each chunk
+        results = Parallel(n_jobs=-1)(
+            delayed(compute_rtm_tc_chunk)(
+                row_start, row_end, ncols_P, dm, dn, self.coslamp, self.sinlamp, self.cosphip, 
+                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, 
+                self.Yp, self.Zp, self.radius, self.G_rho_dxdy, Hp_ref, self.ref_topo['z'].values, 
+            ) for row_start, row_end in chunks
+        )
+        
+        if progress:
+            stop_signal.set()
+            progress_thread.join()
+            print('\nCompleted.')
+        
+        # Collect results
+        for row_start, row_end, dg_RTM_chunk in results:
+            dg_RTM[row_start:row_end, :] = dg_RTM_chunk
+        
+        # Calculate RTM gravity anomaly
+        dg_RTM += TWOPIGRHO * (Hp - Hp_ref) * 1e5
+        
+        return dg_RTM
+        
     def rtm_anomaly_approximation(self, tc=None) -> tuple[np.ndarray, np.ndarray]:
         '''
-        Compute RTM gravity anomalies using the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
+        Compute RTM gravity anomalies using the approximate formula dg_RTM =  2 * pi * G * rho * (H - Href) - tc
         
         Parameters
         ----------
@@ -356,7 +474,7 @@ class TerrainQuantities:
         
         Returns
         -------
-        Dg_RTM   : Residual terrain (RTM) gravity anomalies
+        dg_RTM   : Residual terrain (RTM) gravity anomalies
         tc       : Terrain Correction
         
         Reference
@@ -376,13 +494,13 @@ class TerrainQuantities:
         Parameters
         ----------
         approximation : True/False
-                        If True, use the approximate formula Dg_RTM =  2 * pi * G * rho * (H - Href) - tc
+                        If True, use the approximate formula dg_RTM =  2 * pi * G * rho * (H - Href) - tc
         parallel      : True/False
                         If True, use the parallelized version. Default: True.
 
         Returns
         -------
-        Dg_RTM        : Residual terrain Model (RTM) gravity anomalies
+        dg_RTM        : Residual terrain Model (RTM) gravity anomalies
         '''
         if approximation and tc is None:
             return self.rtm_anomaly_approximation()[0]
@@ -392,8 +510,8 @@ class TerrainQuantities:
             return self.rtm_anomaly_parallel()
         else:
             return self.rtm_anomaly_sequential()
-    
-    
+
+
     def rtm_zeta(self) -> np.ndarray:
         pass
     
