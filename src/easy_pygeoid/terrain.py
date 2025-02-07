@@ -15,6 +15,7 @@ import threading
 from . import constants
 from .coordinates import geodetic2cartesian
 from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk
+from .gravity import normal_gravity_somigliana
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -516,6 +517,78 @@ class TerrainQuantities:
         else:
             return self.rtm_anomaly_sequential()
 
+
+    def indirect_effect_sequential(self) -> np.ndarray:
+        '''
+        Compute the indirect effect due to the second method of Helmert's condensation
+        
+        Notes
+        -----
+        1. Wichiencharoen (1982): The Indirect Effects On The Computation of Geoid Undulations (Section 2.1.1, Page 21)
+        '''
+        nrows_P, ncols_P = self.ori_P['z'].shape
+        ind = np.zeros((nrows_P, ncols_P))
+        dn = np.round(self.ncols - ncols_P) + 1
+        dm = np.round(self.nrows - nrows_P) + 1
+
+        n1 = 1
+        n2 = dn
+        
+        # Normal gravity at the ellipsoid
+        gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid='wgs84')
+        
+        
+        Hp   = self.ori_P['z'].values 
+
+        for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
+            m1 = 1
+            m2 = dm
+            for j in range(ncols_P):
+                smallH = self.ori_topo['z'].values[n1:n2, m1:m2]
+                smallX = self.X[n1:n2, m1:m2]
+                smallY = self.Y[n1:n2, m1:m2]
+                smallZ = self.Z[n1:n2, m1:m2]
+
+                # Local coordinates (x, y)
+                x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
+                    self.sinlamp[i, j] * (smallX - self.Xp[i, j])
+                y = self.cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
+                    self.coslamp[i, j] * self.sinphip[i, j] * (smallX - self.Xp[i, j]) - \
+                    self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
+
+                # Distances
+                d = np.hypot(x, y)
+                # d = np.where(d <= self.radius, d, np.nan)
+                d[d > self.radius] = np.nan
+                d3 = d * d * d
+                d5 = d3 * d * d
+                d7 = d5 * d * d
+
+                # Potential change of regular part
+                dV1 = -np.pi * self.G * self.rho * Hp[i, j] ** 2
+                
+                # Powers of heights
+                Hp3 = Hp[i, j] ** 3
+                Hp5 = Hp[i, j] ** 5
+                Hp7 = Hp[i, j] ** 7
+                H3  = smallH ** 3
+                H5  = smallH ** 5
+                H7  = smallH ** 7
+                
+                v2  = -1/6 * bn.nansum((H3 - Hp3) / d3)      # 1/2
+                v3  = 0.075 * bn.nansum((H5 - Hp5) / d5)    # 3/40
+                v4  = -15/336 * bn.nansum((H7 - Hp7) / d7)   
+                dV2 = self.G_rho_dxdy * (v2 + v3 + v4)
+
+                # Indirect effect
+                ind[i, j] = (dV1 - dV2) / gamma_0[i, j]
+                
+                # moving window
+                m1 += 1
+                m2 += 1
+            n1 += 1
+            n2 += 1
+        return ind
 
     def rtm_zeta(self) -> np.ndarray:
         pass
