@@ -190,3 +190,95 @@ def compute_rtm_tc_chunk(
             m2 += 1
 
     return row_start, row_end, tc_chunk
+
+
+@njit
+def compute_ind_chunk(
+    row_start: int, row_end: int, ncols_P: int, dm: int, dn: int, coslamp: np.ndarray, sinlamp: np.ndarray, 
+    cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
+    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_rho_dxdy: float
+) -> tuple[int, int, np.ndarray]:
+    '''
+    Compute a chunk of rows for the indirect effect of Helmert's second method of condensation
+
+    Parameters
+    ----------
+    row_start : starting row index (inclusive)
+    row_end   : ending row index (exclusive)
+    ncols_P   : number of columns in the sub-grid
+    dm        : number of rows in the moving window
+    lamp      : longitude of the computation points
+    phip      : latitude of the computation points
+    Hp        : height of the computation points
+    ori_topo  : original topography
+    X, Y, Z   : cartesian coordinates of the original topography
+    Xp, Yp, Zp: cartesian coordinates of the sub-grid
+    radius    : integration radius [km]
+    G         : gravitational constant
+    rho       : density of the Earth
+    dx, dy    : grid size in x and y directions
+
+    Returns
+    -------
+    row_start : starting row index
+    row_end   : ending row index
+    ind_chunk : 2D array of terrain correction values for the chunk
+    '''
+    ind_chunk = np.zeros((row_end - row_start, ncols_P))
+
+    for i in range(row_start, row_end):
+        m1 = 1
+        m2 = dm
+        
+        coslamp_i = coslamp[i, :]
+        sinlamp_i = sinlamp[i, :]
+        cosphip_i = cosphip[i, :]
+        sinphip_i = sinphip[i, :]
+
+        for j in range(ncols_P):
+            # smallH = ori_topo['z'].values[i:i+dn, m1:m2]
+            smallH = ori_topo[i:i+dn, m1:m2]
+            smallX = X[i:i+dn, m1:m2]
+            smallY = Y[i:i+dn, m1:m2]
+            smallZ = Z[i:i+dn, m1:m2]
+
+            # Local coordinates (x, y)
+            x = coslamp_i[j] * (smallY - Yp[i, j]) - \
+                sinlamp_i[j] * (smallX - Xp[i, j])
+            y = cosphip_i[j] * (smallZ - Zp[i, j]) - \
+                coslamp_i[j] * sinphip_i[j] * (smallX - Xp[i, j]) - \
+                sinlamp_i[j] * sinphip_i[j] * (smallY - Yp[i, j])
+
+            # Distances
+            d = np.hypot(x, y)
+            # d[d > radius] = np.nan
+            # d[d == 0] = np.nan
+            # Numba compliant masking
+            for k in range(d.shape[0]):
+                for l in range(d.shape[1]):
+                    if d[k, l] > radius or d[k, l] == 0:
+                        d[k, l] = np.nan
+
+            d3 = d * d * d
+            d5 = d3 * d * d
+            d7 = d5 * d * d
+
+            # Potential change of the irregular part of topography
+            # Powers of height
+            Hp3 = Hp[i, j] ** 3
+            Hp5 = Hp[i, j] ** 5
+            Hp7 = Hp[i, j] ** 7
+            H3  = smallH ** 3
+            H5  = smallH ** 5
+            H7  = smallH ** 7
+
+            v2  = -1/6 * np.nansum((H3 - Hp3) / d3)      # 1/2
+            v3  = 0.075 * np.nansum((H5 - Hp5) / d5)    # 3/40
+            v4  = -15/336 * np.nansum((H7 - Hp7) / d7)  
+            ind_chunk[i - row_start, j] = G_rho_dxdy * (v2 + v3 + v4)
+
+            # Moving window
+            m1 += 1
+            m2 += 1
+
+    return row_start, row_end, ind_chunk
