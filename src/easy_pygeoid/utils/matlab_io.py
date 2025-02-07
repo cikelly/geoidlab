@@ -10,7 +10,7 @@ import h5py
 
 from scipy.io import loadmat, savemat
 
-class MATIO():
+class MATLABIO():
     '''
     Class to read and write mat files
     '''
@@ -53,7 +53,7 @@ class MATIO():
             else:
                 lat = lat[:, 0]
                 lon = lon[0, :]
-            
+
         data_vars = {}
         for key in keys:
             if data[key].shape == (len(lat), len(lon)) and ('lat' not in key.lower() and 'lon' not in key.lower()):
