@@ -266,11 +266,11 @@ def compute_ind_chunk(
             # Potential change of the irregular part of topography
             # Powers of height
             Hp3 = Hp[i, j] ** 3
-            Hp5 = Hp[i, j] ** 5
-            Hp7 = Hp[i, j] ** 7
+            Hp5 = Hp3 * Hp[i, j] * Hp[i, j]
+            Hp7 = Hp5 * Hp[i, j] * Hp[i, j]
             H3  = smallH ** 3
-            H5  = smallH ** 5
-            H7  = smallH ** 7
+            H5  = H3 * smallH * smallH
+            H7  = H5 * smallH * smallH
 
             v2  = -1/6 * np.nansum((H3 - Hp3) / d3)      # 1/2
             v3  = 0.075 * np.nansum((H5 - Hp5) / d5)    # 3/40
