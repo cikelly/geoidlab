@@ -14,7 +14,7 @@ import threading
 
 from . import constants
 from .coordinates import geodetic2cartesian
-from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk
+from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk, compute_ind_chunk
 from .gravity import normal_gravity_somigliana
 
 from tqdm import tqdm
@@ -589,6 +589,105 @@ class TerrainQuantities:
             n1 += 1
             n2 += 1
         return ind
+    
+    def indirect_effect_parallel(
+        self, 
+        chunk_size: int=10, 
+        progress: bool=True, 
+    ) -> np.ndarray:
+        '''
+        Compute terrain correction (parallelized with chunking).
+
+        Parameters
+        ----------
+        chunk_size : number of rows to process in each chunk
+        progress   : Progress bar display
+
+        Returns
+        -------
+        ind         : Terrain Correction
+        '''
+        if progress:
+            def print_progress(stop_signal) -> None:
+                '''
+                Prints '#' every second to indicate progress.
+                '''
+                while not stop_signal.is_set():
+                    sys.stdout.write("#")
+                    sys.stdout.flush()
+                    time.sleep(1.5)  # Adjust the frequency as needed
+
+        nrows_P, ncols_P = self.ori_P['z'].shape
+        ind = np.zeros((nrows_P, ncols_P))
+        dn = np.round(self.ncols - ncols_P) + 1
+        dm = np.round(self.nrows - nrows_P) + 1
+
+        Hp = self.ori_P['z'].values
+
+        # Potential change of the regular part of topography
+        dV1 = -np.pi * self.G * self.rho * Hp ** 2
+        # Normal gravity at the ellipsoid
+        gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid='wgs84')
+        
+        # Divide rows into chunks
+        chunks = [
+            (i, min(i + chunk_size, nrows_P)) 
+            for i in range(0, nrows_P, chunk_size)
+        ]
+
+        print('Computing terrain correction...') 
+        
+        if progress:
+            stop_signal = threading.Event()
+            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
+            progress_thread.start()
+
+        # Submit tasks for each chunk
+
+        results = Parallel(n_jobs=-1)(
+            delayed(compute_ind_chunk)(
+                row_start, row_end, ncols_P, dm, dn, self.coslamp, self.sinlamp, self.cosphip, 
+                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, 
+                self.Yp, self.Zp, self.radius, self.G_rho_dxdy
+            ) for row_start, row_end in chunks
+        )
+        
+        if progress:
+            stop_signal.set()
+            progress_thread.join()
+            print('\nCompleted.')
+        
+        # Collect results
+        for row_start, row_end, ind_chunk in results:
+            ind[row_start:row_end, :] = ind_chunk
+        return (dV1 - ind) / gamma_0
+
+    def indirect_effect(
+        self,
+        parallel: bool=True,
+        chunk_size: int=10,
+        progress: bool=True,
+    ) -> np.ndarray:
+        '''
+        Compute terrain correction.
+
+        Parameters
+        ----------
+        parallel   : True/False
+                    If True, use the parallelized version. Default: True.
+        chunk_size : int
+                    Size of the chunk in terms of number of rows. Default is 10.
+        progress   : True/False
+                    If True, display a progress bar. Default: True.
+        
+        Return
+        ------
+        tc       : Terrain Correction
+        '''
+        if parallel:
+            return self.indirect_effect_parallel(chunk_size=chunk_size, progress=progress)
+        else:
+            return self.indirect_effect_sequential()
 
     def rtm_zeta(self) -> np.ndarray:
         pass
