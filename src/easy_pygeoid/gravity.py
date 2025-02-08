@@ -5,7 +5,9 @@
 ############################################################
 from . import constants
 from numpy import (
-    sin, cos, radians, 
+    sin, 
+    cos, 
+    radians, 
     sqrt
 )
 
@@ -41,7 +43,7 @@ def normal_gravity(phi, ellipsoid='wgs84') -> float:
     gamma_a = ref_ellipsoid['gamma_a']
     gamma_b = ref_ellipsoid['gamma_b']
     e2      = ref_ellipsoid['e2']
-           
+
     k       = b*gamma_b / (a*gamma_a) - 1
 
     numerator   = 1 + k * sin(radians(phi))**2
@@ -78,10 +80,10 @@ def normal_gravity_somigliana(phi, ellipsoid='wgs84') -> float:
     gamma_a = ref_ellipsoid['gamma_a']
     gamma_b = ref_ellipsoid['gamma_b']
     e2      = ref_ellipsoid['e2']
-    
+
     numerator = a*gamma_a*cos(radians(phi))**2 + b*gamma_b*sin(radians(phi))**2
     denominator = sqrt(a**2*cos(radians(phi))**2 + b**2*sin(radians(phi))**2)
-    
+
     gamma   = numerator / denominator
     return gamma  
 
@@ -102,7 +104,7 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84') -> float:
     a = ref_ellipsoid['semi_major']
     f = ref_ellipsoid['f']
     m = ref_ellipsoid['m']
-    
+
     gamma   = normal_gravity(phi=phi, ellipsoid=ellipsoid)
     
     gamma_h = gamma   * (1 - 2/a*(1+f+m-2*f*sin(radians(phi))**2)*h + (3/a**2 * h**2))
@@ -160,16 +162,15 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False) -> 
     # Free-air and Bouguer gravity
     free_air_gravity = gravity + 0.3086 * elevation
     bouguer_gravity  = free_air_gravity - 0.1119 * elevation
-    # bouguer_gravity = gravity - 0.1119 * elevation + 0.3086 * elevation
-    
+
     # normal gravity
     gamma   = normal_gravity_somigliana(phi=lat, ellipsoid=ellipsoid)
     gamma   = gamma   * 1e5 # m/s2 to mgal
 
     # Gravity anomalies
-    free_air_anomaly = free_air_gravity - gamma  
-    bouguer_anomaly  = bouguer_gravity - gamma  
-    
+    free_air_anomaly = free_air_gravity - gamma
+    bouguer_anomaly  = bouguer_gravity - gamma
+
     # Atmospheric correction
     if atm:
         atm_corr = 0.874 - 9.9e-5 * elevation + 3.56e-9*elevation**2
@@ -196,5 +197,5 @@ def gravity_reduction(gravity, elevation) -> tuple:
     # Free-air and Bouguer gravity
     free_air_gravity = gravity + 0.3086 * elevation
     bouguer_gravity = free_air_gravity - 0.1119 * elevation
-    
+
     return free_air_gravity, bouguer_gravity
