@@ -33,7 +33,8 @@ class TerrainQuantities:
         ref_topo: xr.Dataset=None, 
         radius: float=110.,
         ellipsoid: str='wgs84',
-        bbox_off: float=1.
+        bbox_off: float=1.,
+        sub_grid: tuple[float, float, float, float]=None
     ) -> None:
         '''
         Initialize the TerrainQuantities class for terrain modeling
@@ -45,6 +46,7 @@ class TerrainQuantities:
         radius    : Integration radius in kilometers
         ellipsoid : Reference ellipsoid
         bbox_off  : Offset in degrees for bounding box
+        sub_grid  : Bounding coordinates of the area of interest
 
         Returns
         -------
@@ -92,24 +94,27 @@ class TerrainQuantities:
         # Define sub-grid and extract data
         lon = self.ori_topo['x'].values
         lat = self.ori_topo['y'].values
-        # print(f'Defining sub-grid based on integration radius: {radius} km')
-        self.radius_deg = self.km2deg((self.radius / 1000))
-        min_lat = round(min(lat) + self.radius_deg)
-        max_lat = round(max(lat) - self.radius_deg)
-        min_lon = round(min(lon) + self.radius_deg)
-        max_lon = round(max(lon) - self.radius_deg)
-        
-        # Ensure sub-grid is within bounds
-        if min_lat >= min(lat) or max_lat >= max(lat) or min_lon >= min(lon) or max_lon <= max(lon):
-            self.sub_grid = (
-                min(lon)+self.bbox_off, 
-                max(lon)-self.bbox_off, 
-                min(lat)+self.bbox_off, 
-                max(lat)-self.bbox_off
-            )
+        if sub_grid is None:
+            # print(f'Defining sub-grid based on integration radius: {radius} km')
+            self.radius_deg = self.km2deg((self.radius / 1000))
+            min_lat = round(min(lat) + self.radius_deg)
+            max_lat = round(max(lat) - self.radius_deg)
+            min_lon = round(min(lon) + self.radius_deg)
+            max_lon = round(max(lon) - self.radius_deg)
+
+            # Ensure sub-grid is within bounds
+            if min_lat >= min(lat) or max_lat >= max(lat) or min_lon >= min(lon) or max_lon <= max(lon):
+                self.sub_grid = (
+                    min(lon)+self.bbox_off, 
+                    max(lon)-self.bbox_off, 
+                    min(lat)+self.bbox_off, 
+                    max(lat)-self.bbox_off
+                )
+            else:
+                self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
         else:
-            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
-            
+            self.sub_grid = sub_grid
+
         # Extract sub-grid topography
         self.ori_P = self.ori_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
         self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
@@ -120,8 +125,9 @@ class TerrainQuantities:
         dx = TerrainQuantities.deg2km(self.dlam) * 1000 # meters
         dy = TerrainQuantities.deg2km(self.dphi) * 1000 # meters
         
-        # Precompute G_rho_dxdy
+        # Precompute G_rho_dxdy and 2 * pi * G * rho
         self.G_rho_dxdy = self.G * self.rho * dx * dy
+        self.two_pi_G_rho = 2 * np.pi * self.G * self.rho
         
         # Get cartesian coordinates of the original topography (running point)
         Lon, Lat = np.meshgrid(lon, lat)
@@ -299,7 +305,6 @@ class TerrainQuantities:
             return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress)
         else:
             return self.terrain_correction_sequential()
-        # return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress) if parallel else self.terrain_correction_sequential()
 
     
     def rtm_anomaly_sequential(self) -> np.ndarray:
@@ -322,7 +327,8 @@ class TerrainQuantities:
         ---------
         1. Forsberg & Tscherning (1984): Topographic effects in gravity field modelling for BVP
            Equation 19
-        2. Märdla et al. (2017): From Discrete Gravity Survey Data to a High-resolution Gravity Field Representation in the Nordic-Baltic Region
+        2. Märdla et al. (2017): From Discrete Gravity Survey Data to a High-resolution Gravity 
+           Field Representation in the Nordic-Baltic Region
            Equation 7
         
         Notes
@@ -389,8 +395,8 @@ class TerrainQuantities:
             n1 += 1
             n2 += 1
         # Calculate RTM gravity anomalies
-        dg_RTM = 2 * np.pi * self.G * self.rho * (Hp - Hp_ref) * 1e5 + tc_rtm
-        return dg_RTM    
+        dg_RTM = self.two_pi_G_rho * (Hp - Hp_ref) * 1e5 + tc_rtm
+        return dg_RTM
 
     
     def rtm_anomaly_parallel(
@@ -410,7 +416,6 @@ class TerrainQuantities:
         -------
         dg_RTM     : Residual terrain (RTM) gravity anomalies
         '''
-        TWOPIGRHO = 2 * np.pi * self.G * self.rho
         if progress:
             def print_progress(stop_signal) -> None:
                 '''
@@ -435,7 +440,7 @@ class TerrainQuantities:
             for i in range(0, nrows_P, chunk_size)
         ]
         
-        print('Computing RMT terrain correction...')
+        print('Computing RTM terrain correction...')
         
         if progress:
             stop_signal = threading.Event()
@@ -461,7 +466,7 @@ class TerrainQuantities:
             dg_RTM[row_start:row_end, :] = dg_RTM_chunk
         
         # Calculate RTM gravity anomaly
-        dg_RTM += TWOPIGRHO * (Hp - Hp_ref) * 1e5
+        dg_RTM += self.two_pi_G_rho * (Hp - Hp_ref) * 1e5
         
         return dg_RTM
         
@@ -486,7 +491,7 @@ class TerrainQuantities:
         if tc is None:
             tc = self.terrain_correction()
         print('Computing RTM gravity anomalies...')
-        return (2 * np.pi * self.G * self.rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
+        return (self.two_pi_G_rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
 
 
     def rtm_anomaly(
@@ -575,8 +580,8 @@ class TerrainQuantities:
                 H5  = H3 * smallH * smallH
                 H7  = H5 * smallH * smallH
                 
-                v2  = -1/6 * bn.nansum((H3 - Hp3) / d3)      # 1/2
-                v3  = 0.075 * bn.nansum((H5 - Hp5) / d5)    # 3/40
+                v2  = -1/6 * bn.nansum((H3 - Hp3) / d3)
+                v3  = 0.075 * bn.nansum((H5 - Hp5) / d5)     # 3/40
                 v4  = -15/336 * bn.nansum((H7 - Hp7) / d7)   
                 dV2 = self.G_rho_dxdy * (v2 + v3 + v4)
 
@@ -635,7 +640,7 @@ class TerrainQuantities:
             for i in range(0, nrows_P, chunk_size)
         ]
 
-        print('Computing terrain correction...') 
+        print('Computing potential change of irregular part...') 
         
         if progress:
             stop_signal = threading.Event()
@@ -673,13 +678,10 @@ class TerrainQuantities:
 
         Parameters
         ----------
-        parallel   : True/False
-                    If True, use the parallelized version. Default: True.
-        chunk_size : int
-                    Size of the chunk in terms of number of rows. Default is 10.
-        progress   : True/False
-                    If True, display a progress bar. Default: True.
-        
+        parallel   : If True, use the parallelized version. Default: True.
+        chunk_size : Size of the chunk in terms of number of rows. Default is 10.
+        progress   : If True, display a progress bar. Default: True.
+
         Return
         ------
         tc       : Terrain Correction
@@ -733,7 +735,7 @@ class TerrainQuantities:
         '''
         rad = km / radius
         deg = rad * 180 / np.pi
-        # km / 111.11
+
         return deg
     
     @staticmethod
@@ -758,6 +760,5 @@ class TerrainQuantities:
         '''
         rad = deg * np.pi / 180
         km = rad * radius
-        
+
         return km
-    

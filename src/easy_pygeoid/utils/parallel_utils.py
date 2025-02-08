@@ -272,7 +272,7 @@ def compute_ind_chunk(
             H5  = H3 * smallH * smallH
             H7  = H5 * smallH * smallH
 
-            v2  = -1/6 * np.nansum((H3 - Hp3) / d3)      # 1/2
+            v2  = -1/6 * np.nansum((H3 - Hp3) / d3) 
             v3  = 0.075 * np.nansum((H5 - Hp5) / d5)    # 3/40
             v4  = -15/336 * np.nansum((H7 - Hp7) / d7)  
             ind_chunk[i - row_start, j] = G_rho_dxdy * (v2 + v3 + v4)
