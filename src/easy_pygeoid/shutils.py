@@ -1,12 +1,11 @@
-############################################################
-# Utilities for spherical harmonic synthesis               #
-# Copyright (c) 2024, Caleb Kelly                          #
-# Author: Caleb Kelly  (2024)                              #
-############################################################
+###########################################################
+#Utilities for spherical harmonic synthesis               #
+#Copyright (c) 2024, Caleb Kelly                          #
+#Author: Caleb Kelly  (2024)                              #
+###########################################################
 from . import constants
-from numpy import (
-    zeros, sqrt, ndarray
-)
+
+import numpy as np
 import copy
 
 def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> dict:
@@ -30,9 +29,9 @@ def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> dict:
     variance_dict = {}
     
     # for i in range(len(coefficients)):
-    geoid   = zeros(shc1['nmax']+1)
-    degree  = zeros(shc1['nmax']+1)
-    anomaly = zeros(shc1['nmax']+1)
+    geoid   = np.zeros(shc1['nmax']+1)
+    degree  = np.zeros(shc1['nmax']+1)
+    anomaly = np.zeros(shc1['nmax']+1)
     
     C = shc1['Cnm']
     S = shc1['Snm']
@@ -45,8 +44,8 @@ def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> dict:
         for m in range(n+1):
             sum += C2[n, m] + S2[n, m]
         
-        geoid[n]   = sqrt(shc1['a']**2 * sum)
-        anomaly[n] = sqrt((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2 * sum)
+        geoid[n]   = np.sqrt(shc1['a']**2 * sum)
+        anomaly[n] = np.sqrt((shc1['GM'] / shc1['a']**2)**2 * 10**10 * (n-1)**2 * sum)
         
         degree[n]  = n
     
@@ -83,9 +82,9 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> d
     
     variance_dict = {}
     
-    geoid   = zeros(shc1['nmax']+1)
-    degree  = zeros(shc1['nmax']+1)
-    anomaly  = zeros(shc1['nmax']+1)
+    geoid   = np.zeros(shc1['nmax']+1)
+    degree  = np.zeros(shc1['nmax']+1)
+    anomaly  = np.zeros(shc1['nmax']+1)
     
     dC = shc1['sCnm']
     dS = shc1['sSnm']
@@ -106,8 +105,8 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> d
         geoid[n]   = sum2
         degree[n]  = n
         
-    anomaly = sqrt(anomaly)
-    geoid   = sqrt(geoid)
+    anomaly = np.sqrt(anomaly)
+    geoid   = np.sqrt(geoid)
     
     variance_dict['error_anomaly'] = anomaly
     variance_dict['error_geoid']   = geoid * 100 # geoid (cm)
@@ -118,22 +117,22 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> d
 
 
 def subtract_zonal_harmonics(
-        shc: dict[str, ndarray],
+        shc: dict[str, np.ndarray],
         ellipsoid: str = 'wgs84'
-    ) -> dict[str, ndarray]:
+    ) -> dict[str, np.ndarray]:
     '''
     Replace C20, C40, C60, C80, and C100 coefficients (zonal harmonics)
 
     Parameters
     ----------
-    shc       : dict[str, numpy.ndarray]
+    shc       : dict[str, numpy.np.ndarray]
                     spherical harmonic coefficients (out of icgem.read_icgem())
     ellipsoid : str
                     reference ellipsoid ('wgs84' or 'grs80')
 
     Returns
     -------
-    shc       : dict[str, numpy.ndarray]
+    shc       : dict[str, numpy.np.ndarray]
                     shc with updated Cn0 coefficients
     '''
     # Check if shc is not None
@@ -157,3 +156,4 @@ def subtract_zonal_harmonics(
         shc['Cnm'][n, 0] = shc['Cnm'][n, 0] - (GMe / shc['GM']) * (a_e / shc['a']) ** n * ref_ellipsoid[Cn0]
 
     return shc
+
