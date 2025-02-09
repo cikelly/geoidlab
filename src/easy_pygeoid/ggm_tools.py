@@ -9,10 +9,10 @@ from pathlib import Path
 
 from . import (
     icgem,
-    shtools,
     constants,
     gravity,
-    coordinates as co
+    coordinates as co,
+    shutils
 )
 
 from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
@@ -84,7 +84,7 @@ class GlobalGeopotentialModel():
             raise ValueError(f'Failed to read model file: {e}')
         
         # Subtract even zonal harmonics
-        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
+        self.shc = shutils.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
         if self.grav_data is None:
             raise ValueError('Provide data with columns lon, lat, and elevation in order')
@@ -762,7 +762,7 @@ class GlobalGeopotentialModel2D():
             # self.shc = icgem.read_icgem(os.path.join(self.model_dir, self.model + '.gfc'))
             self.shc = icgem.read_icgem(str(Path(self.model_dir) / (self.model + '.gfc')))
         # Subtract even zonal harmonics
-        self.shc = shtools.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
+        self.shc = shutils.subtract_zonal_harmonics(self.shc, self.ellipsoid) if zonal_harmonics else self.shc
         
         if self.lon is None and self.lat is None:
             print('No grid coordinates provided. Computing over the entire globe...\n')
