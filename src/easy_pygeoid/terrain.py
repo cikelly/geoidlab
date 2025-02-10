@@ -527,12 +527,18 @@ class TerrainQuantities:
         '''
         Compute the indirect effect due to the second method of Helmert's condensation
         
+        Returns
+        -------
+        ind    : Indirect effect
+        zeta   : Height anomaly due to residual topography
+        
         Notes
         -----
         1. Wichiencharoen (1982): The Indirect Effects On The Computation of Geoid Undulations (Section 2.1.1, Page 21)
         '''
         nrows_P, ncols_P = self.ori_P['z'].shape
-        ind = np.zeros((nrows_P, ncols_P))
+        ind  = np.zeros((nrows_P, ncols_P))
+        zeta = np.zeros((nrows_P, ncols_P))
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
 
@@ -587,13 +593,14 @@ class TerrainQuantities:
 
                 # Indirect effect
                 ind[i, j] = (dV1 - dV2) / gamma_0[i, j]
+                zeta[i, j] = 1 / 9.82 * dV2
                 
                 # moving window
                 m1 += 1
                 m2 += 1
             n1 += 1
             n2 += 1
-        return ind
+        return ind, zeta
     
     def indirect_effect_parallel(
         self, 
@@ -610,7 +617,8 @@ class TerrainQuantities:
 
         Returns
         -------
-        ind         : Terrain Correction
+        ind        : Indirect effect
+        zeta       : Height anomaly due to residual topography
         '''
         if progress:
             def print_progress(stop_signal) -> None:
@@ -665,7 +673,8 @@ class TerrainQuantities:
         # Collect results
         for row_start, row_end, ind_chunk in results:
             ind[row_start:row_end, :] = ind_chunk
-        return (dV1 - ind) / gamma_0
+            
+        return (dV1 - ind) / gamma_0, ind / 9.82
 
     def indirect_effect(
         self,
