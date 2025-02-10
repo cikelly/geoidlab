@@ -5,7 +5,7 @@
 ############################################################
 
 from easy_pygeoid.legendre import ALF, ALFsGravityAnomaly
-from easy_pygeoid.shutils import replace_zonal_harmonics
+from easy_pygeoid.shtools import replace_zonal_harmonics
 from numba import jit
 
 import easy_pygeoid.coordinates as co
