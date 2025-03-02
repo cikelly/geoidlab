@@ -136,7 +136,7 @@ class DigitalTerrainModel:
         leg_progress: bool = False,
         height: np.ndarray = None,
         n_workers: int = None,
-        save: bool = False
+        save: bool = True
     ) -> np.ndarray:
         '''
         Compute heights from DTM2006.0 spherical harmonic coefficients
@@ -231,7 +231,7 @@ class DigitalTerrainModel:
         if save:
             DigitalTerrainModel.save_dtm2006_height(lon, lat, H, self.nmax)
             
-        return H_flat
+        return H
     
     # Create a static method that saves writes H as a netcdf files if H is a 2D array
     @staticmethod
