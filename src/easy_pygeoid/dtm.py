@@ -161,9 +161,9 @@ class DigitalTerrainModel:
             raise ValueError('lon and lat must have the same shape')
 
         input_shape = lon.shape
-        lon_flat = lon.flatten()
-        lat_flat = lat.flatten()
-        height_flat = np.zeros_like(lon_flat) if height is None else height.flatten()
+        lon_flat = lon.ravel()
+        lat_flat = lat.ravel()
+        height_flat = np.zeros_like(lon_flat) if height is None else height.ravel()
         num_points = len(lon_flat)
         
         # Check if self has the HCnm attribute
@@ -229,7 +229,7 @@ class DigitalTerrainModel:
         H = H_flat.reshape(input_shape)
         
         if save:
-            self.save_dtm2006_height(lon, lat, H)
+            DigitalTerrainModel.save_dtm2006_height(lon, lat, H, self.nmax)
             
         return H_flat
     
@@ -239,6 +239,7 @@ class DigitalTerrainModel:
         lon: np.ndarray,
         lat: np.ndarray,
         H: np.ndarray,
+        nmax: int,
         filename: str = 'H_dtm2006.nc'
     ) -> None:
         '''
@@ -251,6 +252,9 @@ class DigitalTerrainModel:
         H         : 2D array of synthesized heights
         filename  : path to the netCDF file
         '''
+        if nmax is None:
+            raise ValueError('nmax must be provided')
+        
         from netCDF4 import Dataset
         from datetime import datetime, timezone
         
@@ -263,7 +267,7 @@ class DigitalTerrainModel:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Update filename to include nmax
-        filename = filename.replace('.nc', f'_nmax{DigitalTerrainModel.nmax}.nc')
+        filename = filename.replace('.nc', f'_{nmax}.nc')
         
         # Full file path
         file_path = output_dir / filename
