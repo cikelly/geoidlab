@@ -334,6 +334,10 @@ class TerrainQuantities:
         Notes
         -----
         1. dg_RTM = 2 * pi * G * rho * (Hp - HrefP) + tc(Href - HrefP) - tc(H - HP)
+        
+        References
+        ---------
+        1. Sanso & Sideris: Geoid Determination Theory and Methods, Page 367; Equation 8.73
         '''
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc_rtm = np.zeros((nrows_P, ncols_P))
@@ -700,9 +704,7 @@ class TerrainQuantities:
         else:
             return self.indirect_effect_sequential()
 
-    def rtm_zeta(self) -> np.ndarray:
-        pass
-    
+
     @staticmethod
     def rename_variables(ds) -> xr.Dataset:
         coord_names = {
