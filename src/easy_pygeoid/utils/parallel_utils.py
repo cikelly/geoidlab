@@ -4,8 +4,7 @@
 # Author: Caleb Kelly  (2025)                              #
 ############################################################
 import numpy as np
-import bottleneck as bn
-from numba import njit
+from numba import njit, prange
 
 from numpy.lib.stride_tricks import sliding_window_view
 
@@ -398,3 +397,70 @@ def compute_separation_chunk(Cnm, Snm, lon, a, r, Pnm, n) -> np.ndarray:
     for m in range(n + 1):
         sum += (Cnm[n, m] * np.cos(m * lon) + Snm[n, m] * np.sin(m * lon)) * Pnm[:, n, m]
     return sum
+
+# @njit(parallel=True)
+# def compute_harmonic_sum(Pnm, HCnm, HSnm, cosm, sinm) -> np.ndarray:
+#     '''
+#     Compute spherical harmonic sum for multiple points.
+    
+#     Parameters
+#     ----------
+#     Pnm       : ndarray (num_points, nmax+1, nmax+1)
+#                 Normalized associated Legendre functions
+#     HCnm      : ndarray (nmax+1, nmax+1)
+#                 Cosine coefficients
+#     HSnm      : ndarray (nmax+1, nmax+1)
+#                 Sine coefficients
+#     cosm      : ndarray (nmax+1, num_points)
+#                 Cosine of m * lambda
+#     sinm      : ndarray (nmax+1, num_points)
+#                 Sine of m * lambda
+    
+#     Returns
+#     -------
+#     H         : ndarray (num_points,)
+#                 Computed heights
+#     '''
+#     num_points = Pnm.shape[0]
+#     nmax_plus_1 = Pnm.shape[1]
+#     H = np.zeros(num_points)
+    
+#     # Parallelize over points
+#     for i in prange(num_points):
+#         total = 0.0
+#         for n in range(nmax_plus_1):
+#             for m in range(n + 1):  # Only sum up to n, as Pnm is upper triangular
+#                 cos_term = HCnm[n, m] * Pnm[i, n, m] * cosm[m, i]
+#                 sin_term = HSnm[n, m] * Pnm[i, n, m] * sinm[m, i]
+#                 total += cos_term + sin_term
+#         H[i] = total
+    
+#     return H
+
+@njit(parallel=True)
+def compute_harmonic_sum(Pnm, HCnm, HSnm, cosm, sinm) -> np.ndarray:
+    num_points = Pnm.shape[0]
+    nmax_plus_1 = Pnm.shape[1]
+    H = np.zeros(num_points)
+    for i in prange(num_points):
+        total = 0.0
+        for n in range(nmax_plus_1):
+            for m in range(n + 1):
+                cos_term = HCnm[n, m] * Pnm[i, n, m] * cosm[m, i]
+                sin_term = HSnm[n, m] * Pnm[i, n, m] * sinm[m, i]
+                total += cos_term + sin_term
+        H[i] = total
+    return H
+
+@njit(parallel=True)
+def compute_harmonic_sum_precomputed(HC_Pnm, HS_Pnm, cosm, sinm) -> np.ndarray:
+    num_points = HC_Pnm.shape[0]
+    nmax_plus_1 = HC_Pnm.shape[1]
+    H = np.zeros(num_points)
+    for i in prange(num_points):
+        total = 0.0
+        for n in range(nmax_plus_1):
+            for m in range(n + 1):
+                total += HC_Pnm[i, n, m] * cosm[m, i] + HS_Pnm[i, n, m] * sinm[m, i]
+        H[i] = total
+    return H
