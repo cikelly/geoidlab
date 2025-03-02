@@ -135,7 +135,8 @@ class DigitalTerrainModel:
         chunk_size: int = 800,
         leg_progress: bool = False,
         height: np.ndarray = None,
-        n_workers: int = None
+        n_workers: int = None,
+        save: bool = False
     ) -> np.ndarray:
         '''
         Compute heights from DTM2006.0 spherical harmonic coefficients
@@ -225,4 +226,97 @@ class DigitalTerrainModel:
                 end = min(start + chunk_size, num_points)
                 H_flat[start:end] = result
         
-        return H_flat.reshape(input_shape)
+        H = H_flat.reshape(input_shape)
+        
+        if save:
+            self.save_dtm2006_height(lon, lat, H)
+            
+        return H_flat
+    
+    # Create a static method that saves writes H as a netcdf files if H is a 2D array
+    @staticmethod
+    def save_dtm2006_height(
+        lon: np.ndarray,
+        lat: np.ndarray,
+        H: np.ndarray,
+        filename: str = 'H_dtm2006.nc'
+    ) -> None:
+        '''
+        Save synthesized height to a netCDF file
+        
+        Parameters
+        ----------
+        lon       : 2D array of geodetic longitudes
+        lat       : 2D array of geodetic latitudes
+        H         : 2D array of synthesized heights
+        filename  : path to the netCDF file
+        '''
+        from netCDF4 import Dataset
+        from datetime import datetime, timezone
+        
+        # Ensure all inputs are 2D arrays with the same shape
+        if lon.shape != lat.shape or lon.shape != H.shape:
+            raise ValueError('lon, lat, and H must have the same shape')
+        
+        # Create the output directory if it doesn't exist
+        output_dir = Path('outputs')
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Update filename to include nmax
+        filename = filename.replace('.nc', f'_nmax{DigitalTerrainModel.nmax}.nc')
+        
+        # Full file path
+        file_path = output_dir / filename
+        
+        # Extract 1D coordinate arrays from 2D grids (assuming regular grid from np.meshgrid)
+        lon_1d = lon[0, :]
+        lat_1d = lat[:, 0]
+        
+        # Create and write to the netCDF file
+        with Dataset(file_path, 'w', format='NETCDF4') as ds:
+            # --- Global Attributes ---
+            ds.title = 'Synthesized Heights from DTM2006.0 Model'
+            ds.description = (
+                'This dataset contains synthesized heights representing terrain elevations '
+                'computed from the DTM2006.0 spherical harmonic model.'
+            )
+            ds.creation_date = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+            ds.source = 'DTM2006.0 spherical harmonic coefficients'
+            ds.author = 'easy-pygeoid development team'  
+            ds.software = 'easy-pygeoid'  
+            ds.conventions = 'CF-1.8'  # Optional, aligns with geospatial standards
+            
+            # --- Dimensions ---
+            ds.createDimension('lon', len(lon_1d))
+            ds.createDimension('lat', len(lat_1d))
+            
+            # --- Variables ---
+            # Longitude
+            lon_var = ds.createVariable('lon', 'f8', ('lon',))
+            lon_var.long_name = 'longitude'
+            lon_var.units = 'degrees'
+            lon_var.standard_name = 'longitude'
+            lon_var.description = 'Geodetic longitude of grid points, measured east from Greenwich.'
+            
+            # Latitude
+            lat_var = ds.createVariable('lat', 'f8', ('lat',))
+            lat_var.long_name = 'latitude'
+            lat_var.units = 'degrees'
+            lat_var.standard_name = 'latitude'
+            lat_var.description = 'Geodetic latitude of grid points, measured north from the equator.'
+            
+            # Synthesized Height
+            H_var = ds.createVariable('H', 'f8', ('lat', 'lon'))
+            H_var.long_name = 'synthesized_height'
+            H_var.units = 'meters'
+            H_var.standard_name = 'height_above_reference_ellipsoid' 
+            H_var.description = (
+                'Synthesized terrain height above the reference ellipsoid, computed from '
+                'DTM2006.0 spherical harmonic coefficients.'
+            )
+            H_var.coordinates = 'lon lat'  # Link to coordinate variables
+            
+            # --- Write Data ---
+            lon_var[:] = lon_1d
+            lat_var[:] = lat_1d
+            H_var[:, :] = H
