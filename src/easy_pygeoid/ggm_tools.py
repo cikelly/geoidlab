@@ -313,10 +313,8 @@ class GlobalGeopotentialModel:
         2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to disturbing_potential()
         3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r). See last paragraph on Page 296
         '''
-        if r_or_R == 'R':
-            self.r = self.shc['a'] * np.ones(len(self.lon))
-            self.R = self.shc['a'] * np.ones(len(self.lon))
-            
+        r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
+        
         Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         T   = np.zeros(len(self.lon))
         
@@ -328,11 +326,9 @@ class GlobalGeopotentialModel:
                     self.shc['Cnm'][n, m] * np.cos(mlambda) + 
                     self.shc['Snm'][n, m] * np.sin(mlambda)
                 ) * Pnm[:, n, m]
-            T += (self.shc['a'] / self.r)**n * sum
-        if r_or_R == 'r':
-            T = self.shc['GM'] / self.r * T # [m2/s2]
-        else:
-            T = self.shc['GM'] / self.R * T # [m2/s2]        
+            T += (self.shc['a'] / r)**n * sum
+        
+        T = self.shc['GM'] / r * T # [m2/s2]
         
         return T
     
@@ -347,10 +343,9 @@ class GlobalGeopotentialModel:
         -------
         T         : Disturbing potential array (m2/s2)
         '''
-        if r_or_R == 'R':
-            self.r = self.shc['a'] * np.ones(len(self.lon))
-            self.R = self.shc['a'] * np.ones(len(self.lon))
-            
+    
+        r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
+
         Cnm = np.array(self.shc['Cnm'])
         Snm = np.array(self.shc['Snm'])
         a = np.array(self.shc['a'])
@@ -366,7 +361,7 @@ class GlobalGeopotentialModel:
             end_idx = min((i + 1) * self.chunk, n_points)
             
             lon_chunk = self.lon[start_idx:end_idx]
-            r_chunk = self.r[start_idx:end_idx]
+            r_chunk = r[start_idx:end_idx]
             vartheta_chunk = self.vartheta[start_idx:end_idx]
             T_chunk = np.zeros(len(lon_chunk))
             
@@ -381,10 +376,7 @@ class GlobalGeopotentialModel:
             T[start_idx:end_idx] = T_chunk
             print('\n')
         
-        if r_or_R == 'r':
-            T = GM / self.r * T # [m2/s2]
-        else:
-            T = GM / self.R * T # [m2/s2]
+        T = GM / r * T # [m2/s2]
         
         return T
     
@@ -614,10 +606,9 @@ class GlobalGeopotentialModel:
         ref_ellipsoid = constants.wgs84() if 'wgs84' in self.ellipsoid.lower() else constants.grs80()
         GM0 = ref_ellipsoid['GM']
         U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
+        R   = ref_ellipsoid['semi_major'] if zeta_or_geoid == 'geoid' else self.r
         
         W0  = constants.earth()['W0']
-        # R   = constants.earth()['radius']
-        R = self.r
         
         if zeta_or_geoid == 'zeta':
             gamma   = gravity.normal_gravity_above_ellipsoid(
@@ -639,10 +630,11 @@ class GlobalGeopotentialModel:
         -------
         H : Geoid-quasi geoid separation values.
         '''
+
         Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         H = np.zeros(len(self.lon))
 
-        for n in tqdm(range(2, self.nmax + 1), desc='Computing separation'):
+        for n in tqdm(range(0, self.nmax + 1), desc='Computing separation'):
             sum = np.zeros(len(self.lon))
             for m in range(n + 1):
                 mlambda = m * self.lambda_
@@ -650,10 +642,10 @@ class GlobalGeopotentialModel:
                     self.shc['Cnm'][n, m] * np.cos(mlambda) + 
                     self.shc['Snm'][n, m] * np.sin(mlambda)
                 ) * Pnm[:, n, m]
-            H += (self.shc['a'] / self.r) ** n * sum
-        
+            H += sum
+
         return H
-    
+
     def separation_parallel(self) -> np.ndarray:
         '''
         Compute the geoid-quasi geoid separation using chunking and Numba optimization.
@@ -685,7 +677,7 @@ class GlobalGeopotentialModel:
             Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
-            for n in range(2, self.nmax + 1):
+            for n in range(0, self.nmax + 1):
                 H_chunk += compute_separation_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
             
             H[start_idx:end_idx] = H_chunk
