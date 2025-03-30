@@ -1,39 +1,47 @@
 #!/usr/bin/env python3
 import argparse
-from src.dem import dem4geoid
+
+import sys
+from pathlib import Path
+
+# Get the absolute path to the src directory
+src_path = Path(__file__).resolve().parent.parent / 'src'
+sys.path.append(str(src_path))
+
+from easy_pygeoid.dem import dem4geoid
+
+from src.easy_pygeoid.dem import dem4geoid
 # import matplotlib.pyplot as plt
 
-def compute_geoid(bbox, gravity_data, dem=None, start=None, end=None):
+def compute_geoid(bbox, gravity_data, dem=None, start=None, end=None) -> None:
     # Download DEM if not provided
     if dem is None:
         print(f'No DEM provided. Downloading SRTM30Plus over {bbox}...')
         try:
             dem = dem4geoid(bbox=bbox, downloads_dir='downloads')
-            # dem['z'].plot(cmap='terrain')
-            # plt.show()
         except Exception as e:
             print(f'Download failed. Error: {e}.')
             return  
             
     # Compute geoid
 
-def gravity_field_reduction(bbox, gravity_data, dem=None):
+def gravity_field_reduction(bbox, gravity_data, dem=None) -> None:
     # Implement gravity field reduction (free-air)
     pass
 
-def residual_gravity_anomalies(bbox, gravity_data, dem=None):
+def residual_gravity_anomalies(bbox, gravity_data, dem=None) -> None:
     # Implement residual gravity anomalies computation
     pass
 
-def compute_step(bbox, gravity_data, dem=None):
+def compute_step(bbox, gravity_data, dem=None) -> None:
     # Implement main computation step
     pass
 
-def restore_step(bbox, gravity_data, dem=None):
+def restore_step(bbox, gravity_data, dem=None) -> None:
     # Implement restore step
     pass
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Compute gravimetric geoid using provided DEM and gravity data.',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)
