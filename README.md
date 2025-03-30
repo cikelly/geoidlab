@@ -40,11 +40,11 @@ compute_geoid.py -h
 compute_reference_geoid.py -h
 ```
 ## Examples
-- Prepare data: This includes all relevant data for your study area
-  Terrestrial gravity data
-  Marine gravity data
-  Global Geopotential Model (GGM). `easy-pygeoid` can automatically download this. Just provide the name of the GGM in the template file
-  Digital Elevation Model (DEM). `easy-pygeoid` presently downloads SRTM30PLUS
+- Prepare data: This includes all relevant data for your study area:
+  - Terrestrial gravity data
+  - Marine gravity data
+  - Global Geopotential Model (GGM). `easy-pygeoid` can automatically download this. Just provide the name of the GGM in the template file
+  - Digital Elevation Model (DEM). `easy-pygeoid` presently downloads SRTM30PLUS
 - Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
   ensure that they are free-air anomalies
 - Call `compute_geoid.py --start [step]`
