@@ -22,15 +22,13 @@ from .utils.parallel_utils import (
     compute_second_radial_chunk,
     compute_separation_chunk
 )
-from numba import jit
-from numba_progress import ProgressBar
+
 from tqdm import tqdm
-from joblib import Parallel, delayed
 from IPython.display import clear_output
 
 import numpy as np
 import pandas as pd
-import gc
+
 
 class GlobalGeopotentialModel:
     def __init__(
@@ -559,7 +557,7 @@ class GlobalGeopotentialModel:
         
         Returns
         -------
-        zeta    : Geoid height (m)
+        zeta       : Geoid height (m)
         
         Notes
         -----
@@ -588,7 +586,7 @@ class GlobalGeopotentialModel:
         zeta_or_geoid : 'zeta' or 'geoid'
         Returns
         -------
-        N          : Geoid corrected for zero-degree term
+        N             : Geoid corrected for zero-degree term
         
         Reference
         ---------
@@ -628,7 +626,7 @@ class GlobalGeopotentialModel:
 
         Returns
         -------
-        H : Geoid-quasi geoid separation values.
+        H      : Geoid-quasi geoid separation values.
         '''
 
         Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
