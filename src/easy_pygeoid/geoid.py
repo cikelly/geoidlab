@@ -9,6 +9,7 @@ import xarray as xr
 from .utils.distances import haversine
 from .gravity import normal_gravity_somigliana
 from .constants import earth
+from tqdm import tqdm
 
 
 class ResidualGeoid:
@@ -53,39 +54,25 @@ class ResidualGeoid:
         5. The ellipsoid is case-insensitive
         6. The residual anomalies should be in mGal
         '''
-        self.res_anomaly = res_anomaly
-        self.sph_cap = sph_cap
-        self.method = method.lower()
-        self.ellipsoid = ellipsoid
-        lon = self.res_anomaly.lon.values
-        lat = self.res_anomaly.lat.values
         
+        self.res_anomaly = res_anomaly
+        self.sph_cap     = sph_cap
+        self.method      = method.lower()
+        self.ellipsoid   = ellipsoid
+        lon              = self.res_anomaly.lon.values
+        lat              = self.res_anomaly.lat.values
         
         if sub_grid is None:
-            from .terrain import TerrainQuantities
-            
-            box_off_deg = TerrainQuantities.km2deg(bbox_off)
-            
-            min_lon = lon.min().values - self.sph_cap,
-            max_lon = lon.max().values + self.sph_cap,
-            min_lat = lat.min().values - self.sph_cap,
-            max_lat = lat.max().values + self.sph_cap
-            
-            # Ensure sub-grid is within bounds
-            if min_lat >= min(lat) or max_lat >= max(lat) or min_lon >= min(lon) or max_lon <= max(lon):
-                self.sub_grid = (
-                    min(lon)+box_off_deg, 
-                    max(lon)-box_off_deg, 
-                    min(lat)+box_off_deg, 
-                    max(lat)-box_off_deg
-                )
-            else:
-                self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
+            min_lon = lon.min() - bbox_off
+            max_lon = lon.max() + bbox_off
+            min_lat = lat.min() - bbox_off
+            max_lat = lat.max() + bbox_off
+            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
         else:
             self.sub_grid = sub_grid
         
         # Extract sub-grid residual anomalies
-        self.res_anomaly_P = self.res_anomaly.sel(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])
+        self.res_anomaly_P = self.res_anomaly.sel(lon=slice(self.sub_grid[0], self.sub_grid[1]), lat=slice(self.sub_grid[2], self.sub_grid[3]))
 
         # Grid size
         self.nrows, self.ncols = self.res_anomaly['Dg'].shape
@@ -98,64 +85,112 @@ class ResidualGeoid:
         self.gamma0 *= 1e5
         self.LatP = LatP
         
+        self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
     
     def compute_geoid(self) -> np.ndarray:
         '''
         Compute the residual geoid height
         '''
+        nrows_P, ncols_P = self.res_anomaly_P['Dg'].shape
         phip = np.radians(self.LatP)
-        lambdap = np.radians(self.LonP)
+        lonp = np.radians(self.LonP)
+        coslonp = np.cos(lonp)
+        sinlonp = np.sin(lonp)
+        cosphip = np.cos(phip)
+        sinphip = np.sin(phip)
         
-        # Near zone computation
-        psi_0 = np.sqrt( (np.cos(phip) * np.radians(self.dphi)  * np.radians(self.dlam)) * 1 / np.pi )
-        s_0 = earth['radius'] * psi_0
-        N_inner = s_0 / self.gamma0 * self.res_anomaly_P['Dg']
+        #### Near zone computation
+        cosphip = np.cos(phip)
+        N_inner = earth()['radius'] / self.gamma0 * np.sqrt(cosphip * np.radians(self.dphi) * np.radians(self.dlam) * 1 / np.pi) * self.res_anomaly_P['Dg']
         
-        # Far zone computation
+        # self.inner = N_inner
+        
+        #### Far zone computation
+        dn = np.round(self.ncols - ncols_P) + 1
+        dm = np.round(self.nrows - nrows_P) + 1
+        n1 = 1
+        n2 = dn
+        
         N_far = np.zeros_like(N_inner)
-
-        # Precompute coordinates for efficiency
-        lon2 = np.radians(self.res_anomaly['lon'].values)  # Full grid longitudes
-        lat2 = np.radians(self.res_anomaly['lat'].values)  # Full grid latitudes
-        Lon2, Lat2 = np.meshgrid(lon2, lat2)  # Full grid mesh
-        
-        # Area element per cell (in m**2)
-        lat1 = Lat2 - np.radians(self.dphi) / 2
-        lat2 = Lat2 + np.radians(self.dphi) / 2
-        lon1 = Lon2 - np.radians(self.dlam) / 2
-        lon2 = Lon2 + np.radians(self.dlam) / 2
-        dA = earth['radius']**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
-        
-        for i in range(self.nrows):
-            for j in range(self.ncols):
-                # Computation point
-                lon1 = lambdap[i, j]
-                lat1 = phip[i, j]
+        for i in tqdm(range(nrows_P), desc='Computing far zone contribution'):
+            m1 = 1
+            m2 = dm
+            for j in range(ncols_P):
+                smallDg  = self.res_anomaly['Dg'].values[n1:n2, m1:m2]  
+                smallphi = np.radians(self.Lat[n1:n2, m1:m2]) 
+                smalllon = np.radians(self.Lon[n1:n2, m1:m2])  
                 
-                # Spherical distance to all points in full grid
-                sd = haversine(lon1, lat1, Lon2, Lat2, r=1.0, unit='rad')
-
-                cos_psi = np.sin(lat1) * np.sin(lat2) + np.cos(lat1) * np.cos(lat2) * np.cos(lon1 - lon2)
-                psi = np.arccos(np.clip(cos_psi, -1, 1))  # Ensure numerical stability
-
-                # Apply spherical cap
-                mask = sd <= np.radians(self.sph_cap)
-                psi = sd[mask]
-                if not np.any(mask):  # Skip if no points within cap
-                    continue
+                # Surface area on the sphere
+                lat1 = smallphi - np.radians(self.dphi) / 2
+                lat2 = smallphi + np.radians(self.dphi) / 2
+                lon1 = smalllon - np.radians(self.dlam) / 2
+                lon2 = smalllon + np.radians(self.dlam) / 2
+                A_k  = earth()['radius']**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
                 
-                # Stokes function
-                S_k = self._stokes_function(psi)
                 
-                # Far zone contribution
-                dg_subset = self.res_anomaly['Dg'].values[mask]
-                dA_subset = dA[mask]
-                N_far[i, j] = np.nansum(S_k * dg_subset * dA_subset) / (4 * np.pi * self.gamma0[i, j] * earth['radius'])
+                cos_dlam = np.cos(smalllon * coslonp[i,j]) + np.sin(smalllon * sinlonp[i,j])
+                cos_psi  = sinphip[i,j] * np.sin(smallphi) + cosphip[i,j] * np.cos(smallphi) * cos_dlam
+                sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) * np.sin( (phip[i,j] - smallphi) / 2 ) + \
+                    np.sin( (lonp[i,j] - smalllon) / 2 ) * np.sin( (lonp[i,j] - smalllon) / 2 ) * cosphip[i,j] * np.cos(smallphi)
+                    
+                # Stokes' function
+                S_k = 1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2)
+                S_k[np.isinf(S_k) | (sin2_psi_2 == 0)] = 0  # Handle infinities and zero distances
+                
+                # Spherical distance
+                sd = haversine(lonp[i, j], phip[i, j], smalllon, smallphi, r=1.0, unit='rad')
+                # Mask points outside the spherical cap
+                sd[sd > self.sph_cap] = np.nan
+                # Find the index of all NaN values in sd
+                mask = ~np.isnan(sd)
+                S_k = S_k[mask]
+                
+                c_k = A_k.flatten() * S_k
+                
+                # Set all NaN values to 0
+                c_k[np.isnan(c_k)] = 0
+                
+                N_far[i, j] = np.sum(c_k * smallDg.flatten()) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
+                
+                m1 += 1
+                m2 += 1
+            n1 += 1
+            n2 += 1
         
-        # Total geoid undulation
-        N = N_inner + N_far
+        return N_inner + N_far
+        
+        
+        
+    
+    def stokes_function(self, psi: np.ndarray) -> np.ndarray:
+        '''
+        Compute Stokes' function matching MATLAB's implementation in Stokes_small.m.
 
-        return N
+        Parameters
+        ----------
+        psi       : Spherical distance in radians
+
+        Returns
+        -------
+        S_k       : Stokes' function values
+        '''
+        # Compute auxiliary quantity: sin^2(psi/2)
+        sin2_psi_2 = np.sin(psi / 2)**2  # Matches MATLAB's sin((...)/2).^2
+        
+        # Compute cos(psi) for consistency with MATLAB
+        cos_psi = np.cos(psi)
+        
+        # Stokes' function as per MATLAB
+        S_k = (1.0 / np.sqrt(sin2_psi_2) - 
+            6.0 * np.sqrt(sin2_psi_2) + 
+            1.0 - 
+            5.0 * cos_psi - 
+            3.0 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2))
+        
+        # Handle singularities (Inf to NaN, as in MATLAB)
+        S_k[np.isinf(S_k)] = np.nan
+        
+        return S_k
     
     def _stokes_function(self, psi: np.ndarray) -> np.ndarray:
         '''
