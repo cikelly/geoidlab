@@ -36,8 +36,9 @@ class MATLABIO():
         None
         '''
         data = loadmat(self.filename)
-
         keys = [key for key in data.keys() if not key.startswith('__')]
+        lat = None
+        lon = None
 
         for key in keys:
             if 'lat' in key.lower():
@@ -68,6 +69,8 @@ class MATLABIO():
         '''
         data = h5py.File(self.filename)
         keys = [key for key in data.keys() if not key.startswith('__')]
+        lat = None
+        lon = None
 
         for key in keys:
             if 'lat' in key.lower():
@@ -92,6 +95,35 @@ class MATLABIO():
         self.lon = lon
         self.lat = lat
         self.data_vars = data_vars
+        
+    def read_single_variable(self) -> None:
+        '''
+        Read a MAT file with a single variable
+        
+        Returns
+        -------
+        None
+        '''
+        def _read_v7() -> None:
+            data = h5py.File(self.filename, 'r')
+            keys = [key for key in data.keys() if not key.startswith('__')]
+            if len(keys) == 1:
+                self.data = data[keys[0]][:]
+            else:
+                raise ValueError('Expected a single variable, but found multiple.')
+        
+        def _read_v5() -> None:
+            data = loadmat(self.filename)
+            keys = [key for key in data.keys() if not key.startswith('__')]
+            if len(keys) == 1:
+                self.data = data[keys[0]]
+            else:
+                raise ValueError('Expected a single variable, but found multiple.')
+        
+        try:
+            _read_v7()
+        except OSError:
+            _read_v5()
         
     def _to_xarray(self) -> xr.Dataset:
         '''
@@ -122,7 +154,18 @@ class MATLABIO():
         try:
             self.read_mat_v7()
         except:
-            self.read_mat_v5()
+            try:
+                self.read_mat_v5()
+            except:
+                try:
+                    self.read_single_variable()
+                except OSError as e:
+                    raise e
         
-        return self._to_xarray() if to_xarray else None
+        if self.data is not None:
+            return self.data  # Return single variable directly
+        elif to_xarray:
+            return self._to_xarray()
+        else:
+            return None
         
