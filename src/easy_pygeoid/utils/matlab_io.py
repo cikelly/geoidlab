@@ -14,7 +14,7 @@ class MATLABIO():
     '''
     Class to read and write mat files
     '''
-    def __init__(self, filename) -> None:
+    def __init__(self, filename:str = None, xr_data: xr.Dataset = None, save_filename:str = None) -> None:
         '''
         Initialize
         
@@ -26,7 +26,11 @@ class MATLABIO():
         -------
         None
         '''
+        self.data = None
+        self.xrdata = xr_data
         self.filename = filename
+        self.save_filename = save_filename
+        
     def read_mat_v5(self) -> None:
         '''
         Read version 5 mat file
@@ -168,4 +172,18 @@ class MATLABIO():
             return self._to_xarray()
         else:
             return None
+    
+    def write_mat(self) -> None:
+        '''
+        Write mat file
         
+        Returns
+        -------
+        None
+        '''
+        Lon, Lat = np.meshgrid(self.xrdata.lon.values, self.xrdata.lat.values)
+        
+        data_vars = {'Long': Lon, 'Lat': Lat}
+        for var in self.xrdata.data_vars:
+            data_vars[var] = self.xrdata[var].values
+        savemat(self.save_filename, data_vars)
