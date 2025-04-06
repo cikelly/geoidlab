@@ -24,6 +24,20 @@ DATASET_CONFIG = {
         'fname'      : 'IND',
         'long_name'  : 'Indirect Effect',
     },
+    'rtm': {
+        'var_name'   : 'rtm_anomaly',
+        'units'      : 'mGal',
+        'description': 'Residual Terrain Model (RTM) Gravity Anomalies',
+        'fname'      : 'RTM',
+        'long_name'  : 'Residual Terrain Model Gravity Anomalies',
+    },
+    'zeta': {
+        'var_name'   : 'zeta',
+        'units'      : 'meters',
+        'description': 'Height anomaly due to residual topography',
+        'fname'      : 'zeta',
+        'long_name'  : 'Height anomaly',
+    },
     # Add more datasets as needed
 }
 
