@@ -167,13 +167,13 @@ class TerrainQuantities:
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
 
-        n1 = 1
+        n1 = 0
         n2 = dn
 
         Hp   = self.ori_P['z'].values 
 
         for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
-            m1 = 1
+            m1 = 0
             m2 = dm
             for j in range(ncols_P):
                 smallH = self.ori_topo['z'].values[n1:n2, m1:m2]
@@ -344,14 +344,14 @@ class TerrainQuantities:
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
 
-        n1 = 1
+        n1 = 0
         n2 = dn
         
         Hp     = self.ori_P['z'].values
         Hp_ref = self.ref_P['z'].values
 
         for i in tqdm(range(nrows_P), desc='Computing RTM terrain correction'):
-            m1 = 1
+            m1 = 0
             m2 = dm
             for j in range(ncols_P):
                 smallH     = self.ori_topo['z'].values[n1:n2, m1:m2]
@@ -546,7 +546,7 @@ class TerrainQuantities:
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
 
-        n1 = 1
+        n1 = 0
         n2 = dn
         
         # Normal gravity at the ellipsoid
@@ -556,7 +556,7 @@ class TerrainQuantities:
         Hp   = self.ori_P['z'].values 
 
         for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
-            m1 = 1
+            m1 = 0
             m2 = dm
             for j in range(ncols_P):
                 smallH = self.ori_topo['z'].values[n1:n2, m1:m2]
