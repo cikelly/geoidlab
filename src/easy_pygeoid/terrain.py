@@ -16,6 +16,7 @@ from . import constants
 from .coordinates import geodetic2cartesian
 from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk, compute_ind_chunk
 from .gravity import normal_gravity_somigliana
+from .utils.io import save_to_netcdf
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -30,11 +31,12 @@ class TerrainQuantities:
     def __init__(
         self, 
         ori_topo: xr.Dataset, 
-        ref_topo: xr.Dataset=None, 
-        radius: float=110.,
-        ellipsoid: str='wgs84',
-        bbox_off: float=1.,
-        sub_grid: tuple[float, float, float, float]=None
+        ref_topo: xr.Dataset = None, 
+        radius: float = 110.,
+        ellipsoid: str = 'wgs84',
+        bbox_off: float = 1.,
+        sub_grid: tuple[float, float, float, float] = None,
+        proj_dir: str = None
     ) -> None:
         '''
         Initialize the TerrainQuantities class for terrain modeling
@@ -74,6 +76,7 @@ class TerrainQuantities:
         self.ellipsoid   = ellipsoid
         self.radius      = radius * 1000 # meters
         self.bbox_off    = bbox_off
+        self.proj_dir    = proj_dir
 
         if ori_topo is None and ref_topo is None:
             raise ValueError('At least ori_topo must be provided')
@@ -302,9 +305,20 @@ class TerrainQuantities:
         tc       : Terrain Correction
         '''
         if parallel:
-            return self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress)
+            tc = self.terrain_correction_parallel(chunk_size=chunk_size, progress=progress)
         else:
-            return self.terrain_correction_sequential()
+            tc = self.terrain_correction_sequential()
+        
+        # Save terrain correction
+        save_to_netcdf(
+            data=tc,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='tc',
+            proj_dir=self.proj_dir
+        )
+        
+        return tc
 
     
     def rtm_anomaly_sequential(self) -> np.ndarray:
@@ -518,13 +532,22 @@ class TerrainQuantities:
         dg_RTM        : Residual terrain Model (RTM) gravity anomalies
         '''
         if approximation and tc is None:
-            return self.rtm_anomaly_approximation()[0]
+            dg_RTM = self.rtm_anomaly_approximation()[0]
         elif approximation and tc is not None:
-            return self.rtm_anomaly_approximation(tc=tc)[0]
+            dg_RTM = self.rtm_anomaly_approximation(tc=tc)[0]
         elif parallel:
-            return self.rtm_anomaly_parallel(chunk_size=chunk_size)
+            dg_RTM = self.rtm_anomaly_parallel(chunk_size=chunk_size)
         else:
-            return self.rtm_anomaly_sequential()
+            dg_RTM = self.rtm_anomaly_sequential()
+        
+        save_to_netcdf(
+            data=dg_RTM,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='rtm',
+            proj_dir=self.proj_dir
+        )
+        return dg_RTM
 
 
     def indirect_effect_sequential(self) -> np.ndarray:
@@ -700,9 +723,29 @@ class TerrainQuantities:
         tc       : Terrain Correction
         '''
         if parallel:
-            return self.indirect_effect_parallel(chunk_size=chunk_size, progress=progress)
+            ind, zeta = self.indirect_effect_parallel(chunk_size=chunk_size, progress=progress)
         else:
-            return self.indirect_effect_sequential()
+            ind, zeta = self.indirect_effect_sequential()
+        
+        # Save indirect effect
+        save_to_netcdf(
+            data=ind,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='IND',
+            proj_dir=self.proj_dir
+        )
+        
+        # Save zeta
+        save_to_netcdf(
+            data=zeta,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='zeta',
+            proj_dir=self.proj_dir
+        )
+        
+        return ind, zeta
 
 
     @staticmethod

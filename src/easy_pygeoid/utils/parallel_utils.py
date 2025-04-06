@@ -43,7 +43,7 @@ def compute_tc_chunk(
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
 
     for i in range(row_start, row_end):
-        m1 = 1
+        m1 = 0
         m2 = dm
         
         coslamp_i = coslamp[i, :]
@@ -132,7 +132,7 @@ def compute_rtm_tc_chunk(
     tc_chunk = np.zeros((row_end - row_start, ncols_P))
 
     for i in range(row_start, row_end):
-        m1 = 1
+        m1 = 0
         m2 = dm
         
         coslamp_i = coslamp[i, :]
@@ -226,7 +226,7 @@ def compute_ind_chunk(
     ind_chunk = np.zeros((row_end - row_start, ncols_P))
 
     for i in range(row_start, row_end):
-        m1 = 1
+        m1 = 0
         m2 = dm
         
         coslamp_i = coslamp[i, :]
