@@ -32,8 +32,8 @@ def scatteredInterpolant(
     grid_extent, 
     resolution, 
     resolution_unit='minutes',
-    data_key='Dg'
-) -> np.ndarray:
+    data_key='Dg',
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
     Interpolate scattered data using Delaunay triangulation and linear interpolation.
 
