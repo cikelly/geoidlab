@@ -5,11 +5,13 @@
 ############################################################
 import numpy as np
 import xarray as xr
+import warnings
 
 from .utils.distances import haversine
 from .gravity import normal_gravity_somigliana
 from .constants import earth
 from tqdm import tqdm
+
 
 
 class ResidualGeoid:
@@ -22,7 +24,6 @@ class ResidualGeoid:
         res_anomaly: xr.Dataset,
         sph_cap: float = 1.0,
         sub_grid: tuple[float, float, float, float] = None,
-        bbox_off: float = 1.,
         method:str = 'hk',
         ellipsoid: str = 'wgs84'
     ) -> None:
@@ -55,35 +56,31 @@ class ResidualGeoid:
         6. The residual anomalies should be in mGal
         '''
         
+        if sub_grid is None:
+            raise ValueError('sub_grid must be provided')
+        
+        self.sub_grid = sub_grid
         self.res_anomaly = res_anomaly
         self.sph_cap     = sph_cap
         self.method      = method.lower()
         self.ellipsoid   = ellipsoid
         lon              = self.res_anomaly.lon.values
         lat              = self.res_anomaly.lat.values
-        
-        if sub_grid is None:
-            min_lon = lon.min() - bbox_off
-            max_lon = lon.max() + bbox_off
-            min_lat = lat.min() - bbox_off
-            max_lat = lat.max() + bbox_off
-            self.sub_grid = (min_lon, max_lon, min_lat, max_lat)
-        else:
-            self.sub_grid = sub_grid
-        
-        # Extract sub-grid residual anomalies
-        self.res_anomaly_P = self.res_anomaly.sel(lon=slice(self.sub_grid[0], self.sub_grid[1]), lat=slice(self.sub_grid[2], self.sub_grid[3]))
 
         # Grid size
         self.nrows, self.ncols = self.res_anomaly['Dg'].shape
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
         self.dphi = (max(lat) - min(lat)) / (self.nrows - 1)
         
+        # Extract sub-grid residual anomalies
+        self.res_anomaly_P = self.res_anomaly.sel(lon=slice(self.sub_grid[0], self.sub_grid[1]), lat=slice(self.sub_grid[2], self.sub_grid[3]))
+        
         # Calculate normal gravity at the ellipsoid
         self.LonP, LatP = np.meshgrid(self.res_anomaly_P['lon'], self.res_anomaly_P['lat'])  
+        self.LatP = LatP
         self.gamma0 = normal_gravity_somigliana(phi=LatP, ellipsoid=self.ellipsoid)
         self.gamma0 *= 1e5
-        self.LatP = LatP
+        
         
         self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
     
@@ -100,20 +97,21 @@ class ResidualGeoid:
         sinphip = np.sin(phip)
         
         #### Near zone computation
-        cosphip = np.cos(phip)
+        # cosphip = np.cos(phip)
         N_inner = earth()['radius'] / self.gamma0 * np.sqrt(cosphip * np.radians(self.dphi) * np.radians(self.dlam) * 1 / np.pi) * self.res_anomaly_P['Dg']
         
-        # self.inner = N_inner
+        self.inner = N_inner
         
         #### Far zone computation
         dn = np.round(self.ncols - ncols_P) + 1
         dm = np.round(self.nrows - nrows_P) + 1
-        n1 = 1
+        n1 = 0
         n2 = dn
         
         N_far = np.zeros_like(N_inner)
+        
         for i in tqdm(range(nrows_P), desc='Computing far zone contribution'):
-            m1 = 1
+            m1 = 0
             m2 = dm
             for j in range(ncols_P):
                 smallDg  = self.res_anomaly['Dg'].values[n1:n2, m1:m2]  
@@ -126,36 +124,42 @@ class ResidualGeoid:
                 lon1 = smalllon - np.radians(self.dlam) / 2
                 lon2 = smalllon + np.radians(self.dlam) / 2
                 A_k  = earth()['radius']**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
-                
-                
-                cos_dlam = np.cos(smalllon * coslonp[i,j]) + np.sin(smalllon * sinlonp[i,j])
+
+                cos_dlam = np.cos(smalllon) * coslonp[i,j] + np.sin(smalllon) * sinlonp[i,j]
                 cos_psi  = sinphip[i,j] * np.sin(smallphi) + cosphip[i,j] * np.cos(smallphi) * cos_dlam
-                sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) * np.sin( (phip[i,j] - smallphi) / 2 ) + \
-                    np.sin( (lonp[i,j] - smalllon) / 2 ) * np.sin( (lonp[i,j] - smalllon) / 2 ) * cosphip[i,j] * np.cos(smallphi)
-                    
-                # Stokes' function
-                S_k = 1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2)
-                S_k[np.isinf(S_k) | (sin2_psi_2 == 0)] = 0  # Handle infinities and zero distances
-                
+                sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
+
+                ### Stokes' function
+                # Set S_k to zero when np.log(np.sqrt(sin2_psi_2) + sin2_psi_2) leads to NaN or 0 values 
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', category=RuntimeWarning)
+                    log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
+                    S_k = np.where(
+                        log_arg <=0, 
+                        0,
+                        1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
+                    )
+                # S_k = 1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2)
+
                 # Spherical distance
-                sd = haversine(lonp[i, j], phip[i, j], smalllon, smallphi, r=1.0, unit='rad')
+                sd = haversine(np.degrees(lonp[i, j]), np.degrees(phip[i, j]), np.degrees(smalllon), np.degrees(smallphi), unit='deg')
                 # Mask points outside the spherical cap
                 sd[sd > self.sph_cap] = np.nan
                 # Find the index of all NaN values in sd
-                mask = ~np.isnan(sd)
-                S_k = S_k[mask]
+                mask = np.isnan(sd)
+                S_k[mask] = np.nan
                 
-                c_k = A_k.flatten() * S_k
+                # print(S_k)
+                c_k = A_k * S_k
                 
-                # Set all NaN values to 0
-                c_k[np.isnan(c_k)] = 0
-                
-                N_far[i, j] = np.sum(c_k * smallDg.flatten()) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
+                N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
                 
                 m1 += 1
                 m2 += 1
             n1 += 1
             n2 += 1
+            self.inner = N_inner
+            self.outer = N_far
         
         return N_inner + N_far
         
