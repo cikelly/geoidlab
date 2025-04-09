@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+from pykrige.ok import OrdinaryKriging
 
 def clean_data(df, key='Dg') -> pd.DataFrame:
     '''
@@ -87,3 +88,69 @@ def scatteredInterpolant(
     data_interp = np.where(np.isnan(data_linear), data_nearest, data_linear)
 
     return Lon, Lat, data_interp.reshape(Lon.shape)
+
+def krigingInterpolant(
+    df,
+    grid_extent,
+    resolution,
+    resolution_unit='minutes',
+    data_key='Dg',
+    variogram_model='spherical',
+    nlags=6
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    '''
+    Interpolate scattered data using Ordinary Kriging.
+
+    Parameters
+    ----------
+    df             : the input DataFrame
+    grid_extent    : the extent of the grid (lon_min, lon_max, lat_min, lat_max)
+    resolution     : the resolution of the grid (in degrees or minutes)
+    resolution_unit: unit of resolution ('degrees', 'minutes', or 'seconds')
+    data_key       : column name containing the data values
+    variogram_model: variogram model for kriging ('linear', 'power', 'gaussian', 'spherical', 'exponential')
+    nlags          : number of lag bins for variogram fitting
+
+    Returns
+    -------
+    Lon           : longitude grid
+    Lat           : latitude grid
+    grid          : the interpolated grid
+    '''
+    # Clean the data
+    df_clean = clean_data(df, key=data_key)
+
+    # Convert resolution to degrees
+    if resolution_unit == 'minutes':
+        resolution = resolution / 60.0
+    elif resolution_unit == 'seconds':
+        resolution = resolution / 3600.0
+    elif resolution_unit == 'degrees':
+        pass
+    else:
+        raise ValueError('resolution_unit must be \'degrees\', \'minutes\', or \'seconds\'')
+
+    # Create grid
+    lon_min, lon_max, lat_min, lat_max = grid_extent
+    lon_grid = np.arange(lon_min, lon_max + resolution, resolution)
+    lat_grid = np.arange(lat_min, lat_max + resolution, resolution)
+    Lon, Lat = np.meshgrid(lon_grid, lat_grid)
+
+    # Extract data
+    lon = df_clean['lon'].values
+    lat = df_clean['lat'].values
+    values = df_clean[data_key].values
+
+    # Perform Kriging
+    ok = OrdinaryKriging(
+        lon,
+        lat,
+        values,
+        variogram_model=variogram_model,
+        nlags=nlags,
+        verbose=False,
+        enable_plotting=False
+    )
+    z, ss = ok.execute('grid', lon_grid, lat_grid)
+
+    return Lon, Lat, z, ss
