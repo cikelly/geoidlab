@@ -569,12 +569,12 @@ class GlobalGeopotentialModel:
                 3. Finally, they obtain the geoid as N = N - N_topo
         '''
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
-        
+
         T = self.disturbing_potential(r_or_R='R') if T is None else T
         gamma0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
-        
+
         # Remove topographic effect if requested
         N_topo = np.zeros_like(N)
         if icgem:
@@ -589,18 +589,6 @@ class GlobalGeopotentialModel:
         N = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
         
         return N
-    
-    def geoid_icgem(self, T=None) -> np.ndarray:
-        '''
-        Compute geoid heights from a GGM using the ICGEM method
-        
-        Notes
-        -----
-        ICGEM computes the reference geoid using two contributions:
-            1. The geoid as computed by `geoid` method (N)
-            2. The contribution of topography (N_topo)
-            3. Finally, they obtain the geoid as N = N - N_topo
-        '''
 
     def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid') -> np.ndarray:
         '''
