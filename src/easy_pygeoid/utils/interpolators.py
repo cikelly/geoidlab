@@ -66,8 +66,10 @@ def scatteredInterpolant(
 
     # Create a grid for interpolation
     lon_min, lon_max, lat_min, lat_max = grid_extent
-    lon_grid = np.arange(lon_min, lon_max + resolution, resolution)
-    lat_grid = np.arange(lat_min, lat_max + resolution, resolution)
+    num_x_points = int((lon_max - lon_min) / resolution) + 1
+    num_y_points = int((lat_max - lat_min) / resolution) + 1
+    lon_grid = np.linspace(lon_min, lon_max, num_x_points)
+    lat_grid = np.linspace(lat_min, lat_max, num_y_points)
 
     # Create a meshgrid for interpolation
     Lon, Lat = np.meshgrid(lon_grid, lat_grid)
