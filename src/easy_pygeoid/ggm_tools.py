@@ -547,13 +547,14 @@ class GlobalGeopotentialModel:
         
         return zeta
     
-    def geoid(self, T=None) -> np.ndarray:
+    def geoid(self, T=None, icgem=False) -> np.ndarray:
         '''
         Geoid heights based on Bruns' method
         
         Parameters
         ----------
         T         : Disturbing potential array (m2/s2)
+        icgem     : Use ICGEM formula which accounts for topographic effect
         
         Returns
         -------
@@ -562,6 +563,10 @@ class GlobalGeopotentialModel:
         Notes
         -----
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.8, p.288
+        2. ICGEM computes the reference geoid using two contributions:
+                1. The geoid as computed by `geoid` method (N)
+                2. The contribution of topography (N_topo)
+                3. Finally, they obtain the geoid as N = N - N_topo
         '''
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
         
@@ -570,10 +575,32 @@ class GlobalGeopotentialModel:
 
         N = T / gamma0
         
+        # Remove topographic effect if requested
+        N_topo = np.zeros_like(N)
+        if icgem:
+            from easy_pygeoid.dtm import DigitalTerrainModel
+            dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
+            H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)
+            N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
+        
+        N -= N_topo
+        
         # Zero-degree term
         N = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
         
         return N
+    
+    def geoid_icgem(self, T=None) -> np.ndarray:
+        '''
+        Compute geoid heights from a GGM using the ICGEM method
+        
+        Notes
+        -----
+        ICGEM computes the reference geoid using two contributions:
+            1. The geoid as computed by `geoid` method (N)
+            2. The contribution of topography (N_topo)
+            3. Finally, they obtain the geoid as N = N - N_topo
+        '''
 
     def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid') -> np.ndarray:
         '''
