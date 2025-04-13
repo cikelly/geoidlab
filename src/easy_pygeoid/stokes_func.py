@@ -10,7 +10,7 @@ from numpy import (
     zeros_like, degrees
 )
 
-from legendre import legendre_poly
+from .legendre import legendre_poly
 
 def stokes(comp_point, int_points) -> tuple:
     '''
@@ -238,7 +238,7 @@ def heck_and_gruninger_psi(psi, psi0, nmax) -> float:
     S_0, _ = stokes_psi(array([psi0]))
     
     # Heck and Gruninger's modification
-    S_hg = S_wg - S_0[0] - S_wg0[0]
+    S_hg = S_wg - (S_0[0] - S_wg0[0])
     
     return S_hg
 
