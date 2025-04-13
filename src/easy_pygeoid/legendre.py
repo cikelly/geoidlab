@@ -4,7 +4,7 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 # from . import constants
-from easy_pygeoid.coordinates import geodetic2spherical
+from .coordinates import geodetic2spherical
 from numba import jit
 from numba_progress import ProgressBar
 
