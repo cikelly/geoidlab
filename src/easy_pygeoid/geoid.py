@@ -84,6 +84,32 @@ class ResidualGeoid:
         
         self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
     
+    def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
+        '''
+        Compute Stokes' function values.
+
+        Parameters
+        ----------
+        sin2_psi_2 : np.ndarray
+            Sine squared of half the spherical distance.
+        cos_psi : np.ndarray
+            Cosine of the spherical distance.
+
+        Returns
+        -------
+        S_k : np.ndarray
+            Stokes' function values.
+        '''
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
+            S_k = np.where(
+                log_arg <= 0,
+                0,
+                1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
+            )
+        return S_k
+
     def compute_geoid(self) -> np.ndarray:
         '''
         Compute the residual geoid height
@@ -130,16 +156,7 @@ class ResidualGeoid:
                 sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
 
                 ### Stokes' function
-                # Set S_k to zero when np.log(np.sqrt(sin2_psi_2) + sin2_psi_2) leads to NaN or 0 values 
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore', category=RuntimeWarning)
-                    log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
-                    S_k = np.where(
-                        log_arg <=0, 
-                        0,
-                        1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
-                    )
-                # S_k = 1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2)
+                S_k = self.stokes_function(sin2_psi_2, cos_psi)
 
                 # Spherical distance
                 sd = haversine(np.degrees(lonp[i, j]), np.degrees(phip[i, j]), np.degrees(smalllon), np.degrees(smallphi), unit='deg')
@@ -149,7 +166,6 @@ class ResidualGeoid:
                 mask = np.isnan(sd)
                 S_k[mask] = np.nan
                 
-                # print(S_k)
                 c_k = A_k * S_k
                 
                 N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
@@ -162,62 +178,3 @@ class ResidualGeoid:
             self.outer = N_far
         
         return N_inner + N_far
-        
-        
-        
-    
-    def stokes_function(self, psi: np.ndarray) -> np.ndarray:
-        '''
-        Compute Stokes' function matching MATLAB's implementation in Stokes_small.m.
-
-        Parameters
-        ----------
-        psi       : Spherical distance in radians
-
-        Returns
-        -------
-        S_k       : Stokes' function values
-        '''
-        # Compute auxiliary quantity: sin^2(psi/2)
-        sin2_psi_2 = np.sin(psi / 2)**2  # Matches MATLAB's sin((...)/2).^2
-        
-        # Compute cos(psi) for consistency with MATLAB
-        cos_psi = np.cos(psi)
-        
-        # Stokes' function as per MATLAB
-        S_k = (1.0 / np.sqrt(sin2_psi_2) - 
-            6.0 * np.sqrt(sin2_psi_2) + 
-            1.0 - 
-            5.0 * cos_psi - 
-            3.0 * cos_psi * np.log(np.sqrt(sin2_psi_2) + sin2_psi_2))
-        
-        # Handle singularities (Inf to NaN, as in MATLAB)
-        S_k[np.isinf(S_k)] = np.nan
-        
-        return S_k
-    
-    def _stokes_function(self, psi: np.ndarray) -> np.ndarray:
-        '''
-        Compute Stokes' function for the given spherical distance psi.
-
-        Parameters
-        ----------
-        psi : spherical distance in radians
-
-        Returns
-        -------
-        S_k : Stokes' function values
-        '''
-        if self.method == 'hk':
-            # Heck and Gruninger's modification
-            S_k = 1 / np.sin(psi / 2) - 6 * np.sin(psi / 2) + 1 - 5 * np.cos(psi) - 3 * np.cos(psi) * np.log(np.sin(psi / 2) + np.sin(psi / 2)**2)
-        elif self.method == 'wg':
-            # Wong and Gore's modification
-            S_k = 1 / np.sin(psi / 2) - 6 * np.sin(psi / 2) + 1 - 5 * np.cos(psi)
-        elif self.method == 'og':
-            # Original Stokes' function
-            S_k = 1 / np.sin(psi / 2) - 6 * np.sin(psi / 2) + 1 - 5 * np.cos(psi) - 3 * np.cos(psi) * np.log(np.sin(psi / 2))
-        else:
-            raise ValueError(f"Unknown method: {self.method}")
-
-        return S_k
