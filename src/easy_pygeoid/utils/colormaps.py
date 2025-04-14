@@ -4,6 +4,10 @@
 # Author: Caleb Kelly  (2025)                              #
 ############################################################
 
+# parula_cmap colormap is based on MATLAB's "parula" colormap.
+# MATLAB (R) is a registered trademark of The MathWorks, Inc.
+# See: https://www.mathworks.com/help/matlab/ref/colormap.html
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -11,6 +15,11 @@ from matplotlib.colors import LinearSegmentedColormap
 def parula_cmap(reverse=False) -> LinearSegmentedColormap:
     '''
     Create MATLAB's parula colormap
+    
+    Parameters
+    ----------
+    reverse   : bool
+                If True, reverse the colormap.
     '''
     parula_colors = np.array([
     [0.2081, 0.1663, 0.5292], [0.2116, 0.1898, 0.5777], [0.2123, 0.2138, 0.6270], [0.2081, 0.2386, 0.6771],
