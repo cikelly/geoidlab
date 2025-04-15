@@ -10,6 +10,7 @@ import warnings
 from .utils.distances import haversine
 from .gravity import normal_gravity_somigliana
 from .constants import earth
+from .stokes_func import Stokes
 from tqdm import tqdm
 
 
@@ -25,7 +26,8 @@ class ResidualGeoid:
         sph_cap: float = 1.0,
         sub_grid: tuple[float, float, float, float] = None,
         method:str = 'hk',
-        ellipsoid: str = 'wgs84'
+        ellipsoid: str = 'wgs84',
+        nmax: int = None,
     ) -> None:
         '''
         Initialize the ResidualGeoid class.
@@ -40,6 +42,7 @@ class ResidualGeoid:
                         'hk' for Heck and Gruninger's modification
                         'wg' for Wong and Gore's modification
                         'og' for original Stokes' function
+                        'ml' for Meissl's modification
         ellipsoid  : reference ellipsoid for normal gravity calculation
                     
         Returns
@@ -64,6 +67,7 @@ class ResidualGeoid:
         self.sph_cap     = sph_cap
         self.method      = method.lower()
         self.ellipsoid   = ellipsoid
+        self.nmax        = nmax
         lon              = self.res_anomaly.lon.values
         lat              = self.res_anomaly.lat.values
 
@@ -83,6 +87,49 @@ class ResidualGeoid:
         
         
         self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
+        
+        # Initialize Stokes object
+        self.stokes_calculator = Stokes(psi0=np.radians(self.sph_cap), nmax=self.nmax)
+    
+    def stokes_kernel(self, sin2_psi_2, cos_psi) -> np.ndarray:
+        '''
+        Compute Stokes' kernel based on the selected method
+        
+        Parameters
+        ----------
+        sin2_psi_2 : sin²(ψ/2) values
+        cos_psi    : cos(ψ) values
+        
+        Returns
+        -------
+        S_k : Stokes' kernel values
+        '''
+        # Calculate spherical distance from sin2_psi_2 and set psi in Stokes calculator object
+        self.stokes_calculator.psi = 2 * np.arcsin(np.sqrt(sin2_psi_2))
+        
+        # Handle any numerical issues
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            
+            if self.method == 'og':
+                # Original Stokes function
+                S_k, _ = self.stokes_calculator.stokes_psi()
+            elif self.method == 'wg':
+                # Wong and Gore's modification
+                S_k = self.stokes_calculator.wong_and_gore_psi()
+            elif self.method == 'hk':
+                # Heck and Gruninger's modification
+                S_k = self.stokes_calculator.heck_and_gruninger_psi()
+            elif self.method == 'ml':
+                # Meissl's modification
+                S_k = self.stokes_calculator.meissl_psi()
+            else:
+                raise ValueError(f"Unknown method: {self.method}")
+                
+            # Handle any NaN values
+            S_k = np.nan_to_num(S_k, nan=0.0)
+            
+        return S_k
     
     def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
         '''
@@ -156,7 +203,9 @@ class ResidualGeoid:
                 sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
 
                 ### Stokes' function
-                S_k = self.stokes_function(sin2_psi_2, cos_psi)
+                # S_k = self.stokes_function(sin2_psi_2, cos_psi)
+                # Compute Stokes' kernel using the appropriate method
+                S_k = self.stokes_kernel(sin2_psi_2, cos_psi)
 
                 # Spherical distance
                 sd = haversine(np.degrees(lonp[i, j]), np.degrees(phip[i, j]), np.degrees(smalllon), np.degrees(smallphi), unit='deg')
