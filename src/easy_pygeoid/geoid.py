@@ -6,11 +6,12 @@
 import numpy as np
 import xarray as xr
 import warnings
+import bottleneck as bn
 
 from .utils.distances import haversine
 from .gravity import normal_gravity_somigliana
 from .constants import earth
-from .stokes_func import Stokes
+from .stokes_func import Stokes4ResidualGeoid
 from tqdm import tqdm
 
 
@@ -25,7 +26,7 @@ class ResidualGeoid:
         res_anomaly: xr.Dataset,
         sph_cap: float = 1.0,
         sub_grid: tuple[float, float, float, float] = None,
-        method:str = 'hk',
+        method:str = 'hg',
         ellipsoid: str = 'wgs84',
         nmax: int = None,
     ) -> None:
@@ -89,9 +90,9 @@ class ResidualGeoid:
         self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
         
         # Initialize Stokes object
-        self.stokes_calculator = Stokes(psi0=np.radians(self.sph_cap), nmax=self.nmax)
+        # self.stokes_calculator = Stokes(psi0=np.radians(self.sph_cap), nmax=self.nmax)
     
-    def stokes_kernel(self, sin2_psi_2, cos_psi) -> np.ndarray:
+    def stokes_kernel(self) -> np.ndarray:
         '''
         Compute Stokes' kernel based on the selected method
         
@@ -104,8 +105,6 @@ class ResidualGeoid:
         -------
         S_k : Stokes' kernel values
         '''
-        # Calculate spherical distance from sin2_psi_2 and set psi in Stokes calculator object
-        self.stokes_calculator.psi = 2 * np.arcsin(np.sqrt(sin2_psi_2))
         
         # Handle any numerical issues
         with warnings.catch_warnings():
@@ -113,16 +112,16 @@ class ResidualGeoid:
             
             if self.method == 'og':
                 # Original Stokes function
-                S_k, _ = self.stokes_calculator.stokes_psi()
+                S_k, _ = self.stokes_calculator.stokes()
             elif self.method == 'wg':
                 # Wong and Gore's modification
-                S_k = self.stokes_calculator.wong_and_gore_psi()
-            elif self.method == 'hk':
+                S_k = self.stokes_calculator.wong_and_gore()
+            elif self.method == 'hg':
                 # Heck and Gruninger's modification
-                S_k = self.stokes_calculator.heck_and_gruninger_psi()
+                S_k = self.stokes_calculator.heck_and_gruninger()
             elif self.method == 'ml':
                 # Meissl's modification
-                S_k = self.stokes_calculator.meissl_psi()
+                S_k = self.stokes_calculator.meissl()
             else:
                 raise ValueError(f"Unknown method: {self.method}")
                 
@@ -131,31 +130,31 @@ class ResidualGeoid:
             
         return S_k
     
-    def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
-        '''
-        Compute Stokes' function values.
+    # def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
+    #     '''
+    #     Compute Stokes' function values.
 
-        Parameters
-        ----------
-        sin2_psi_2 : np.ndarray
-            Sine squared of half the spherical distance.
-        cos_psi : np.ndarray
-            Cosine of the spherical distance.
+    #     Parameters
+    #     ----------
+    #     sin2_psi_2 : np.ndarray
+    #         Sine squared of half the spherical distance.
+    #     cos_psi : np.ndarray
+    #         Cosine of the spherical distance.
 
-        Returns
-        -------
-        S_k : np.ndarray
-            Stokes' function values.
-        '''
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=RuntimeWarning)
-            log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
-            S_k = np.where(
-                log_arg <= 0,
-                0,
-                1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
-            )
-        return S_k
+    #     Returns
+    #     -------
+    #     S_k : np.ndarray
+    #         Stokes' function values.
+    #     '''
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore', category=RuntimeWarning)
+    #         log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
+    #         S_k = np.where(
+    #             log_arg <= 0,
+    #             0,
+    #             1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
+    #         )
+    #     return S_k
 
     def compute_geoid(self) -> np.ndarray:
         '''
@@ -173,7 +172,7 @@ class ResidualGeoid:
         # cosphip = np.cos(phip)
         N_inner = earth()['radius'] / self.gamma0 * np.sqrt(cosphip * np.radians(self.dphi) * np.radians(self.dlam) * 1 / np.pi) * self.res_anomaly_P['Dg']
         
-        self.inner = N_inner
+        # self.inner = N_inner
         
         #### Far zone computation
         dn = np.round(self.ncols - ncols_P) + 1
@@ -182,6 +181,8 @@ class ResidualGeoid:
         n2 = dn
         
         N_far = np.zeros_like(N_inner)
+        
+        psi0 = np.radians(self.sph_cap)
         
         for i in tqdm(range(nrows_P), desc='Computing far zone contribution'):
             m1 = 0
@@ -198,32 +199,42 @@ class ResidualGeoid:
                 lon2 = smalllon + np.radians(self.dlam) / 2
                 A_k  = earth()['radius']**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
 
-                cos_dlam = np.cos(smalllon) * coslonp[i,j] + np.sin(smalllon) * sinlonp[i,j]
-                cos_psi  = sinphip[i,j] * np.sin(smallphi) + cosphip[i,j] * np.cos(smallphi) * cos_dlam
-                sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
+                # cos_dlam = np.cos(smalllon) * coslonp[i,j] + np.sin(smalllon) * sinlonp[i,j]
+                # cos_psi  = sinphip[i,j] * np.sin(smallphi) + cosphip[i,j] * np.cos(smallphi) * cos_dlam
+                # sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
 
                 ### Stokes' function
                 # S_k = self.stokes_function(sin2_psi_2, cos_psi)
                 # Compute Stokes' kernel using the appropriate method
-                S_k = self.stokes_kernel(sin2_psi_2, cos_psi)
-
+                self.stokes_calculator = Stokes4ResidualGeoid(
+                    lonp=lonp[i,j],
+                    latp=phip[i,j],
+                    lon=smalllon.flatten(),
+                    lat=smallphi.flatten(),
+                    psi0=psi0,
+                    nmax=self.nmax
+                )
+                
+                S_k = self.stokes_kernel()
+                S_k = S_k.reshape(smallDg.shape)
+                
                 # Spherical distance
                 sd = haversine(np.degrees(lonp[i, j]), np.degrees(phip[i, j]), np.degrees(smalllon), np.degrees(smallphi), unit='deg')
                 # Mask points outside the spherical cap
                 sd[sd > self.sph_cap] = np.nan
                 # Find the index of all NaN values in sd
-                mask = np.isnan(sd)
-                S_k[mask] = np.nan
+                # mask = np.isnan(sd)
+                S_k[np.isnan(sd)] = np.nan
                 
                 c_k = A_k * S_k
                 
-                N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
+                N_far[i, j] = bn.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
                 
                 m1 += 1
                 m2 += 1
             n1 += 1
             n2 += 1
-            self.inner = N_inner
-            self.outer = N_far
+            # self.inner = N_inner
+            # self.outer = N_far
         
         return N_inner + N_far
