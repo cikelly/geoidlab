@@ -5,9 +5,180 @@
 ############################################################
 
 import numpy as np
+import warnings
 
-from .legendre import legendre_poly
+from .legendre import legendre_poly, legendre_poly_fast
 
+class Stokes4ResidualGeoid:
+    '''
+    Class for Stokes' function and its modifications
+    '''
+    def __init__(
+        self,
+        lonp, 
+        latp, 
+        lon, 
+        lat,
+        psi0=None, 
+        nmax=None
+    ) -> None:
+        '''
+        Initialize the Stokes class.
+        
+        Parameters
+        ----------
+        comp_point : array-like, shape (2,)
+                       [lon, lat] of computation point in radians
+        int_points : array-like, shape (n, 2)
+                       [lon, lat] of integration points in radians
+        psi0       : float, spherical distance of the spherical cap in radians
+        nmax       : int, maximum degree of expansion
+        
+        Returns
+        -------
+        None
+        '''
+        self.lonp = np.asarray(lonp)
+        self.latp = np.asarray(latp)
+        self.lon  = np.asarray(lon)
+        self.lat  = np.asarray(lat)
+        self.psi0 = psi0
+        self.nmax = nmax
+    
+    def stokes(self, custom=False, lonp=None, latp=None, lon=None, lat=None) -> tuple:
+        '''
+        Implements the original Stokes' kernel
+        
+        Parameters
+        ----------
+        custom      : bool, optional
+                        If True, use custom custom inputs rather than those in self
+        lonp        : float, optional
+                        Longitude of computation point in radians
+        latp        : float, optional
+                        Latitude of computation point in radians
+        lon         : float, optional
+                        Longitude of integration point in radians
+        lat         : float, optional
+                        Latitude of integration point in radians
+        
+        Returns
+        -------
+        S         : Stokes' function
+        cos_psi   : Cosine of spherical distance
+        '''
+        if custom and (lonp is None or latp is None or lon is None or lat is None):
+                raise ValueError('lonp, latp, lon, and lat must be provided if custom=True')
+            
+        if not custom:
+            lonp, latp, lon, lat = self.lonp, self.latp, self.lon, self.lat
+        
+        cos_dlam   = np.cos(lon) * np.cos(lonp) + np.sin(lon) * np.sin(lonp)
+        cos_psi    = np.sin(latp) * np.sin(lat) + np.cos(latp) * np.cos(lat) * cos_dlam
+        sin2_psi_2 = np.sin((latp - lat)/2)**2 + np.sin((lonp - lon)/2)**2 * np.cos(latp) * np.cos(lat)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
+            S = np.where(
+                log_arg <= 0,
+                0,
+                1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
+            )
+
+        return S, cos_psi
+    
+    def wong_and_gore(self) -> np.ndarray:
+        '''
+        Wong and Gore's modification of Stokes' function, vectorized for performance.
+
+        Returns
+        -------
+        S_wg : Wong and Gore's modified Stokes' function
+        '''
+        S, cos_psi = self.stokes()
+        
+        # Compute Legendre polynomials for all points at once
+        Pn_all = legendre_poly_fast(t=cos_psi, nmax=self.nmax)
+        
+        # Coefficients for the sum term
+        coefficients = np.array([(2 * n + 1) / (n - 1) for n in range(2, self.nmax + 1)])
+        
+        # Compute the sum term vectorized across all points
+        sum_term = np.dot(Pn_all[:, 2:], coefficients)
+        
+        # Apply the modification
+        S_wg = S - sum_term
+        
+        return S_wg
+    
+    # def wong_and_gore(self) -> np.ndarray[float]:
+    #     '''
+    #     Wong and Gore's modification of Stokes' function
+        
+    #     Returns
+    #     -------
+    #     S_wg      : Wong and Gore's modification of Stokes' function
+    #     '''
+    #     S, cos_psi = self.stokes()
+        
+    #     # Wong and Gore's modification (Featherstone (2002): Eq. 21)
+    #     S_wg = np.zeros_like(cos_psi)
+        
+    #     # print(cos_psi)
+    #     for i, t in enumerate(cos_psi):
+    #         # print(t)
+    #         # Pn = legendre_poly(t=t, nmax=self.nmax)
+    #         Pn = legendre_poly_numba(t=t, nmax=self.nmax)
+    #         sum_term = 0
+    #         for n in range(2, self.nmax + 1):
+    #             sum_term += (2 * n + 1) / (n - 1) * Pn[n]
+    #         S_wg[i] = S[i] - sum_term
+        
+    #     return S_wg
+    
+    def heck_and_gruninger(self) -> np.ndarray[float]:
+        '''
+        Heck and Gruninger's modification of Stokes' function
+        
+        Returns
+        -------
+        S_hg      : Heck and Gruninger's modification of Stokes' function
+        '''
+        # S, cos_psi = self.stokes()
+        
+        # Wong and Gore
+        S_wg = self.wong_and_gore()
+        
+        # Featherstone (2002): Eq. 26
+        
+        # Stokes' function for a spherical cap (psi_0)
+        S_0, cos_psi_0 = self.stokes(lonp=0, latp=0, lon=0, lat=self.psi0, custom=True)
+        
+        # Wong and Gore for spherical cap (psi_0)
+        Pn = legendre_poly_fast(t=cos_psi_0, nmax=self.nmax)
+        S_wgL = 0
+        for n in range(2, self.nmax + 1):
+            S_wgL += (2 * n + 1) / (n - 1) * Pn[n]
+        
+        # Heck and Gruninger
+        S_hg = S_wg - (S_0 - S_wgL)
+        
+        return S_hg
+    
+    def meissl(self) -> np.ndarray[float]:
+        '''
+        Meissl's modification of Stokes' function
+        
+        Returns
+        -------
+        S_m       : Modified Stokes' function
+        '''
+        S, _ = self.stokes()
+        S_0, _ = self.stokes(lonp=0, latp=0, lon=0, lat=self.psi0, custom=True)
+        
+        return S - S_0
+    
 class Stokes:
     '''
     Class for Stokes' function and its modifications
