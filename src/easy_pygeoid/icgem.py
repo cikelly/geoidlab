@@ -138,8 +138,8 @@ def read_icgem(icgem_file:str, model_dir='downloads'):
     # if not os.path.exists(icgem_file):
     if not icgem_file.exists():
         # print(f'{icgem_file} cannot be found in {os.getcwd()}. Downloading to {model_dir} ...\n')
-        print(f'{icgem_file} cannot be found in {Path.cwd()}. Downloading to {model_dir} ...\n')
-        model_name = icgem_file.split('/')[-1].split('.')[0]
+        model_name = icgem_file.name.split('.')[0]
+        print(f'{model_name+'.gfc'} cannot be found in {Path.cwd()}. Downloading to {model_dir} ...\n')
         download_ggm(model_name)
         # icgem_file = f'{model_dir}' + model_name + '.gfc'
         icgem_file = model_dir / (model_name + '.gfc')
