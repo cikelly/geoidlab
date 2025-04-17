@@ -5,7 +5,7 @@
 ############################################################
 # from . import constants
 from .coordinates import geodetic2spherical
-from numba import jit
+from numba import jit, njit
 from numba_progress import ProgressBar
 
 import numpy as np
@@ -102,12 +102,13 @@ def legendre_poly(theta=None, t=None, nmax=60) -> np.ndarray:
         raise ValueError('Either theta or t must be provided')
     
     if theta is not None:
-        if not -90 <= theta <= 90:
-            raise ValueError('theta must be in the range [-90, 90]')
         t = np.cos(np.radians(theta))
-    elif t is not None:
-        if not -1 <= t <= 1:
-            raise ValueError('t must be in the range [-1, 1]')
+        # if not -90 <= theta <= 90:
+        #     raise ValueError('theta must be in the range [-90, 90]')
+        # t = np.cos(np.radians(theta))
+    # elif t is not None:
+    #     if not -1 <= t <= 1:
+    #         raise ValueError('t must be in the range [-1, 1]')
     
     # t     = np.cos(radians(theta))
     Pn    = np.zeros((nmax+1,))
@@ -119,7 +120,57 @@ def legendre_poly(theta=None, t=None, nmax=60) -> np.ndarray:
     
     return Pn
 
+@njit(parallel=True)
+def leg_poly_numba(t, nmax) -> np.ndarray:
+    Pn = np.zeros(nmax + 1)
+    Pn[0] = 1.0
+    if nmax >= 1:
+        Pn[1] = t
+    for n in range(2, nmax + 1):
+        Pn[n] = ((2 * n - 1) * t * Pn[n-1] - (n - 1) * Pn[n-2]) / n
+    return Pn
 
+def legendre_poly_numba(theta=None, t=None, nmax=60) -> np.ndarray:
+    if theta is not None:
+        t = np.cos(np.radians(theta))
+    return leg_poly_numba(t, nmax)
+
+
+def legendre_poly_fast(theta=None, t=None, nmax=60) -> np.ndarray:
+    '''
+    Compute Legendre polynomials of the First Kind (m=0) for scalar or array inputs.
+
+    Parameters
+    ----------
+    theta     : geodetic latitude (degrees), scalar or array
+    t         : cosine of theta, scalar or array
+    nmax      : maximum degree of expansion
+
+    Returns 
+    -------
+    Pn        : Legendre polynomials, 1D array (nmax+1,) if t is scalar, 
+                2D array (len(t), nmax+1) if t is array
+    '''
+    if theta is None and t is None:
+        raise ValueError('Either theta or t must be provided')
+    
+    if theta is not None:
+        t = np.cos(np.radians(theta))
+    
+    if np.isscalar(t):
+        t = np.array([t])
+    else:
+        t = np.asarray(t)
+    
+    N = len(t)
+    Pn = np.zeros((N, nmax + 1))
+    Pn[:, 0] = 1
+    if nmax >= 1:
+        Pn[:, 1] = t
+    for n in range(2, nmax + 1):
+        Pn[:, n] = ((2 * n - 1) * t * Pn[:, n - 1] - (n - 1) * Pn[:, n - 2]) / n
+    
+    return Pn[0] if N == 1 else Pn
 
 @jit(nopython=True)
 def compute_legendre_chunk(vartheta, n, Pnm) -> np.ndarray:
