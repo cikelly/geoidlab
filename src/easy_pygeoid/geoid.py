@@ -163,10 +163,10 @@ class ResidualGeoid:
         nrows_P, ncols_P = self.res_anomaly_P['Dg'].shape
         phip = np.radians(self.LatP)
         lonp = np.radians(self.LonP)
-        coslonp = np.cos(lonp)
-        sinlonp = np.sin(lonp)
+        # coslonp = np.cos(lonp)
+        # sinlonp = np.sin(lonp)
         cosphip = np.cos(phip)
-        sinphip = np.sin(phip)
+        # sinphip = np.sin(phip)
         
         #### Near zone computation
         # cosphip = np.cos(phip)
@@ -234,7 +234,5 @@ class ResidualGeoid:
                 m2 += 1
             n1 += 1
             n2 += 1
-            # self.inner = N_inner
-            # self.outer = N_far
         
         return N_inner + N_far
