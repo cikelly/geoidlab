@@ -379,19 +379,17 @@ class Interpolators:
         if method is None:
             raise ValueError('No interpolation method specified. Provide \'method\' argument or set \'self.method\'.')
 
-        if method == 'linear':
-            return self.scatteredInterpolant()
-        elif method == 'spline':
-            return self.splineInterpolant()
-        elif method == 'kriging':
-            return self.krigingInterpolant(**kwargs)
-        elif method == 'rbf':
-            return self.rbfInterpolant(**kwargs)
-        elif method == 'idw':
-            return self.idwInterpolant(**kwargs)
-        elif method == 'biharmonic':
-            return self.biharmonicSplineInterpolant(**kwargs)
-        elif method == 'gpr':
-            return self.gprInterpolant(**kwargs)
-        else:
+        method_map = {
+            'linear'    : self.scatteredInterpolant,
+            'spline'    : self.splineInterpolant,
+            'kriging'   : self.krigingInterpolant,
+            'rbf'       : self.rbfInterpolant,
+            'idw'       : self.idwInterpolant,
+            'biharmonic': self.biharmonicSplineInterpolant,
+            'gpr'       : self.gprInterpolant
+        }
+        
+        if method not in method_map:
             raise ValueError(f'Unknown interpolation method: {method}')
+        
+        return method_map[method](**kwargs)
