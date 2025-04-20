@@ -63,7 +63,7 @@ class ResidualGeoid:
         if sub_grid is None:
             raise ValueError('sub_grid must be provided')
         
-        self.sub_grid = sub_grid
+        self.sub_grid    = sub_grid
         self.res_anomaly = res_anomaly
         self.sph_cap     = sph_cap
         self.method      = method.lower()
@@ -88,9 +88,6 @@ class ResidualGeoid:
         
         
         self.Lon, self.Lat = np.meshgrid(self.res_anomaly['lon'], self.res_anomaly['lat'])
-        
-        # Initialize Stokes object
-        # self.stokes_calculator = Stokes(psi0=np.radians(self.sph_cap), nmax=self.nmax)
     
     def stokes_kernel(self) -> np.ndarray:
         '''
@@ -106,55 +103,24 @@ class ResidualGeoid:
         S_k : Stokes' kernel values
         '''
         
+        method_map = {
+            'og': self.stokes_calculator.stokes(),
+            'wg': self.stokes_calculator.wong_and_gore(),
+            'hg': self.stokes_calculator.heck_and_gruninger(),
+            'ml': self.stokes_calculator.meissl()
+        }
+        
+        if self.method not in method_map:
+            raise ValueError(f'Unknown method: {self.method}')
+        
         # Handle any numerical issues
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=RuntimeWarning)
             
-            if self.method == 'og':
-                # Original Stokes function
-                S_k, _ = self.stokes_calculator.stokes()
-            elif self.method == 'wg':
-                # Wong and Gore's modification
-                S_k = self.stokes_calculator.wong_and_gore()
-            elif self.method == 'hg':
-                # Heck and Gruninger's modification
-                S_k = self.stokes_calculator.heck_and_gruninger()
-            elif self.method == 'ml':
-                # Meissl's modification
-                S_k = self.stokes_calculator.meissl()
-            else:
-                raise ValueError(f"Unknown method: {self.method}")
-                
-            # Handle any NaN values
+            S_k = method_map[self.method]
             S_k = np.nan_to_num(S_k, nan=0.0)
             
         return S_k
-    
-    # def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
-    #     '''
-    #     Compute Stokes' function values.
-
-    #     Parameters
-    #     ----------
-    #     sin2_psi_2 : np.ndarray
-    #         Sine squared of half the spherical distance.
-    #     cos_psi : np.ndarray
-    #         Cosine of the spherical distance.
-
-    #     Returns
-    #     -------
-    #     S_k : np.ndarray
-    #         Stokes' function values.
-    #     '''
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter('ignore', category=RuntimeWarning)
-    #         log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
-    #         S_k = np.where(
-    #             log_arg <= 0,
-    #             0,
-    #             1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
-    #         )
-    #     return S_k
 
     def compute_geoid(self) -> np.ndarray:
         '''
@@ -163,16 +129,10 @@ class ResidualGeoid:
         nrows_P, ncols_P = self.res_anomaly_P['Dg'].shape
         phip = np.radians(self.LatP)
         lonp = np.radians(self.LonP)
-        # coslonp = np.cos(lonp)
-        # sinlonp = np.sin(lonp)
         cosphip = np.cos(phip)
-        # sinphip = np.sin(phip)
         
         #### Near zone computation
-        # cosphip = np.cos(phip)
         N_inner = earth()['radius'] / self.gamma0 * np.sqrt(cosphip * np.radians(self.dphi) * np.radians(self.dlam) * 1 / np.pi) * self.res_anomaly_P['Dg']
-        
-        # self.inner = N_inner
         
         #### Far zone computation
         dn = np.round(self.ncols - ncols_P) + 1
@@ -199,13 +159,8 @@ class ResidualGeoid:
                 lon2 = smalllon + np.radians(self.dlam) / 2
                 A_k  = earth()['radius']**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
 
-                # cos_dlam = np.cos(smalllon) * coslonp[i,j] + np.sin(smalllon) * sinlonp[i,j]
-                # cos_psi  = sinphip[i,j] * np.sin(smallphi) + cosphip[i,j] * np.cos(smallphi) * cos_dlam
-                # sin2_psi_2 = np.sin( (phip[i,j] - smallphi) / 2 ) ** 2 + np.sin( (lonp[i,j] - smalllon) / 2 ) ** 2 * cosphip[i,j] * np.cos(smallphi)
-
                 ### Stokes' function
-                # S_k = self.stokes_function(sin2_psi_2, cos_psi)
-                # Compute Stokes' kernel using the appropriate method
+                # Compute Stokes' kernel 
                 self.stokes_calculator = Stokes4ResidualGeoid(
                     lonp=lonp[i,j],
                     latp=phip[i,j],
@@ -222,12 +177,8 @@ class ResidualGeoid:
                 sd = haversine(np.degrees(lonp[i, j]), np.degrees(phip[i, j]), np.degrees(smalllon), np.degrees(smallphi), unit='deg')
                 # Mask points outside the spherical cap
                 sd[sd > self.sph_cap] = np.nan
-                # Find the index of all NaN values in sd
-                # mask = np.isnan(sd)
                 S_k[np.isnan(sd)] = np.nan
-                
                 c_k = A_k * S_k
-                
                 N_far[i, j] = bn.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma0[i, j] * earth()['radius'])
                 
                 m1 += 1
@@ -236,3 +187,31 @@ class ResidualGeoid:
             n2 += 1
         
         return N_inner + N_far
+    
+    
+    ### Old code for reference
+    # def stokes_function(self, sin2_psi_2: np.ndarray, cos_psi: np.ndarray) -> np.ndarray:
+    #     '''
+    #     Compute Stokes' function values.
+
+    #     Parameters
+    #     ----------
+    #     sin2_psi_2 : np.ndarray
+    #         Sine squared of half the spherical distance.
+    #     cos_psi : np.ndarray
+    #         Cosine of the spherical distance.
+
+    #     Returns
+    #     -------
+    #     S_k : np.ndarray
+    #         Stokes' function values.
+    #     '''
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore', category=RuntimeWarning)
+    #         log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
+    #         S_k = np.where(
+    #             log_arg <= 0,
+    #             0,
+    #             1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
+    #         )
+    #     return S_k
