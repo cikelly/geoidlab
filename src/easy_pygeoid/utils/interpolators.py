@@ -342,8 +342,7 @@ class Interpolators:
             from scipy.spatial.distance import pdist
             dists = pdist(self.points)
             median_dist = np.median(dists)
-            # Relax bounds to avoid optimizer hitting limits
-            # kernel = GPR_Constant(1.0, (0.1, 10.0)) * GPR_RBF(length_scale=median_dist, length_scale_bounds=(median_dist/10, median_dist*10))
+        
             if kernel is None:
                 kernel = GPR_Constant(1.0, (1e-6, 1e6)) * GPR_RBF(
                     length_scale=median_dist, 
