@@ -1,7 +1,7 @@
 gdal
 numpy
 requests
-python
+python<=3.12
 tqdm
 beautifulsoup4
 xarray
@@ -15,6 +15,7 @@ gdal>=3.8
 rasterio
 rioxarray
 bottleneck
+scikit-learn
 # dask
 # dask[complete]
 # wget
