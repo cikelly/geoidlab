@@ -9,7 +9,10 @@ import pandas as pd
 
 from scipy.spatial import Delaunay
 from scipy.interpolate import (
-    LinearNDInterpolator, NearestNDInterpolator, CloughTocher2DInterpolator, Rbf
+    LinearNDInterpolator, 
+    NearestNDInterpolator, 
+    CloughTocher2DInterpolator, 
+    Rbf
 )
 from typing import Union
 
