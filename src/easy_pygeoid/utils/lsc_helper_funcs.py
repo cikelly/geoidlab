@@ -256,7 +256,7 @@ def lsc_exponential(
 
     if use_chunking:
         # Process in chunks with parallel computation
-        def compute_chunk_covariance(start_idx, end_idx):
+        def compute_chunk_covariance(start_idx, end_idx) -> np.ndarray:
             chunk_X = X[start_idx:end_idx]
             chunk_Y = Y[start_idx:end_idx]
             s2 = (chunk_X[:, None] - X[None, :])**2 + (chunk_Y[:, None] - Y[None, :])**2
@@ -275,7 +275,7 @@ def lsc_exponential(
         Czz = np.vstack(Czz_chunks)
         
         # Compute prediction-to-data distances in parallel chunks
-        def compute_interp_chunk(start_idx, end_idx):
+        def compute_interp_chunk(start_idx, end_idx) -> np.ndarray:
             chunk_Xi = Xi[start_idx:end_idx]
             chunk_Yi = Yi[start_idx:end_idx]
             s2i = (chunk_Xi[:, None] - X[None, :])**2 + (chunk_Yi[:, None] - Y[None, :])**2
@@ -373,7 +373,7 @@ def lsc_gaussian(
 
     if use_chunking:
         # Process in chunks with parallel computation
-        def compute_chunk_covariance(start_idx, end_idx):
+        def compute_chunk_covariance(start_idx, end_idx) -> np.ndarray:
             chunk_X = X[start_idx:end_idx]
             chunk_Y = Y[start_idx:end_idx]
             s2 = (chunk_X[:, None] - X[None, :])**2 + (chunk_Y[:, None] - Y[None, :])**2
@@ -391,7 +391,7 @@ def lsc_gaussian(
         Czz = np.vstack(Czz_chunks)
         
         # Compute prediction-to-data distances in parallel chunks
-        def compute_interp_chunk(start_idx, end_idx):
+        def compute_interp_chunk(start_idx, end_idx) -> np.ndarray:
             chunk_Xi = Xi[start_idx:end_idx]
             chunk_Yi = Yi[start_idx:end_idx]
             s2i = (chunk_Xi[:, None] - X[None, :])**2 + (chunk_Yi[:, None] - Y[None, :])**2
