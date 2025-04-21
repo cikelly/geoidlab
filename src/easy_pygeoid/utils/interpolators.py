@@ -500,6 +500,7 @@ class Interpolators:
         n_jobs: int = -1,
         chunk_size: Optional[int] = 1000,
         cache_dir: Optional[str] = None,
+        use_chunking: bool = True,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float]:
         '''
@@ -512,6 +513,7 @@ class Interpolators:
         n_jobs           : Number of parallel jobs (-1 for all cores)
         chunk_size       : Size of chunks for parallel processing (default: 1000)
         cache_dir        : Directory to store cached computations (None for no caching)
+        use_chunking     : Whether to process data in chunks (default: True)
         **kwargs         : Additional parameters including:
                           covariance_model : Covariance model ('exp' or 'gaus')
                           C0              : Variance parameter (fitted if None)
@@ -569,7 +571,7 @@ class Interpolators:
                     from .lsc_helper_funcs import compute_spatial_covariance_robust as compute_cov
                 else:
                     from .lsc_helper_funcs import compute_spatial_covariance as compute_cov
-                covariance, covdist = compute_cov(lon, lat, values, chunk_size=chunk_size)
+                covariance, covdist = compute_cov(lon, lat, values, chunk_size=chunk_size, use_chunking=use_chunking)
                 if covariance_model == 'exp':
                     C0, D = fit_exponential_covariance(lon, lat, values, covariance, covdist)
                 elif covariance_model == 'gaus':
@@ -590,10 +592,10 @@ class Interpolators:
         try:
             if covariance_model == 'exp':
                 zz = lsc_exponential(Xi, Yi, lon, lat, C0, D, N, values, 
-                                   n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir)
+                                   n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir, use_chunking=use_chunking)
             elif covariance_model == 'gaus':
                 zz = lsc_gaussian(Xi, Yi, lon, lat, C0, D, N, values,
-                                n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir)
+                                n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir, use_chunking=use_chunking)
         except Exception as e:
             if fall_back_on_error:
                 if self.verbose:
