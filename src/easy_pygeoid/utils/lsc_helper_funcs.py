@@ -85,7 +85,9 @@ def compute_spatial_covariance_robust(
                 if len(vals) > 0:
                     covariance[bin_idx] += np.median(vals)
                     ncov[bin_idx] += 1
-    covariance = np.where(ncov > 0, covariance / ncov, 0)
+    # Add a small epsilon to avoid division by zero
+    epsilon = 1e-12
+    covariance = np.where(ncov > 0, covariance / (ncov + epsilon), 0)
     covdist = np.arange(n_bins) * ds
     return covariance, covdist
 
