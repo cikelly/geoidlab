@@ -23,7 +23,7 @@ from scipy.interpolate import (
     Rbf
 )
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 
 # from sklearn.gaussian_process import GaussianProcessRegressor
 # from sklearn.gaussian_process.kernels import RBF as GPR_RBF, ConstantKernel as GPR_Constant
@@ -288,6 +288,10 @@ class Interpolators:
         Lat      : 2D array of latitude coordinates
         data_rbf : 2D array of interpolated values
         '''
+        valid_funcs = ['linear', 'cubic', 'quintic', 'thin_plate', 'gaussian', 'inverse', 'multiquadric']
+        if function not in valid_funcs:
+            raise ValueError(f'Invalid function type: {function}. Valid functions: {valid_funcs}.')
+        
         if epsilon is None:
             # Estimate average spacing between points
             from scipy.spatial.distance import pdist
@@ -489,27 +493,39 @@ class Interpolators:
         
         return method_map[method](**kwargs)
     
-    def lscInterpolant(self, N=None, robust_covariance=False, **kwargs) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float]:
+    def lscInterpolant(
+        self, 
+        N=None, 
+        robust_covariance=False, 
+        n_jobs: int = -1,
+        chunk_size: Optional[int] = 1000,
+        cache_dir: Optional[str] = None,
+        **kwargs
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float]:
         '''
-        Least Squares Collocation interpolation.
+        Least Squares Collocation interpolation with parallel processing and memory optimization.
         
         Parameters
         ----------
-        covariance_model   : Covariance model ('exp' or 'gaus')
-        C0                 : Variance parameter (fitted if None)
-        D                  : Correlation length parameter (fitted if None)
-        N                  : Noise variance array (default: 1e-6 for all points)
-        robust_covariance  : Use robust (median-based) empirical covariance estimation
-        fall_back_on_error : If True, fall back to nearest neighbor interpolation on error
-            
+        N                 : Noise variance array (default: 1e-6 for all points)
+        robust_covariance : Use robust (median-based) empirical covariance estimation
+        n_jobs           : Number of parallel jobs (-1 for all cores)
+        chunk_size       : Size of chunks for parallel processing (default: 1000)
+        cache_dir        : Directory to store cached computations (None for no caching)
+        **kwargs         : Additional parameters including:
+                          covariance_model : Covariance model ('exp' or 'gaus')
+                          C0              : Variance parameter (fitted if None)
+                          D               : Correlation length parameter (fitted if None)
+                          fall_back_on_error : If True, fall back to nearest neighbor interpolation on error
+                
         Returns
         -------
-        Lon                : Longitude grid
-        Lat                : Latitude grid
-        data_interp        : Interpolated values (LSC with nearest neighbor extrapolation)
-        raw_lsc            : Raw LSC interpolated values (may contain NaNs)
-        C0                 : Fitted or specified variance parameter
-        D                  : Fitted or specified correlation length parameter
+        Lon             : Longitude grid
+        Lat             : Latitude grid
+        data_interp     : Interpolated values (LSC with nearest neighbor extrapolation)
+        raw_lsc         : Raw LSC interpolated values (may contain NaNs)
+        C0             : Fitted or specified variance parameter
+        D              : Fitted or specified correlation length parameter
         '''
         covariance_model = kwargs.get('covariance_model', 'exp')
         fall_back_on_error = kwargs.get('fall_back_on_error', False)
@@ -553,13 +569,11 @@ class Interpolators:
                     from .lsc_helper_funcs import compute_spatial_covariance_robust as compute_cov
                 else:
                     from .lsc_helper_funcs import compute_spatial_covariance as compute_cov
-                covariance, covdist = compute_cov(lon, lat, values)
+                covariance, covdist = compute_cov(lon, lat, values, chunk_size=chunk_size)
                 if covariance_model == 'exp':
                     C0, D = fit_exponential_covariance(lon, lat, values, covariance, covdist)
                 elif covariance_model == 'gaus':
                     C0, D = fit_gaussian_covariance(lon, lat, values, covariance, covdist)
-                else:
-                    raise NotImplementedError(f'Covariance model \'{covariance_model}\' fitting not implemented yet.')
         except Exception as e:
             if fall_back_on_error:
                 if self.verbose:
@@ -572,14 +586,14 @@ class Interpolators:
                     'Provide C0 and D in kwargs or enable fall_back_on_error.'
                 )
         
-        # Perform LSC
+        # Perform LSC with chunking and parallel processing
         try:
             if covariance_model == 'exp':
-                zz = lsc_exponential(Xi, Yi, lon, lat, C0, D, N, values)
+                zz = lsc_exponential(Xi, Yi, lon, lat, C0, D, N, values, 
+                                   n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir)
             elif covariance_model == 'gaus':
-                zz = lsc_gaussian(Xi, Yi, lon, lat, C0, D, N, values)
-            else:
-                raise NotImplementedError(f'Covariance model \'{covariance_model}\' not implemented yet.')
+                zz = lsc_gaussian(Xi, Yi, lon, lat, C0, D, N, values,
+                                n_jobs=n_jobs, chunk_size=chunk_size, cache_dir=cache_dir)
         except Exception as e:
             if fall_back_on_error:
                 if self.verbose:

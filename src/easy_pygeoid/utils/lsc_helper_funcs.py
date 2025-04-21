@@ -4,43 +4,63 @@ from typing import Union, Tuple, List, Optional
 def compute_spatial_covariance(
     X: np.ndarray, 
     Y: np.ndarray, 
-    G: np.ndarray
+    G: np.ndarray,
+    max_points: Optional[int] = 10000,
+    chunk_size: Optional[int] = 1000
 ) -> Tuple[np.ndarray, np.ndarray]:
     '''
-    Compute empirical covariance of 2D spatial data.
+    Compute empirical covariance of 2D spatial data with memory-efficient chunking.
     
     Parameters
     ----------
-    X         : X coordinates of observations
-    Y         : Y coordinates of observations
-    G         : Observation values
+    X          : X coordinates of observations
+    Y          : Y coordinates of observations
+    G          : Observation values
+    max_points : Maximum number of points to process at once (default: 10000)
+    chunk_size : Size of chunks for processing large datasets (default: 1000)
     
     Returns
     -------
-    covariance: Empirical covariance values
-    covdist   : Corresponding distances
+    covariance : Empirical covariance values
+    covdist    : Corresponding distances
     '''
+    # Subsample if dataset is too large
+    if max_points and len(X) > max_points:
+        idx = np.random.choice(len(X), max_points, replace=False)
+        X = X[idx]
+        Y = Y[idx]
+        G = G[idx]
+    
     smax = np.sqrt((X.max() - X.min())**2 + (Y.max() - Y.min())**2)
     ds = np.sqrt((2 * np.pi * (smax / 2)**2) / len(X))
     n_bins = int(np.round(smax / ds)) + 2
     covariance = np.zeros(n_bins)
     ncov = np.zeros(n_bins)
     
-    # Vectorize distance calculations when possible
-    for i in range(len(G)):
-        dx = X[i] - X
-        dy = Y[i] - Y
-        r = np.sqrt(dx**2 + dy**2)
+    # Process data in chunks
+    n_chunks = int(np.ceil(len(G) / chunk_size))
+    for chunk in range(n_chunks):
+        start_idx = chunk * chunk_size
+        end_idx = min((chunk + 1) * chunk_size, len(G))
         
-        # Skip self-distance
-        mask = (r > 0) & (r < smax)
-        ir = np.round(r[mask] / ds).astype(int)
-        
-        # Only process bins that are within range
-        valid_bins = ir < n_bins
-        if np.any(valid_bins):
-            np.add.at(covariance, ir[valid_bins], G[i] * G[mask][valid_bins])
-            np.add.at(ncov, ir[valid_bins], 1)
+        # Process each point in the chunk
+        for i in range(start_idx, end_idx):
+            dx = X[i] - X
+            dy = Y[i] - Y
+            r = np.sqrt(dx**2 + dy**2)
+            
+            # Skip self-distance
+            mask = (r > 0) & (r < smax)
+            ir = np.round(r[mask] / ds).astype(int)
+            
+            # Only process bins that are within range
+            valid_bins = ir < n_bins
+            if np.any(valid_bins):
+                np.add.at(covariance, ir[valid_bins], G[i] * G[mask][valid_bins])
+                np.add.at(ncov, ir[valid_bins], 1)
+            
+            # Free memory
+            del dx, dy, r, mask, ir
     
     # Add a small epsilon to avoid division by zero
     epsilon = 1e-12
@@ -168,10 +188,22 @@ def fit_gaussian_covariance(X: np.ndarray, Y: np.ndarray, G: np.ndarray,
     return C0, Dbest
 
 
-def lsc_exponential(Xi: np.ndarray, Yi: np.ndarray, X: np.ndarray, Y: np.ndarray, 
-                   C0: float, D: float, N: np.ndarray, G: np.ndarray) -> np.ndarray:
+def lsc_exponential(
+    Xi: np.ndarray, 
+    Yi: np.ndarray, 
+    X: np.ndarray, 
+    Y: np.ndarray, 
+    C0: float, 
+    D: float, 
+    N: np.ndarray, 
+    G: np.ndarray,
+    n_jobs: int = -1,
+    chunk_size: Optional[int] = 1000,
+    cache_dir: Optional[str] = None
+) -> np.ndarray:
     '''
     Perform Least Squares Collocation with exponential covariance model.
+    Includes parallel processing and caching optimizations.
     
     Parameters
     ----------
@@ -183,27 +215,69 @@ def lsc_exponential(Xi: np.ndarray, Yi: np.ndarray, X: np.ndarray, Y: np.ndarray
     D           : Correlation length parameter
     N           : Noise variance for each observation
     G           : Observation values
+    n_jobs      : Number of parallel jobs (-1 for all cores)
+    chunk_size  : Size of chunks for parallel processing
+    cache_dir   : Directory to store cached computations (None for no caching)
         
     Returns
     -------
-    SolG            : Interpolated values at interpolation points
+    SolG        : Interpolated values at interpolation points
     '''
-    # Compute data-to-data distances (observation points)
-    s2 = (X[:, None] - X[None, :])**2 + (Y[:, None] - Y[None, :])**2
-    r = np.sqrt(s2)
-    Czz = C0 * np.exp(-r / D)
+    from joblib import Parallel, delayed, Memory
+    import os
     
-    # Compute prediction-to-data distances (interpolation points to observation points)
-    s2i = (Xi[:, None] - X[None, :])**2 + (Yi[:, None] - Y[None, :])**2
-    ri = np.sqrt(s2i)
-    Csz = C0 * np.exp(-ri / D)
+    # Setup caching if cache_dir is provided
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)
+        memory = Memory(cache_dir, verbose=0)
+        cached_exp = memory.cache(np.exp)
+    else:
+        cached_exp = np.exp
+
+    # Compute or load cached covariance matrix for observation points
+    def compute_chunk_covariance(start_idx, end_idx):
+        chunk_X = X[start_idx:end_idx]
+        chunk_Y = Y[start_idx:end_idx]
+        s2 = (chunk_X[:, None] - X[None, :])**2 + (chunk_Y[:, None] - Y[None, :])**2
+        r = np.sqrt(s2)
+        return C0 * cached_exp(-r / D)
+    
+    # Process observation points in parallel chunks
+    n_obs = len(X)
+    chunk_indices = [(i, min(i + chunk_size, n_obs)) 
+                    for i in range(0, n_obs, chunk_size)]
+    
+    Czz_chunks = Parallel(n_jobs=n_jobs)(
+        delayed(compute_chunk_covariance)(start_idx, end_idx)
+        for start_idx, end_idx in chunk_indices
+    )
+    Czz = np.vstack(Czz_chunks)
     
     # Add noise to diagonal of covariance matrix
     Czz_noise = Czz + np.diag(N)
     
-    # Solve LSC system
-    # Using more stable approach with Cholesky decomposition if possible
+    # Compute prediction-to-data distances in parallel
+    def compute_interp_chunk(start_idx, end_idx):
+        chunk_Xi = Xi[start_idx:end_idx]
+        chunk_Yi = Yi[start_idx:end_idx]
+        s2i = (chunk_Xi[:, None] - X[None, :])**2 + (chunk_Yi[:, None] - Y[None, :])**2
+        ri = np.sqrt(s2i)
+        return C0 * cached_exp(-ri / D)
+    
+    # Process interpolation points in parallel chunks
+    n_interp = len(Xi)
+    interp_indices = [(i, min(i + chunk_size, n_interp)) 
+                     for i in range(0, n_interp, chunk_size)]
+    
+    Csz_chunks = Parallel(n_jobs=n_jobs)(
+        delayed(compute_interp_chunk)(start_idx, end_idx)
+        for start_idx, end_idx in interp_indices
+    )
+    Csz = np.vstack(Csz_chunks)
+    
+    # Solve LSC system with optimized linear algebra
     try:
+        # Try Cholesky decomposition first (more stable)
         L = np.linalg.cholesky(Czz_noise)
         alpha = np.linalg.solve(L, G)
         beta = np.linalg.solve(L.T, alpha)
@@ -211,46 +285,102 @@ def lsc_exponential(Xi: np.ndarray, Yi: np.ndarray, X: np.ndarray, Y: np.ndarray
     except np.linalg.LinAlgError:
         # Fall back to direct solve if Cholesky fails
         SolG = Csz @ np.linalg.solve(Czz_noise, G)
-        
+    
+    # Clear cached computations if using cache
+    if cache_dir:
+        memory.clear()
+    
     return SolG
 
 
-def lsc_gaussian(Xi: np.ndarray, Yi: np.ndarray, X: np.ndarray, Y: np.ndarray, 
-                C0: float, D: float, N: np.ndarray, G: np.ndarray) -> np.ndarray:
+def lsc_gaussian(
+    Xi: np.ndarray, 
+    Yi: np.ndarray, 
+    X: np.ndarray, 
+    Y: np.ndarray, 
+    C0: float, 
+    D: float, 
+    N: np.ndarray, 
+    G: np.ndarray,
+    n_jobs: int = -1,
+    chunk_size: Optional[int] = 1000,
+    cache_dir: Optional[str] = None
+) -> np.ndarray:
     '''
     Perform Least Squares Collocation with Gaussian covariance model.
+    Includes parallel processing and caching optimizations.
     
     Parameters
     ----------
     Xi          : X coordinates of interpolation points
     Yi          : Y coordinates of interpolation points
     X           : X coordinates of observations
-    Y           : Y coordinates of observations
+    Y           : coordinates of observations
     C0          : Variance parameter
     D           : Correlation length parameter
     N           : Noise variance for each observation
     G           : Observation values
+    n_jobs      : Number of parallel jobs (-1 for all cores)
+    chunk_size  : Size of chunks for parallel processing
+    cache_dir   : Directory to store cached computations (None for no caching)
         
     Returns
     -------
     SolG        : Interpolated values at interpolation points
     '''
-    # Compute data-to-data distances
-    s2 = (X[:, None] - X[None, :])**2 + (Y[:, None] - Y[None, :])**2
-    r = np.sqrt(s2)
-    Czz = C0 * np.exp(-(np.log(2) * r**2) / (D**2))
+    from joblib import Parallel, delayed, Memory
+    import os
     
-    # Compute prediction-to-data distances
-    s2i = (Xi[:, None] - X[None, :])**2 + (Yi[:, None] - Y[None, :])**2
-    ri = np.sqrt(s2i)
-    Csz = C0 * np.exp(-(np.log(2) * ri**2) / (D**2))
+    # Setup caching if cache_dir is provided
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)
+        memory = Memory(cache_dir, verbose=0)
+        cached_exp = memory.cache(np.exp)
+    else:
+        cached_exp = np.exp
+
+    # Compute or load cached covariance matrix for observation points
+    def compute_chunk_covariance(start_idx, end_idx):
+        chunk_X = X[start_idx:end_idx]
+        chunk_Y = Y[start_idx:end_idx]
+        s2 = (chunk_X[:, None] - X[None, :])**2 + (chunk_Y[:, None] - Y[None, :])**2
+        return C0 * cached_exp(-(np.log(2) * s2) / (D**2))
+    
+    # Process observation points in parallel chunks
+    n_obs = len(X)
+    chunk_indices = [(i, min(i + chunk_size, n_obs)) 
+                    for i in range(0, n_obs, chunk_size)]
+    
+    Czz_chunks = Parallel(n_jobs=n_jobs)(
+        delayed(compute_chunk_covariance)(start_idx, end_idx)
+        for start_idx, end_idx in chunk_indices
+    )
+    Czz = np.vstack(Czz_chunks)
     
     # Add noise to diagonal of covariance matrix
     Czz_noise = Czz + np.diag(N)
     
-    # Solve LSC system
-    # Using more stable approach with Cholesky decomposition if possible
+    # Compute prediction-to-data distances in parallel
+    def compute_interp_chunk(start_idx, end_idx):
+        chunk_Xi = Xi[start_idx:end_idx]
+        chunk_Yi = Yi[start_idx:end_idx]
+        s2i = (chunk_Xi[:, None] - X[None, :])**2 + (chunk_Yi[:, None] - Y[None, :])**2
+        return C0 * cached_exp(-(np.log(2) * s2i) / (D**2))
+    
+    # Process interpolation points in parallel chunks
+    n_interp = len(Xi)
+    interp_indices = [(i, min(i + chunk_size, n_interp)) 
+                     for i in range(0, n_interp, chunk_size)]
+    
+    Csz_chunks = Parallel(n_jobs=n_jobs)(
+        delayed(compute_interp_chunk)(start_idx, end_idx)
+        for start_idx, end_idx in interp_indices
+    )
+    Csz = np.vstack(Csz_chunks)
+    
+    # Solve LSC system with optimized linear algebra
     try:
+        # Try Cholesky decomposition first (more stable)
         L = np.linalg.cholesky(Czz_noise)
         alpha = np.linalg.solve(L, G)
         beta = np.linalg.solve(L.T, alpha)
@@ -258,5 +388,9 @@ def lsc_gaussian(Xi: np.ndarray, Yi: np.ndarray, X: np.ndarray, Y: np.ndarray,
     except np.linalg.LinAlgError:
         # Fall back to direct solve if Cholesky fails
         SolG = Csz @ np.linalg.solve(Czz_noise, G)
-        
+    
+    # Clear cached computations if using cache
+    if cache_dir:
+        memory.clear()
+    
     return SolG
