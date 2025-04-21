@@ -25,6 +25,12 @@ from scipy.interpolate import (
 
 from typing import Union, Tuple, Optional
 
+import warnings
+warnings.filterwarnings(
+    'ignore', category=RuntimeWarning, 
+    module='multiprocessing.resource_tracker'
+)
+
 # from sklearn.gaussian_process import GaussianProcessRegressor
 # from sklearn.gaussian_process.kernels import RBF as GPR_RBF, ConstantKernel as GPR_Constant
 
