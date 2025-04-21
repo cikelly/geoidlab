@@ -16,6 +16,7 @@ rasterio
 rioxarray
 bottleneck
 scikit-learn
+joblib>=1.3.0
 # dask
 # dask[complete]
-# wget
+
