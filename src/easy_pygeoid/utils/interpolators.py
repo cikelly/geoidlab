@@ -7,6 +7,14 @@
 import numpy as np
 import pandas as pd
 
+from .lsc_helper_funcs import (
+    compute_spatial_covariance,
+    fit_exponential_covariance,
+    fit_gaussian_covariance,
+    lsc_exponential,
+    lsc_gaussian
+)
+
 from scipy.spatial import Delaunay
 from scipy.interpolate import (
     LinearNDInterpolator, 
@@ -14,10 +22,12 @@ from scipy.interpolate import (
     CloughTocher2DInterpolator, 
     Rbf
 )
-from typing import Union
 
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF as GPR_RBF, ConstantKernel as GPR_Constant
+from typing import Union, Tuple
+
+# from sklearn.gaussian_process import GaussianProcessRegressor
+# from sklearn.gaussian_process.kernels import RBF as GPR_RBF, ConstantKernel as GPR_Constant
+
 def clean_data(df, key='Dg') -> pd.DataFrame:
     '''
     Clean the input DataFrame (dropping NaNs and averaging duplicates).
@@ -70,7 +80,8 @@ class Interpolators:
                             'idw'       : inverse distance weighting
                             'biharmonic': biharmonic spline interpolation
                             'gpr'       : Gaussian process regression
-        resolution_unit: unit of resolution ('degrees' or 'minutes')
+                            'lsc'       : Least Squares Collocation
+        resolution_unit: unit of resolution ('degrees' or 'minutes' or 'seconds')
         data_key       : the column name of the data to interpolate (default: 'Dg')
         verbose        : if True, print additional information
         
@@ -84,6 +95,7 @@ class Interpolators:
         self.resolution = resolution
         self.resolution_unit = resolution_unit
         self.data_key = data_key
+        self.verbose = verbose
 
         if self.method is None:
             print('No interpolation method specified. Defaulting to kriging.') if verbose else None
@@ -120,9 +132,13 @@ class Interpolators:
         # if self.method == 'linear' or self.method == 'spline':
         self.neighbor_interp = NearestNDInterpolator(self.points, self.values)
 
-    def scatteredInterpolant(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def scatteredInterpolant(self, merge: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Interpolate scattered data using Delaunay triangulation and linear interpolation.
+        
+        Parameters
+        ----------
+        merge           : If True, merge results with nearest neighbor extrapolation
         
         Returns
         -------
@@ -132,14 +148,20 @@ class Interpolators:
         '''
         interpolator = LinearNDInterpolator(self.tri, self.values)
         data_linear  = interpolator(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
-        data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
-        data_interp  = np.where(np.isnan(data_linear), data_nearest, data_linear)
+
+        if merge:
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            data_linear  = np.where(np.isnan(data_linear), data_nearest, data_linear)
         
-        return self.Lon, self.Lat, data_interp
-    
-    def splineInterpolant(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return self.Lon, self.Lat, data_linear
+
+    def splineInterpolant(self, merge: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Interpolate scattered data using cubic spline-like interpolation (Clough-Tocher).
+        
+        Parameters
+        ----------
+        merge           : If True, merge results with nearest neighbor extrapolation
         
         Returns
         -------
@@ -149,14 +171,17 @@ class Interpolators:
         '''
         interpolator = CloughTocher2DInterpolator(self.tri, self.values, fill_value=np.nan)
         data_cubic   = interpolator(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
-        data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
-        data_interp  = np.where(np.isnan(data_cubic), data_nearest, data_cubic)
+
+        if merge:
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            data_cubic   = np.where(np.isnan(data_cubic), data_nearest, data_cubic)
         
-        return self.Lon, self.Lat, data_interp
-    
+        return self.Lon, self.Lat, data_cubic
+
     def krigingInterpolant(
         self, 
         fall_back_on_error: bool = False, 
+        merge: bool = True,
         **kwargs
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         '''
@@ -165,7 +190,8 @@ class Interpolators:
         Parameters
         ----------
         fall_back_on_error : if True, fall back to default kriging parameters on error
-        kwargs             : additional parameters for OrdinaryKriging
+        merge             : If True, merge results with nearest neighbor extrapolation
+        kwargs            : additional parameters for OrdinaryKriging
         
         Returns
         -------
@@ -216,25 +242,27 @@ class Interpolators:
                 signature = inspect.signature(OrdinaryKriging.__init__)
                 for param_name, param in signature.parameters.items():
                     if param_name != 'self':
-                        default = param.default if param.default is not inspect.Parameter.empty else "Required"
-                        print(f"  {param_name:<23}: Default = {default}")
+                        default = param.default if param.default is not inspect.Parameter.empty else 'Required'
+                        print(f'  {param_name:<23}: Default = {default}')
                 
                 raise ValueError(
                     f'Invalid kriging parameter: {str(e)}.'
-                    'Check kwargs against the valid parameters printed above or see https://pykrige.readthedocs.io/"'
+                    'Check kwargs against the valid parameters printed above or see https://pykrige.readthedocs.io/'
                 )
             
         zz, ss       = ok.execute('grid', self.lon_grid, self.lat_grid)
-        z_nearest    = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
-        data_interp  = np.where(np.isnan(zz), z_nearest, zz)
-        # data_interp  = data_interp.reshape(self.Lon.shape)
+
+        if merge:
+            z_nearest    = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            zz           = np.where(np.isnan(zz), z_nearest, zz)
         
-        return self.Lon, self.Lat, data_interp, zz, ss
-    
+        return self.Lon, self.Lat, zz, zz, ss
+
     def rbfInterpolant(
         self, 
         function: str = 'linear', 
         epsilon: float = None,
+        merge: bool = True,
         **kwargs
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
@@ -251,6 +279,7 @@ class Interpolators:
                     'inverse'     : for inverse distance weighting
                     'multiquadric': for multiquadric interpolation
         epsilon  : RBF parameter (default None)
+        merge    : If True, merge results with nearest neighbor extrapolation
         kwargs   : Additional arguments for scipy.interpolate.Rbf
         
         Returns
@@ -267,9 +296,20 @@ class Interpolators:
 
         rbf = Rbf(self.points[:,0], self.points[:,1], self.values, function=function, epsilon=epsilon, **kwargs)
         data_rbf = rbf(self.Lon, self.Lat)
+
+        if merge:
+            from scipy.spatial import Delaunay
+            hull = Delaunay(self.points)
+            mask = hull.find_simplex(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))) >= 0
+            mask = mask.reshape(self.Lon.shape)
+
+            # Blend with nearest neighbor extrapolation
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            data_rbf = np.where(mask, data_rbf, data_nearest)
+
         return self.Lon, self.Lat, data_rbf
 
-    def idwInterpolant(self, power: float = 2.0, eps: float = 1e-12) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def idwInterpolant(self, power: float = 2.0, eps: float = 1e-12, merge: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Interpolate using Inverse Distance Weighting (IDW).
         
@@ -277,6 +317,7 @@ class Interpolators:
         ----------
         power     : Power parameter for IDW (default 2)
         eps       : Small value to avoid division by zero
+        merge     : If True, merge results with nearest neighbor extrapolation
         
         Returns
         -------
@@ -290,13 +331,25 @@ class Interpolators:
         dist = np.sqrt(((xi[:, None, :] - x[None, :, :]) ** 2).sum(axis=2))
         weights = 1.0 / (dist ** power + eps)
         weights /= weights.sum(axis=1, keepdims=True)
-        zi = (weights * z).sum(axis=1)
-        return self.Lon, self.Lat, zi.reshape(self.Lon.shape)
+        zi = (weights * z).sum(axis=1).reshape(self.Lon.shape)
+
+        if merge:
+            from scipy.spatial import Delaunay
+            hull = Delaunay(self.points)
+            mask = hull.find_simplex(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))) >= 0
+            mask = mask.reshape(self.Lon.shape)
+
+            # Blend with nearest neighbor extrapolation
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            zi = np.where(mask, zi, data_nearest)
+
+        return self.Lon, self.Lat, zi
 
     def biharmonicSplineInterpolant(
         self, 
         function: str = 'thin_plate',
         epsilon: float = None,
+        merge: bool = True,
         **kwargs
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
@@ -307,6 +360,7 @@ class Interpolators:
         kwargs          : Additional arguments for scipy.interpolate.Rbf
         kernel          : Kernel function (default None)
         alpha           : Regularization parameter (default 1e-6)
+        merge           : If True, merge results with nearest neighbor extrapolation
         **kwargs        : Additional arguments for scipy.interpolate.Rbf
         
         Returns
@@ -322,37 +376,77 @@ class Interpolators:
         
         rbf = Rbf(self.points[:,0], self.points[:,1], self.values, function=function, epsilon=epsilon, **kwargs)
         data_biharmonic = rbf(self.Lon, self.Lat)
+
+        if merge:
+            from scipy.spatial import Delaunay
+            hull = Delaunay(self.points)
+            mask = hull.find_simplex(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))) >= 0
+            mask = mask.reshape(self.Lon.shape)
+
+            # Blend with nearest neighbor extrapolation
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            data_biharmonic = np.where(mask, data_biharmonic, data_nearest)
+
         return self.Lon, self.Lat, data_biharmonic
 
     def gprInterpolant(
         self, 
         kernel=None, 
-        alpha=1e-10, 
+        alpha=1e-2, 
+        normalize_y=True, 
+        merge: bool = True,
         **kwargs
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         '''
         Interpolate using Gaussian Process Regression (GPR).
+        
         Parameters
         ----------
-        kernel : sklearn.gaussian_process.kernels.Kernel instance (optional)
-        alpha  : Value added to the diagonal of the kernel matrix during fitting
-        kwargs : Additional arguments for GaussianProcessRegressor
+        kernel      : sklearn.gaussian_process.kernels.Kernel instance (optional)
+        alpha       : Regularization parameter (default 1e-2)
+        normalize_y : Whether to normalize the target values (default True)
+        merge       : If True, merge results with nearest neighbor extrapolation
+        kwargs      : Additional arguments for GaussianProcessRegressor
+        
+        Returns
+        -------
+        Lon         : 2D array of longitude coordinates
+        Lat         : 2D array of latitude coordinates
+        predictions : 2D array of interpolated values
         '''
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+        from scipy.spatial.distance import pdist
+
+        # Estimate median distance for kernel initialization
+        median_dist = np.median(pdist(self.points))
         if kernel is None:
-            from scipy.spatial.distance import pdist
-            dists = pdist(self.points)
-            median_dist = np.median(dists)
-        
-            if kernel is None:
-                kernel = GPR_Constant(1.0, (1e-6, 1e6)) * GPR_RBF(
+            kernel = ConstantKernel(
+                1.0, (1e-3, 1e3)) * RBF(
                     length_scale=median_dist, 
-                    length_scale_bounds=(median_dist/1e6, median_dist*1e6)
+                    length_scale_bounds=(median_dist/100, median_dist*10
                 )
-        
-        gpr = GaussianProcessRegressor(kernel=kernel, alpha=alpha, **kwargs)
+            )
+
+        # Initialize and fit GPR
+        gpr = GaussianProcessRegressor(kernel=kernel, alpha=alpha, normalize_y=normalize_y, **kwargs)
         gpr.fit(self.points, self.values)
-        zi, _ = gpr.predict(np.column_stack((self.Lon.ravel(), self.Lat.ravel())), return_std=True)
-        return self.Lon, self.Lat, zi.reshape(self.Lon.shape)
+
+        # Predict
+        predictions, _ = gpr.predict(np.column_stack((self.Lon.ravel(), self.Lat.ravel())), return_std=True)
+        predictions = predictions.reshape(self.Lon.shape)
+
+        if merge:
+            from scipy.spatial import Delaunay
+            hull = Delaunay(self.points)
+            mask = hull.find_simplex(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))) >= 0
+            mask = mask.reshape(self.Lon.shape)
+
+            # Blend with nearest neighbor extrapolation
+            data_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel()))).reshape(self.Lon.shape)
+            predictions = np.where(mask, predictions, data_nearest)
+
+        return self.Lon, self.Lat, predictions
 
     def run(
         self, 
@@ -386,10 +480,119 @@ class Interpolators:
             'rbf'       : self.rbfInterpolant,
             'idw'       : self.idwInterpolant,
             'biharmonic': self.biharmonicSplineInterpolant,
-            'gpr'       : self.gprInterpolant
+            'gpr'       : self.gprInterpolant,
+            'lsc'       : self.lscInterpolant
         }
         
         if method not in method_map:
             raise ValueError(f'Unknown interpolation method: {method}')
         
         return method_map[method](**kwargs)
+    
+    def lscInterpolant(self, N=None, robust_covariance=False, **kwargs) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float]:
+        '''
+        Least Squares Collocation interpolation.
+        
+        Parameters
+        ----------
+        covariance_model   : Covariance model ('exp' or 'gaus')
+        C0                 : Variance parameter (fitted if None)
+        D                  : Correlation length parameter (fitted if None)
+        N                  : Noise variance array (default: 1e-6 for all points)
+        robust_covariance  : Use robust (median-based) empirical covariance estimation
+        fall_back_on_error : If True, fall back to nearest neighbor interpolation on error
+            
+        Returns
+        -------
+        Lon                : Longitude grid
+        Lat                : Latitude grid
+        data_interp        : Interpolated values (LSC with nearest neighbor extrapolation)
+        raw_lsc            : Raw LSC interpolated values (may contain NaNs)
+        C0                 : Fitted or specified variance parameter
+        D                  : Fitted or specified correlation length parameter
+        '''
+        covariance_model = kwargs.get('covariance_model', 'exp')
+        fall_back_on_error = kwargs.get('fall_back_on_error', False)
+        
+        # Validate covariance model
+        valid_models = ['exp', 'gaus']
+        if covariance_model not in valid_models:
+            raise ValueError(f'covariance_model must be one of {valid_models}, got \'{covariance_model}\'.')
+        
+        # Extract coordinates and values
+        lon = self.df_clean['lon'].values
+        lat = self.df_clean['lat'].values
+        values = self.values
+        
+        # Warn if duplicate points are present
+        if self.verbose:
+            coords = np.column_stack((lon, lat))
+            _, idx, counts = np.unique(coords, axis=0, return_index=True, return_counts=True)
+            if np.any(counts > 1):
+                print(f"Warning: {np.sum(counts > 1)} duplicate points detected in input data.")
+        
+        # Use provided noise variance or default
+        if N is None:
+            N = np.ones_like(values) * 1e-6
+        else:
+            N = np.asarray(N)
+            if N.shape != values.shape:
+                raise ValueError(f"Noise variance N must have shape {values.shape}, got {N.shape}")
+        
+        # Grid points
+        Xi = self.Lon.ravel()
+        Yi = self.Lat.ravel()
+        
+        # Fit or use provided covariance parameters
+        C0 = kwargs.get('C0', None)
+        D = kwargs.get('D', None)
+        
+        try:
+            if C0 is None or D is None:
+                if robust_covariance:
+                    from .lsc_helper_funcs import compute_spatial_covariance_robust as compute_cov
+                else:
+                    from .lsc_helper_funcs import compute_spatial_covariance as compute_cov
+                covariance, covdist = compute_cov(lon, lat, values)
+                if covariance_model == 'exp':
+                    C0, D = fit_exponential_covariance(lon, lat, values, covariance, covdist)
+                elif covariance_model == 'gaus':
+                    C0, D = fit_gaussian_covariance(lon, lat, values, covariance, covdist)
+                else:
+                    raise NotImplementedError(f'Covariance model \'{covariance_model}\' fitting not implemented yet.')
+        except Exception as e:
+            if fall_back_on_error:
+                if self.verbose:
+                    print(f'Warning: Failed to fit covariance parameters: {str(e)}. Falling back to default parameters.')
+                C0 = np.var(values)
+                D = np.mean([self.grid_extent[1] - self.grid_extent[0], self.grid_extent[3] - self.grid_extent[2]])
+            else:
+                raise ValueError(
+                    f'Failed to fit covariance parameters: {str(e)}. '
+                    'Provide C0 and D in kwargs or enable fall_back_on_error.'
+                )
+        
+        # Perform LSC
+        try:
+            if covariance_model == 'exp':
+                zz = lsc_exponential(Xi, Yi, lon, lat, C0, D, N, values)
+            elif covariance_model == 'gaus':
+                zz = lsc_gaussian(Xi, Yi, lon, lat, C0, D, N, values)
+            else:
+                raise NotImplementedError(f'Covariance model \'{covariance_model}\' not implemented yet.')
+        except Exception as e:
+            if fall_back_on_error:
+                if self.verbose:
+                    print(f'Warning: LSC computation failed: {str(e)}. Falling back to nearest neighbor interpolation.')
+                zz = self.neighbor_interp(np.column_stack((Xi, Yi)))
+            else:
+                raise ValueError(f'LSC computation failed: {str(e)}.')
+        
+        # Reshape to grid
+        zz = zz.reshape(self.Lon.shape)
+        
+        # Apply nearest neighbor extrapolation for any NaN values
+        z_nearest = self.neighbor_interp(np.column_stack((Xi, Yi))).reshape(self.Lon.shape)
+        data_interp = np.where(np.isnan(zz), z_nearest, zz)
+        
+        return self.Lon, self.Lat, data_interp, zz, C0, D
