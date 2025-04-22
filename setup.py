@@ -2,11 +2,11 @@ from setuptools import setup, find_packages
 
 setup(
     name='easy-pygeoid',
-    version='0.1',
+    version='1.0',
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'compute_geoid=compute_geoid:main',
+            'easy-pygeoid=cli.easy_pygeoid:main',
         ],
     },
 )
