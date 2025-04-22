@@ -1,97 +1,197 @@
 #!/usr/bin/env python3
 import argparse
-
-import sys
 from pathlib import Path
+import sys
 
 # Get the absolute path to the src directory
 src_path = Path(__file__).resolve().parent.parent / 'src'
 sys.path.append(str(src_path))
 
 from easy_pygeoid.dem import dem4geoid
+from easy_pygeoid.geoid import ResidualGeoid
+from easy_pygeoid.ggm_tools import GlobalGeopotentialModel
+from easy_pygeoid.terrain import TerrainQuantities
+from easy_pygeoid.tide import GravityTideSystemConverter
+from easy_pygeoid.utils.interpolators import Interpolators
 
-from src.easy_pygeoid.dem import dem4geoid
-# import matplotlib.pyplot as plt
-
-def compute_geoid(bbox, gravity_data, dem=None, start=None, end=None) -> None:
-    # Download DEM if not provided
+def run_remove_step(args):
+    """Handle the remove step - compute residual gravity anomalies"""
+    # Download DEM if needed
+    dem = args.dem
     if dem is None:
-        print(f'No DEM provided. Downloading SRTM30Plus over {bbox}...')
+        print(f'No DEM provided. Downloading SRTM30Plus over {args.bbox}...')
         try:
-            dem = dem4geoid(bbox=bbox, downloads_dir='downloads')
+            dem = dem4geoid(bbox=args.bbox, downloads_dir='downloads')
         except Exception as e:
             print(f'Download failed. Error: {e}.')
-            return  
+            return None
             
-    # Compute geoid
+    # Convert gravity data to tide-free system if needed
+    grav_conv = GravityTideSystemConverter(path_to_data=args.gravity)
+    grav_data = grav_conv.gravity_mean2free()
+    
+    # Calculate terrain correction
+    tq = TerrainQuantities(
+        ori_topo=dem, 
+        ellipsoid=args.ellipsoid,
+        radius=110,
+        bbox_off=1
+    )
+    tc = tq.terrain_correction()
+    
+    # Calculate residual anomalies 
+    ggm = GlobalGeopotentialModel(
+        model_name=args.ggm,
+        grav_data=grav_data,
+        ellipsoid=args.ellipsoid,
+        nmax=args.nmax,
+        zonal_harmonics=True,
+        model_dir='downloads'
+    )
+    
+    return tc, ggm
 
-def gravity_field_reduction(bbox, gravity_data, dem=None) -> None:
-    # Implement gravity field reduction (free-air)
-    pass
+def run_compute_step(args, tc=None, ggm=None):
+    """Handle the compute step - calculate residual and reference geoids"""
+    if tc is None or ggm is None:
+        print("Remove step must be run first")
+        return None
+        
+    # Calculate residual geoid
+    res_geoid = ResidualGeoid(
+        res_anomaly=tc,
+        method=args.stokes_method,
+        ellipsoid=args.ellipsoid,
+        sph_cap=180/args.nmax,
+        sub_grid=args.bbox,
+        nmax=args.nmax
+    )
+    N_res = res_geoid.compute_geoid()
+    
+    # Calculate reference geoid
+    N_ref = ggm.geoid(icgem=True)
+    
+    return N_res, N_ref
 
-def residual_gravity_anomalies(bbox, gravity_data, dem=None) -> None:
-    # Implement residual gravity anomalies computation
-    pass
-
-def compute_step(bbox, gravity_data, dem=None) -> None:
-    # Implement main computation step
-    pass
-
-def restore_step(bbox, gravity_data, dem=None) -> None:
-    # Implement restore step
-    pass
-
-def main() -> None:
+def run_restore_step(args, N_res=None, N_ref=None, tc=None):
+    """Handle the restore step - combine geoid components"""
+    if N_res is None or N_ref is None or tc is None:
+        print("Compute step must be run first")
+        return None
+    
+    # Calculate indirect effect
+    tq = TerrainQuantities(
+        ori_topo=tc, 
+        ellipsoid=args.ellipsoid,
+        radius=110,
+        bbox_off=1
+    )
+    N_ind, _ = tq.indirect_effect()
+    
+    # Combine components
+    N = N_res + N_ref + N_ind
+    return N
+    
+def main():
     parser = argparse.ArgumentParser(
-        description='Compute gravimetric geoid using provided DEM and gravity data.',
+        description='Compute gravimetric geoid using Remove-Compute-Restore method',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)
     )
-    subparsers = parser.add_subparsers(dest='command', help='Sub-commands for each step of geoid computation')
+    
+    subparsers = parser.add_subparsers(dest='command', help='Steps in RCR process')
+    
+    # Common arguments
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument(
+        '--bbox', '-b', 
+        type=float, nargs=4, 
+        metavar=('W', 'S', 'E', 'N'),
+        required=True,
+        help='Bounding box [West, South, East, North]'
+    )
+    common_parser.add_argument(
+        '--gravity', '-g',
+        required=True,
+        help='Path to gravity data file'
+    )
+    common_parser.add_argument(
+        '--dem', '-d',
+        help='Optional path to DEM file'
+    )
+    common_parser.add_argument(
+        '--ggm',
+        default='GO_CONS_GCF_2_DIR_R6',
+        help='Global Geopotential Model to use'
+    )
+    common_parser.add_argument(
+        '--ellipsoid',
+        default='grs80',
+        choices=['grs80', 'wgs84'],
+        help='Reference ellipsoid'
+    )
+    common_parser.add_argument(
+        '--nmax',
+        type=int,
+        default=222,
+        help='Maximum spherical harmonic degree'  
+    )
 
-    # Subparser for compute_geoid
-    parser_compute = subparsers.add_parser('compute_geoid', help='Compute gravimetric geoid')
-    parser_compute.add_argument('--bbox', '-b', type=float, nargs=4, metavar=('W', 'S', 'E', 'N'), required=True, help='Bounding box of area of interest [left (W), bottom (S), right (E), top (N)]')
-    parser_compute.add_argument('--gravity', '-g', required=True, help='Path to the gravity data file')
-    parser_compute.add_argument('--dem', '-d', required=False, help='Path to the DEM file')
-    parser_compute.add_argument('--start-step', '-s', required=False, help='Start step for gravity anomalies')
-    parser_compute.add_argument('--end-step', '-e', required=False, help='End step for geoid computation')
+    # Remove step
+    remove_parser = subparsers.add_parser(
+        'remove',
+        parents=[common_parser],
+        help='Remove step - compute residual gravity anomalies'
+    )
 
-    # Subparser for gravity_field_reduction
-    parser_reduction = subparsers.add_parser('gravity_field_reduction', help='Perform gravity field reduction (free-air)')
-    parser_reduction.add_argument('--bbox', '-b', type=float, nargs=4, metavar=('W', 'S', 'E', 'N'), required=True, help='Bounding box of area of interest [left (W), bottom (S), right (E), top (N)]')
-    parser_reduction.add_argument('--gravity', '-g', required=True, help='Path to the gravity data file')
-    parser_reduction.add_argument('--dem', '-d', required=False, help='Path to the DEM file')
+    # Compute step  
+    compute_parser = subparsers.add_parser(
+        'compute',
+        parents=[common_parser], 
+        help='Compute step - calculate residual and reference geoids'
+    )
+    compute_parser.add_argument(
+        '--stokes-method',
+        choices=['hg', 'wg', 'og', 'ml'],
+        default='wg',
+        help='Stokes kernel modification method'
+    )
 
-    # Subparser for residual_gravity_anomalies
-    parser_residual = subparsers.add_parser('residual_gravity_anomalies', help='Compute residual gravity anomalies')
-    parser_residual.add_argument('--bbox', '-b', type=float, nargs=4, metavar=('W', 'S', 'E', 'N'), required=True, help='Bounding box of area of interest [left (W), bottom (S), right (E), top (N)]')
-    parser_residual.add_argument('--gravity', '-g', required=True, help='Path to the gravity data file')
-    parser_residual.add_argument('--dem', '-d', required=False, help='Path to the DEM file')
+    # Restore step
+    restore_parser = subparsers.add_parser(
+        'restore',
+        parents=[common_parser],
+        help='Restore step - combine geoid components'
+    )
 
-    # Subparser for compute_step
-    parser_compute_step = subparsers.add_parser('compute_step', help='Perform main computation step')
-    parser_compute_step.add_argument('--bbox', '-b', type=float, nargs=4, metavar=('W', 'S', 'E', 'N'), required=True, help='Bounding box of area of interest [left (W), bottom (S), right (E), top (N)]')
-    parser_compute_step.add_argument('--gravity', '-g', required=True, help='Path to the gravity data file')
-    parser_compute_step.add_argument('--dem', '-d', required=False, help='Path to the DEM file')
-
-    # Subparser for restore_step
-    parser_restore = subparsers.add_parser('restore_step', help='Perform restore step')
-    parser_restore.add_argument('--bbox', '-b', type=float, nargs=4, metavar=('W', 'S', 'E', 'N'), required=True, help='Bounding box of area of interest [left (W), bottom (S), right (E), top (N)]')
-    parser_restore.add_argument('--gravity', '-g', required=True, help='Path to the gravity data file')
-    parser_restore.add_argument('--dem', '-d', required=False, help='Path to the DEM file')
+    # Full pipeline
+    pipeline_parser = subparsers.add_parser(
+        'compute-geoid',
+        parents=[common_parser],
+        help='Run full RCR pipeline'
+    )
+    pipeline_parser.add_argument(
+        '--stokes-method',
+        choices=['hg', 'wg', 'og', 'ml'],
+        default='wg', 
+        help='Stokes kernel modification method'
+    )
 
     args = parser.parse_args()
 
-    if args.command == 'compute_geoid':
-        compute_geoid(args.bbox, args.gravity, args.dem, args.start_step, args.end_step)
-    elif args.command == 'gravity_field_reduction':
-        gravity_field_reduction(args.bbox, args.gravity, args.dem)
-    elif args.command == 'residual_gravity_anomalies':
-        residual_gravity_anomalies(args.bbox, args.gravity, args.dem)
-    elif args.command == 'compute_step':
-        compute_step(args.bbox, args.gravity, args.dem)
-    elif args.command == 'restore_step':
-        restore_step(args.bbox, args.gravity, args.dem)
+    if args.command == 'remove':
+        run_remove_step(args)
+    elif args.command == 'compute':
+        tc, ggm = run_remove_step(args)
+        run_compute_step(args, tc, ggm)
+    elif args.command == 'restore':
+        tc, ggm = run_remove_step(args)
+        N_res, N_ref = run_compute_step(args, tc, ggm)
+        run_restore_step(args, N_res, N_ref, tc)
+    elif args.command == 'compute-geoid':
+        tc, ggm = run_remove_step(args)
+        N_res, N_ref = run_compute_step(args, tc, ggm)
+        N = run_restore_step(args, N_res, N_ref, tc)
+        return N
     else:
         parser.print_help()
 
