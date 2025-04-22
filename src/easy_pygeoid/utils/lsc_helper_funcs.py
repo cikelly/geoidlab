@@ -96,43 +96,111 @@ def compute_spatial_covariance(
 def compute_spatial_covariance_robust(
     X: np.ndarray, 
     Y: np.ndarray, 
-    G: np.ndarray
+    G: np.ndarray,
+    max_points: Optional[int] = 10000,
+    chunk_size: Optional[int] = 1000,
+    use_chunking: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
     '''
     Compute robust (median-based) empirical covariance of 2D spatial data.
+    
     Parameters
     ----------
-    X         : X coordinates of observations
-    Y         : Y coordinates of observations
-    G         : Observation values
+    X           : X coordinates of observations
+    Y           : Y coordinates of observations
+    G           : Observation values
+    max_points  : Maximum number of points to process at once (default: 10000)
+    chunk_size  : Size of chunks for processing large datasets (default: 1000)
+    use_chunking: Whether to process data in chunks (default: True)
+    
     Returns
     -------
-    covariance: Empirical covariance values (median-based)
-    covdist   : Corresponding distances
+    covariance : Empirical covariance values (median-based)
+    covdist    : Corresponding distances
     '''
+    from joblib import Parallel, delayed
+    import numpy as np
+    
+    # Subsample if dataset is too large
+    if max_points and len(X) > max_points:
+        idx = np.random.choice(len(X), max_points, replace=False)
+        X = X[idx]
+        Y = Y[idx]
+        G = G[idx]
+    
     smax = np.sqrt((X.max() - X.min())**2 + (Y.max() - Y.min())**2)
     ds = np.sqrt((2 * np.pi * (smax / 2)**2) / len(X))
     n_bins = int(np.round(smax / ds)) + 2
+    
     covariance = np.zeros(n_bins)
     ncov = np.zeros(n_bins)
-    for i in range(len(G)):
-        dx = X[i] - X
-        dy = Y[i] - Y
-        r = np.sqrt(dx**2 + dy**2)
-        mask = (r > 0) & (r < smax)
-        ir = np.round(r[mask] / ds).astype(int)
-        valid_bins = ir < n_bins
-        if np.any(valid_bins):
-            # Use median instead of mean for robust estimation
-            for bin_idx in np.unique(ir[valid_bins]):
-                vals = G[i] * G[mask][valid_bins][ir[valid_bins] == bin_idx]
-                if len(vals) > 0:
-                    covariance[bin_idx] += np.median(vals)
-                    ncov[bin_idx] += 1
+    
+    if use_chunking:
+        def process_chunk(start_idx, end_idx) -> Tuple[np.ndarray, np.ndarray]:
+            chunk_cov = np.zeros(n_bins)
+            chunk_ncov = np.zeros(n_bins)
+            
+            for i in range(start_idx, end_idx):
+                dx = X[i] - X
+                dy = Y[i] - Y
+                r = np.sqrt(dx**2 + dy**2)
+                mask = (r > 0) & (r < smax)
+                ir = np.round(r[mask] / ds).astype(int)
+                valid_bins = ir < n_bins
+                
+                if np.any(valid_bins):
+                    bin_indices = ir[valid_bins]
+                    values = G[i] * G[mask][valid_bins]
+                    
+                    # Use median for robust estimation within each bin
+                    unique_bins = np.unique(bin_indices)
+                    for bin_idx in unique_bins:
+                        bin_values = values[bin_indices == bin_idx]
+                        if len(bin_values) > 0:
+                            chunk_cov[bin_idx] += np.median(bin_values)
+                            chunk_ncov[bin_idx] += 1
+            
+            return chunk_cov, chunk_ncov
+        
+        # Process in parallel chunks
+        n_chunks = int(np.ceil(len(G) / chunk_size))
+        chunks = [(i * chunk_size, min((i + 1) * chunk_size, len(G))) 
+                 for i in range(n_chunks)]
+        
+        results = Parallel(n_jobs=-1)(
+            delayed(process_chunk)(start, end) for start, end in chunks
+        )
+        
+        # Combine results
+        for chunk_cov, chunk_ncov in results:
+            covariance += chunk_cov
+            ncov += chunk_ncov
+    else:
+        # Process all data at once (original implementation)
+        for i in range(len(G)):
+            dx = X[i] - X
+            dy = Y[i] - Y
+            r = np.sqrt(dx**2 + dy**2)
+            mask = (r > 0) & (r < smax)
+            ir = np.round(r[mask] / ds).astype(int)
+            valid_bins = ir < n_bins
+            
+            if np.any(valid_bins):
+                bin_indices = ir[valid_bins]
+                values = G[i] * G[mask][valid_bins]
+                
+                unique_bins = np.unique(bin_indices)
+                for bin_idx in unique_bins:
+                    bin_values = values[bin_indices == bin_idx]
+                    if len(bin_values) > 0:
+                        covariance[bin_idx] += np.median(bin_values)
+                        ncov[bin_idx] += 1
+    
     # Add a small epsilon to avoid division by zero
     epsilon = 1e-12
     covariance = np.where(ncov > 0, covariance / (ncov + epsilon), 0)
     covdist = np.arange(n_bins) * ds
+    
     return covariance, covdist
 
 
