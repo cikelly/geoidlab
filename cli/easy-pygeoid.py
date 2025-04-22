@@ -3,6 +3,8 @@ import argparse
 from pathlib import Path
 import sys
 
+import xarray as xr
+import numpy as np
 # Get the absolute path to the src directory
 src_path = Path(__file__).resolve().parent.parent / 'src'
 sys.path.append(str(src_path))
@@ -14,8 +16,10 @@ from easy_pygeoid.terrain import TerrainQuantities
 from easy_pygeoid.tide import GravityTideSystemConverter
 from easy_pygeoid.utils.interpolators import Interpolators
 
-def run_remove_step(args):
-    """Handle the remove step - compute residual gravity anomalies"""
+from typing import Tuple
+
+def run_remove_step(args) -> Tuple[np.ndarray, GlobalGeopotentialModel]:
+    '''Handle the remove step - compute residual gravity anomalies'''
     # Download DEM if needed
     dem = args.dem
     if dem is None:
@@ -51,8 +55,8 @@ def run_remove_step(args):
     
     return tc, ggm
 
-def run_compute_step(args, tc=None, ggm=None):
-    """Handle the compute step - calculate residual and reference geoids"""
+def run_compute_step(args, tc=None, ggm=None) -> Tuple[np.ndarray, np.ndarray]:
+    '''Handle the compute step - calculate residual and reference geoids'''
     if tc is None or ggm is None:
         print("Remove step must be run first")
         return None
@@ -73,7 +77,7 @@ def run_compute_step(args, tc=None, ggm=None):
     
     return N_res, N_ref
 
-def run_restore_step(args, N_res=None, N_ref=None, tc=None):
+def run_restore_step(args, N_res=None, N_ref=None, tc=None) -> xr.Dataset:
     """Handle the restore step - combine geoid components"""
     if N_res is None or N_ref is None or tc is None:
         print("Compute step must be run first")
@@ -92,7 +96,8 @@ def run_restore_step(args, N_res=None, N_ref=None, tc=None):
     N = N_res + N_ref + N_ind
     return N
     
-def main():
+def main() -> None:
+    '''Main function for command line interface'''
     parser = argparse.ArgumentParser(
         description='Compute gravimetric geoid using Remove-Compute-Restore method',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)
