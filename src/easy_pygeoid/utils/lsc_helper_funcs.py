@@ -1,6 +1,12 @@
 import numpy as np
 from typing import Union, Tuple, List, Optional
 
+import warnings
+warnings.filterwarnings(
+    'ignore', category=RuntimeWarning, 
+    module='multiprocessing.resource_tracker'
+)
+
 def compute_spatial_covariance(
     X: np.ndarray, 
     Y: np.ndarray, 
