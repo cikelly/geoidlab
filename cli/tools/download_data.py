@@ -10,7 +10,7 @@ sys.path.append(str(src_path))
 from easy_pygeoid.dem import dem4geoid
 from easy_pygeoid.ggm_tools import GlobalGeopotentialModel
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Download GGM and DEM data required for geoid computation',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)

@@ -13,7 +13,7 @@ from easy_pygeoid.terrain import TerrainQuantities
 from easy_pygeoid.dem import dem4geoid
 from easy_pygeoid.tide import GravityTideSystemConverter
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Compute gravity reductions and terrain corrections',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)

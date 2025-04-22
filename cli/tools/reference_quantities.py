@@ -11,7 +11,7 @@ sys.path.append(str(src_path))
 
 from easy_pygeoid.ggm_tools import GlobalGeopotentialModel
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Compute reference quantities (gravity anomalies, geoid) from GGM',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)

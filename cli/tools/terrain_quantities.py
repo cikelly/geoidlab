@@ -10,7 +10,7 @@ sys.path.append(str(src_path))
 from easy_pygeoid.terrain import TerrainQuantities
 from easy_pygeoid.dem import dem4geoid
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Compute terrain quantities (terrain correction and indirect effect)',
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=80)
