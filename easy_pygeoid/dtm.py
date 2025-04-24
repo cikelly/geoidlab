@@ -38,7 +38,7 @@ class DigitalTerrainModel:
         if self.name is None:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
-            print(f'Using compressed file in src/data directory ...')
+            print(f'Using compressed file in easy_pygeoid/data directory ...')
             with lzma.open(self.name, 'rt') as f:
                 self.dtm = f.readlines()
         else:
