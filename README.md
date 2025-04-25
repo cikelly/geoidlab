@@ -1,4 +1,4 @@
-# easy-pygeoid     
+# GeoidLab
 
 <div align="center">
   <img src="docs/logo/logo1.png" alt="Logo" width="200"/>
@@ -7,7 +7,7 @@
 <p></p>
                                                                                   
 
-**`easy-pygeoid` is a highly automated Python package developed for easy geoid modeling.**
+**`GeoidLab` is a highly automated Python package developed for easy geoid modeling.**
 
 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
