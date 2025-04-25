@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import gravity as pygrav
 import scipy.interpolate
 
+from utils.interpolators import Interpolators
 from mpl_toolkits.basemap import Basemap
 
 def plot_gravity_anomaly(
