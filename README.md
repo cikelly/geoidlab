@@ -18,7 +18,7 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Terrain correction
 - Residual Terrain Modeling (RTM)
 
-`easy-pygeoid` uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
+`GeoidLab` uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
 
 - Automatically downloads [SRTM30PLUS](https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/) over the bounding box of interest
 - Downloads multiple SRTM30PLUS tiles if bounding box extends over multiple tiles
@@ -27,11 +27,11 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Can automatically download other DEMs (e.g., Copernicus DEM, NASADEM, and GEBCO). Default is SRTM30PLUS
 
 ## Installation
-`easy-pygeoid` can be installed using conda/mamba or pip.
+`GeoidLab` can be installed using conda/mamba or pip.
   
 ```
 conda create -n geoid_env -y
-mamba install -c conda-forge easy-pygeoid -y
+mamba install -c conda-forge geoidlab -y
 ```      
 Test installation
 
@@ -43,13 +43,13 @@ compute_reference_geoid.py -h
 - Prepare data: This includes all relevant data for your study area:
   - Terrestrial gravity data
   - Marine gravity data
-  - Global Geopotential Model (GGM). `easy-pygeoid` can automatically download this. Just provide the name of the GGM in the template file
-  - Digital Elevation Model (DEM). `easy-pygeoid` presently downloads SRTM30PLUS
+  - Global Geopotential Model (GGM). `GeoidLab` can automatically download this. Just provide the name of the GGM in the template file
+  - Digital Elevation Model (DEM). `GeoidLab` presently downloads SRTM30PLUS
 - Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
   ensure that they are free-air anomalies
 - Call `compute_geoid.py --start [step]`
 
-See the [tutorial repo](https://github.com/cikelly/easy-pygeoid-tutorial) for examples of using `easy-pygeoid`.
+See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for examples of using `GeoidLab`.
 
 ## References
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
