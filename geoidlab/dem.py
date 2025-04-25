@@ -31,7 +31,7 @@ def get_readme_path() -> Path:
     readme_path   : absolute path to the README.V11.txt file
     '''
     script_dir: Path = Path(__file__).resolve().parent
-    readme_path: Path = script_dir / '../easy_pygeoid/data/README.V11.txt'
+    readme_path: Path = script_dir / '../geoidlab/data/README.V11.txt'
     return readme_path.resolve()
 
 def parse_readme(readme_path) -> list:

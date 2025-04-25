@@ -7,7 +7,7 @@ import lzma
 
 from pathlib import Path
 from . import coordinates as co
-from easy_pygeoid.legendre import ALF, ALFsGravityAnomaly
+from geoidlab.legendre import ALF, ALFsGravityAnomaly
 from .utils.parallel_utils import compute_harmonic_sum
 from tqdm import tqdm
 
@@ -38,7 +38,7 @@ class DigitalTerrainModel:
         if self.name is None:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
-            print(f'Using compressed file in easy_pygeoid/data directory ...')
+            print(f'Using compressed file in geoidlab/data directory ...')
             with lzma.open(self.name, 'rt') as f:
                 self.dtm = f.readlines()
         else:
@@ -286,8 +286,8 @@ class DigitalTerrainModel:
             )
             ds.creation_date = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
             ds.source = 'DTM2006.0 spherical harmonic coefficients'
-            ds.author = 'easy-pygeoid development team'  
-            ds.software = 'easy-pygeoid'  
+            ds.author = 'geoidlab development team'  
+            ds.software = 'geoidlab'  
             ds.conventions = 'CF-1.8'  # Optional, aligns with geospatial standards
             
             # --- Dimensions ---

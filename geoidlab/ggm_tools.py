@@ -14,7 +14,7 @@ from . import (
     shtools
 )
 
-from easy_pygeoid.legendre import ALFsGravityAnomaly, ALF
+from geoidlab.legendre import ALFsGravityAnomaly, ALF
 from .utils.parallel_utils import (
     compute_gravity_chunk, 
     compute_disturbance_chunk,
@@ -578,7 +578,7 @@ class GlobalGeopotentialModel:
         # Remove topographic effect if requested
         N_topo = np.zeros_like(N)
         if icgem:
-            from easy_pygeoid.dtm import DigitalTerrainModel
+            from geoidlab.dtm import DigitalTerrainModel
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
             H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)
             N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0

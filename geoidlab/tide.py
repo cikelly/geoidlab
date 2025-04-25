@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 
 from . import constants
-from easy_pygeoid.coordinates import geodetic2geocentric
+from geoidlab.coordinates import geodetic2geocentric
 
 class GravityTideSystemConverter:
     '''

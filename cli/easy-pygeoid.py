@@ -9,12 +9,12 @@ import numpy as np
 src_path = Path(__file__).resolve().parent.parent / 'src'
 sys.path.append(str(src_path))
 
-from easy_pygeoid.dem import dem4geoid
-from easy_pygeoid.geoid import ResidualGeoid
-from easy_pygeoid.ggm_tools import GlobalGeopotentialModel
-from easy_pygeoid.terrain import TerrainQuantities
-from easy_pygeoid.tide import GravityTideSystemConverter
-from easy_pygeoid.utils.interpolators import Interpolators
+from geoidlab.dem import dem4geoid
+from geoidlab.geoid import ResidualGeoid
+from geoidlab.ggm_tools import GlobalGeopotentialModel
+from geoidlab.terrain import TerrainQuantities
+from geoidlab.tide import GravityTideSystemConverter
+from geoidlab.utils.interpolators import Interpolators
 
 from typing import Tuple
 

@@ -7,8 +7,8 @@ import sys
 src_path = Path(__file__).resolve().parent.parent.parent / 'src'
 sys.path.append(str(src_path))
 
-from easy_pygeoid.dem import dem4geoid
-from easy_pygeoid.ggm_tools import GlobalGeopotentialModel
+from geoidlab.dem import dem4geoid
+from geoidlab.ggm_tools import GlobalGeopotentialModel
 
 def main() -> None:
     parser = argparse.ArgumentParser(

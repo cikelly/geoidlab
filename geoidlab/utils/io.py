@@ -110,8 +110,8 @@ def save_to_netcdf(
             'units': config['units'],
             'description': config['description'],
             'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'created_by': 'easy-pygeoid',
-            'website': 'https://github.com/cikelly/easy-pygeoid',
+            'created_by': 'geoidlab',
+            'website': 'https://github.com/cikelly/geoidlab',
             'copyright': f'Copyright (c) {datetime.now().year}, Caleb Kelly',
         }
     )

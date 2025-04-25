@@ -1,16 +1,16 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='easy-pygeoid',
+    name='geoidlab',
     version='1.0',
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'easy-pygeoid=cli.easy_pygeoid:main',
-            'easy-pygeoid-download=cli.tools.download_data:main',
-            'easy-pygeoid-gravity=cli.tools.gravity_reduction:main',
-            'easy-pygeoid-reference=cli.tools.reference_quantities:main',
-            'easy-pygeoid-terrain=cli.tools.terrain_quantities:main',
+            'geoidlab=cli.geoidlab:main',
+            'geoidlab-download=cli.tools.download_data:main',
+            'geoidlab-gravity=cli.tools.gravity_reduction:main',
+            'geoidlab-reference=cli.tools.reference_quantities:main',
+            'geoidlab-terrain=cli.tools.terrain_quantities:main',
         ],
     },
 )
