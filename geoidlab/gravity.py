@@ -3,7 +3,7 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-from . import constants
+import constants
 from numpy import (
     sin, 
     cos, 
@@ -11,7 +11,7 @@ from numpy import (
     sqrt
 )
 
-from .coordinates import geodetic2geocentric
+from coordinates import geodetic2geocentric
 
 def normal_gravity(phi, ellipsoid='wgs84') -> float:
     r'''

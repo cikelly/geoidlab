@@ -3,8 +3,8 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-# from . import constants
-from .coordinates import geodetic2spherical
+# import constants
+from coordinates import geodetic2spherical
 from numba import jit, njit
 from numba_progress import ProgressBar
 

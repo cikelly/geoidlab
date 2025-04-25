@@ -7,7 +7,7 @@
 import numpy as np
 import pandas as pd
 
-from .lsc_helper_funcs import (
+from lsc_helper_funcs import (
     compute_spatial_covariance,
     fit_exponential_covariance,
     fit_gaussian_covariance,
@@ -570,9 +570,9 @@ class Interpolators:
         try:
             if C0 is None or D is None:
                 if robust_covariance:
-                    from .lsc_helper_funcs import compute_spatial_covariance_robust as compute_cov
+                    from lsc_helper_funcs import compute_spatial_covariance_robust as compute_cov
                 else:
-                    from .lsc_helper_funcs import compute_spatial_covariance as compute_cov
+                    from lsc_helper_funcs import compute_spatial_covariance as compute_cov
                 covariance, covdist = compute_cov(lon, lat, values, chunk_size=chunk_size, use_chunking=use_chunking)
                 if covariance_model == 'exp':
                     C0, D = fit_exponential_covariance(lon, lat, values, covariance, covdist)

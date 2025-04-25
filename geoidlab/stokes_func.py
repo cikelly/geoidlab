@@ -7,7 +7,7 @@
 import numpy as np
 import warnings
 
-from .legendre import legendre_poly, legendre_poly_fast
+from legendre import legendre_poly, legendre_poly_fast
 
 class Stokes4ResidualGeoid:
     '''

@@ -6,16 +6,11 @@
 
 from pathlib import Path
 
-from . import (
-    icgem,
-    constants,
-    gravity,
-    coordinates as co,
-    shtools
-)
+import icgem, constants, gravity, coordinates as co, shtools
 
-from geoidlab.legendre import ALFsGravityAnomaly, ALF
-from .utils.parallel_utils import (
+
+from legendre import ALFsGravityAnomaly, ALF
+from utils.parallel_utils import (
     compute_gravity_chunk, 
     compute_disturbance_chunk,
     compute_disturbing_potential_chunk,

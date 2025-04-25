@@ -17,6 +17,7 @@ rioxarray
 bottleneck
 scikit-learn
 joblib>=1.3.0
+basemap
 # dask
 # dask[complete]
 

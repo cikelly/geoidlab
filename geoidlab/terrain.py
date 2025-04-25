@@ -12,11 +12,11 @@ import time
 import sys
 import threading
 
-from . import constants
-from .coordinates import geodetic2cartesian
-from .utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk, compute_ind_chunk
-from .gravity import normal_gravity_somigliana
-from .utils.io import save_to_netcdf
+import constants
+from coordinates import geodetic2cartesian
+from utils.parallel_utils import compute_tc_chunk, compute_rtm_tc_chunk, compute_ind_chunk
+from gravity import normal_gravity_somigliana
+from utils.io import save_to_netcdf
 
 from tqdm import tqdm
 from joblib import Parallel, delayed

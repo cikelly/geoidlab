@@ -8,10 +8,10 @@ import xarray as xr
 import warnings
 import bottleneck as bn
 
-from .utils.distances import haversine
-from .gravity import normal_gravity_somigliana
-from .constants import earth
-from .stokes_func import Stokes4ResidualGeoid
+from utils.distances import haversine
+from gravity import normal_gravity_somigliana
+from constants import earth
+from stokes_func import Stokes4ResidualGeoid
 from tqdm import tqdm
 
 

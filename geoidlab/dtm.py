@@ -6,9 +6,9 @@
 import lzma
 
 from pathlib import Path
-from . import coordinates as co
+import coordinates as co
 from geoidlab.legendre import ALF, ALFsGravityAnomaly
-from .utils.parallel_utils import compute_harmonic_sum
+from utils.parallel_utils import compute_harmonic_sum
 from tqdm import tqdm
 
 from multiprocessing import Pool, cpu_count
