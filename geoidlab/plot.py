@@ -6,11 +6,198 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import gravity as pygrav
 import scipy.interpolate
+import xarray as xr
 
-from utils.interpolators import Interpolators
+from geoidlab.utils.interpolators import Interpolators
 from mpl_toolkits.basemap import Basemap
+
+from geoidlab import gravity as pygrav
+from geoidlab.ggm_tools import GlobalGeopotentialModel
+
+class GeoidLabPlot:
+    '''
+    GeoidLabPlot class for plotting output from GeoidLab data.
+    '''
+    def __init__(
+        self,
+        figsize: tuple = (8,8),
+        cmap: str = 'viridis',
+        projection: str = 'cyl',
+        resolution: str = 'l',
+        subplot_layout: tuple = None,
+        subplot_adjust: dict = None
+    ) -> None:
+        '''
+        Initialize the Plotting class
+        
+        Parameters
+        ----------
+        figsize        : figure size for the plots
+        cmap           : colormap
+        projection     : map projection for spatial plots
+        resolution     : map resolution for coastline etc. (c, l, i, h, f)
+        subplot_layout : tuple of (rows, cols) for subplot layout
+        subplot_adjust : dictionary with subplot parameters 
+                        (left, right, bottom, top, wspace, hspace)
+        
+        Returns
+        -------
+        None
+        '''
+        self.figsize = figsize
+        self.cmap    = cmap
+        self.projection = projection
+        self.resolution = resolution
+        self.subplot_layout = subplot_layout or (1,1)
+        
+        default_adjust = {
+            'left': 0.1,
+            'right': 0.9,
+            'bottom': 0.1,
+            'top': 0.9,
+            'wspace': 0.2,
+            'hspace': 0.2
+        }
+        self.subplot_adjust = {**default_adjust, **(subplot_adjust or {})}
+        
+    def plot_terrain(
+        self,
+        dataset: xr.Dataset,
+        quantities: str | list[str] = None
+    ) -> None:
+        '''
+        Plot terrain-related quantities
+        
+        Parameters
+        ----------
+        dataset     : xarray dataset containing the data
+        quantities  : quantity to plot ('tc', 'rtm', 'ind')
+        '''
+        QUANTITY_MAP = {
+            'tc': 'Terrain Correction',
+            'ind': 'Indirect Effect',
+            'topo': 'Topography',
+            'ref_topo': 'Reference Topography',
+            'rtm_g': 'RTM Gravity Anomaly',
+            'rtm_a': 'Residual Height Anomaly'
+        }
+        
+        QUANTITY_UNITS = {
+            'tc': 'mGal',
+            'ind': 'm',
+            'topo': 'm',
+            'ref_topo': 'm',
+            'rtm_g': 'mGal',
+            'rtm_a': 'm'
+        }
+        
+        if isinstance(dataset, str):
+            dataset = xr.open_dataset(dataset)
+            
+        # Handle case where quantities is a single string
+        if isinstance(quantities, str):
+            quantities = [quantities]
+        
+        # If no quantities specified, find all 2D variables
+        if quantities is None:
+            quantities = [var for var in dataset.data_vars if dataset[var].ndim == 2]
+            
+        # Determine subplot layout
+        n_plots = len(quantities)
+        if n_plots == 1:
+            nrows, ncols = 1, 1
+        else:
+            ncols = int(np.ceil(np.sqrt(n_plots)))
+            nrows = int(np.ceil(n_plots / ncols))
+            
+        fig, axes = plt.subplots(nrows, ncols, figsize=self.figsize)
+        plt.subplots_adjust(**self.subplot_adjust)
+        
+        axes = np.array(axes).ravel()
+        
+        for i, (quantity, ax) in enumerate(zip(quantities, axes)):
+            if quantity not in dataset:
+                raise ValueError(f'Quantity {quantity} not found in dataset.')
+
+            quantity_name = QUANTITY_MAP.get(quantity, quantity)
+            quantity_unit = QUANTITY_UNITS.get(quantity, 'Unknown')
+            cbar_label = f'{quantity_name} [{quantity_unit}]'
+            im = ax.pcolormesh(dataset['lon'], dataset['lat'], dataset[quantity], cmap=self.cmap)
+            ax.set_title(quantity_name, fontsize=12, fontweight='bold')
+            plt.colorbar(im, ax=ax, label=cbar_label)
+            ax.grid(linewidth=0.01)
+            ax.minorticks_on()
+            ax.grid(which='minor', linewidth=0.01)
+        
+        fig.tight_layout()    
+        plt.show()
+            
+            # data = dataset[quantity].values
+            # lon = dataset['lon'].values
+            # lat = dataset['lat'].values
+            
+            # # Create a Basemap instance
+            # m = Basemap(projection=self.projection, resolution=self.resolution,
+            #             llcrnrlon=lon.min(), urcrnrlon=lon.max(),
+            #             llcrnrlat=lat.min(), urcrnrlat=lat.max(),
+            #             ax=ax)
+            
+            # # Plot the data
+            # m.imshow(data, cmap=self.cmap, interpolation='nearest', origin='lower')
+            
+            # # Add coastlines and grid lines
+            # m.drawcoastlines()
+            # m.drawparallels(np.arange(-90., 91., 30.), labels=[1,0,0,0])
+            # m.drawmeridians(np.arange(-180., 181., 60.), labels=[0,0,0,1])
+            
+            # # Set title
+            # ax.set_title(QUANTITY_MAP.get(quantity, quantity), fontsize=12)
+    
+    def plot_ggm(
+        self,
+        model: GlobalGeopotentialModel = None,
+        dataset: xr.Dataset = None,
+        quantity: str = 'geoid',
+        parallel: bool = True,
+    ) -> None:
+        '''
+        Plot gravity field quantities synthesized from a GGM
+        
+        Parameters
+        ----------
+        model       : GlobalGeopontentialModel object
+        dataset     : Dataset to plot
+        quantity    : quantity to plot ('geoid', 'gravity', 'gravity_anomaly')
+        parallel    : whether to use parallel processing
+        
+        Returns
+        -------
+        None
+        '''
+        if model is None and dataset is None:
+            raise ValueError('Either model or dataset must be provided')
+        
+    def plot_gravity(
+        self,
+        dataset: pd.DataFrame | None = None,
+        grid_method: str = 'linear',
+        quantity: str = 'gravity',
+    ) -> None:
+        '''
+        Plot gravity field quantities
+        
+        Parameters
+        ----------
+        dataset     : Dataset to plot
+        quantity    : quantity to plot ('geoid', 'gravity', 'gravity_anomaly')
+        parallel    : whether to use parallel processing
+        
+        Returns
+        -------
+        None
+        '''
+        pass
 
 def plot_gravity_anomaly(
     data=None, gravity_data=None,

@@ -7,7 +7,7 @@
 import numpy as np
 import pandas as pd
 
-from lsc_helper_funcs import (
+from .lsc_helper_funcs import (
     compute_spatial_covariance,
     fit_exponential_covariance,
     fit_gaussian_covariance,

@@ -18,7 +18,7 @@ DATASET_CONFIG = {
         'long_name'  : 'Terrain Correction',
     },
     'IND': {
-        'var_name'   : 'indirect_effect',
+        'var_name'   : 'ind',
         'units'      : 'meters',
         'description': 'Indirect Effect',
         'fname'      : 'IND',

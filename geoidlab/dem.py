@@ -9,6 +9,7 @@ import sys
 import warnings
 import netCDF4
 import re
+import certifi
 
 import xarray as xr
 import rioxarray as rxr
@@ -155,7 +156,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         print(f'Downloading {filename} to: \n\t{downloads_dir} ...')
         # Download NetCDF file
         try:
-            response: requests.Response = requests.get(url, verify=False, stream=True)
+            response: requests.Response = requests.get(url, verify=certifi.where(), stream=True)
             total_size = int(response.headers.get('content-length', 0))
 
             with tqdm(

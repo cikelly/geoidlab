@@ -4,7 +4,7 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 # import constants
-from coordinates import geodetic2spherical
+from geoidlab.coordinates import geodetic2spherical
 from numba import jit, njit
 from numba_progress import ProgressBar
 
