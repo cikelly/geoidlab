@@ -7,7 +7,7 @@
 <p></p>
                                                                                   
 
-**`GeoidLab` is a highly automated Python package developed for easy geoid modeling.**
+**`GeoidLab`: A Modular and Automated Python Package for Geoid Computation.**
 
 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
