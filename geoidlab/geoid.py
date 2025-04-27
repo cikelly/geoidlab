@@ -22,6 +22,7 @@ class ResidualGeoid:
     Geoid class for modeling the geoid via the remove-compute-restore method.
     '''
     VALID_METHODS = {'hg', 'wg', 'og', 'ml'}  # Valid integration methods
+    VALID_WINDOW_MODES = {'small', 'cap'}
     
     def __init__(
         self,
@@ -31,6 +32,7 @@ class ResidualGeoid:
         method: str = 'hg',
         ellipsoid: str = 'wgs84',
         nmax: int = None,
+        window_mode: str = 'small'
     ) -> None:
         '''
         Initialize the ResidualGeoid class.
@@ -49,6 +51,11 @@ class ResidualGeoid:
         nmax       : maximum degree of spherical harmonic expansion
                     (required for 'hg' and 'wg' methods)
         '''
+        # Validate window_mode
+        window_mode = window_mode.lower()
+        if window_mode not in self.VALID_WINDOW_MODES:
+            raise ValueError(f'Invalid window_mode: {window_mode}. Must be one of {sorted(self.VALID_WINDOW_MODES)}')
+        
         # Validate sub_grid
         if sub_grid is None:
             raise ValueError('sub_grid must be provided')
@@ -81,6 +88,7 @@ class ResidualGeoid:
         self.method = method
         self.ellipsoid = ellipsoid.lower()
         self.nmax = int(nmax) if nmax is not None else None
+        self.window_mode = window_mode
         
         # Extract coordinates and convert to float64
         lon = res_anomaly.lon.values.astype(np.float64)
@@ -115,14 +123,22 @@ class ResidualGeoid:
         self.R = np.float64(earth()['radius'])  # Earth radius
         self.k = (1 / (4 * np.pi * self.gamma0 * self.R)).astype(np.float64)
         
-        # Pre-allocate arrays for compute_geoid
+        # Window size calculation
         self.nrows_P, self.ncols_P = self.res_anomaly_P['Dg'].shape
+        if self.window_mode == 'small':
+            dn = int(np.round(self.ncols - self.ncols_P)) + 1
+            dm = int(np.round(self.nrows - self.nrows_P)) + 1
+        else:
+            # Window size based on spherical cap
+            dn = int(np.ceil(self.sph_cap / self.dlam)) * 2 + 1 # Ensure cap is fully covered
+            dm = int(np.ceil(self.sph_cap / self.dphi)) * 2 + 1
+            # Ensure window does not exceed full grid
+            dn = min(dn, self.ncols)
+            dm = min(dm, self.nrows)
+        
+        # Pre-allocate arrays for compute_geoid
         self.N_inner = np.zeros((self.nrows_P, self.ncols_P), dtype=np.float64)
         self.N_far = np.zeros_like(self.N_inner)
-        
-        # Pre-allocate work arrays for compute_geoid
-        dn = int(np.round(self.ncols - self.ncols_P)) + 1
-        dm = int(np.round(self.nrows - self.nrows_P)) + 1
         self._smallDg = np.empty((dn, dm), dtype=np.float64)
         self._smallphi = np.empty_like(self._smallDg)
         self._smalllon = np.empty_like(self._smallDg)
@@ -178,33 +194,39 @@ class ResidualGeoid:
             cosphip * np.radians(self.dphi) * np.radians(self.dlam) / np.pi
         ) * self.res_anomaly_P['Dg'].values
         
-        # Far zone computation using preallocated arrays
-        n1 = 0
-        n2 = self._smallDg.shape[0]
+        # Far zone computation
         psi0 = np.radians(self.sph_cap)
-        
+        dm, dn = self._smallDg.shape
+
         for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
-            m1 = 0
-            m2 = self._smallDg.shape[1]
             for j in range(self.ncols_P):
-                # Use np.copyto to populate preallocated arrays
-                np.copyto(self._smallDg, self.res_anomaly['Dg'].values[n1:n2, m1:m2])
-                np.copyto(self._smallphi, np.radians(self.Lat[n1:n2, m1:m2]))
-                np.copyto(self._smalllon, np.radians(self.Lon[n1:n2, m1:m2]))
-                
-                # Surface area on the sphere using preallocated arrays
+                # Compute window indices dynamically
+                i_center = int(np.round((self.LatP[i, j] - self.res_anomaly['lat'].values[0]) / self.dphi))
+                j_center = int(np.round((self.LonP[i, j] - self.res_anomaly['lon'].values[0]) / self.dlam))
+                i_start = max(0, i_center - dm // 2)
+                i_end = min(self.nrows, i_start + dm)
+                j_start = max(0, j_center - dn // 2)
+                j_end = min(self.ncols, j_start + dn)
+                i_start = i_end - dm  # Adjust to match window size
+                j_start = j_end - dn
+
+                # Extract window data
+                np.copyto(self._smallDg, self.res_anomaly['Dg'].values[i_start:i_end, j_start:j_end])
+                np.copyto(self._smallphi, np.radians(self.Lat[i_start:i_end, j_start:j_end]))
+                np.copyto(self._smalllon, np.radians(self.Lon[i_start:i_end, j_start:j_end]))
+
+                # Surface area
                 np.subtract(self._smallphi, np.radians(self.dphi) / 2, out=self._lat1)
                 np.add(self._smallphi, np.radians(self.dphi) / 2, out=self._lat2)
                 np.subtract(self._smalllon, np.radians(self.dlam) / 2, out=self._lon1)
                 np.add(self._smalllon, np.radians(self.dlam) / 2, out=self._lon2)
-                
                 np.multiply(
                     self.R**2,
                     np.abs(self._lon2 - self._lon1) * np.abs(np.sin(self._lat2) - np.sin(self._lat1)),
                     out=self._A_k
                 )
 
-                # Compute Stokes' kernel
+                # Stokes' kernel
                 self.stokes_calculator = Stokes4ResidualGeoid(
                     lonp=lonp[i,j],
                     latp=phip[i,j],
@@ -213,28 +235,21 @@ class ResidualGeoid:
                     psi0=psi0,
                     nmax=self.nmax
                 )
-                
                 S_k = self.stokes_kernel() if self.method != 'og' else self.stokes_kernel()[0]
                 S_k = S_k.reshape(self._smallDg.shape)
-                
+
                 # Spherical distance
                 sd = haversine(
-                    np.degrees(lonp[i, j]), 
-                    np.degrees(phip[i, j]), 
-                    np.degrees(self._smalllon), 
-                    np.degrees(self._smallphi), 
+                    np.degrees(lonp[i, j]),
+                    np.degrees(phip[i, j]),
+                    np.degrees(self._smalllon),
+                    np.degrees(self._smallphi),
                     unit='deg'
                 )
-                # Mask points outside the spherical cap
                 sd[sd > self.sph_cap] = np.nan
                 S_k[np.isnan(sd)] = np.nan
-                
+
                 # Compute contribution
                 self.N_far[i, j] = bn.nansum(self._A_k * S_k * self._smallDg) * self.k[i, j]
-                
-                m1 += 1
-                m2 += 1
-            n1 += 1
-            n2 += 1
-        
+
         return self.N_inner + self.N_far
