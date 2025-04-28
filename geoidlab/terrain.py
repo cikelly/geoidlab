@@ -475,14 +475,17 @@ class TerrainQuantities:
             tc = self.terrain_correction_sequential()
         
         # Save terrain correction
-        save_to_netcdf(
-            data=tc,
-            lon=self.ori_P['x'].values,
-            lat=self.ori_P['y'].values,
-            dataset_key='tc',
-            proj_dir=self.proj_dir,
-            overwrite=self.overwrite
-        )
+        try:
+            save_to_netcdf(
+                data=tc,
+                lon=self.ori_P['x'].values,
+                lat=self.ori_P['y'].values,
+                dataset_key='tc',
+                proj_dir=self.proj_dir,
+                overwrite=self.overwrite
+            )
+        except Exception as e:
+            print(f'Error saving dataset: {e}')
         
         return tc
 
@@ -749,14 +752,18 @@ class TerrainQuantities:
         else:
             dg_RTM = self.rtm_anomaly_sequential()
         
-        save_to_netcdf(
-            data=dg_RTM,
-            lon=self.ori_P['x'].values,
-            lat=self.ori_P['y'].values,
-            dataset_key='rtm',
-            proj_dir=self.proj_dir,
-            overwrite=self.overwrite
-        )
+        try:
+            save_to_netcdf(
+                data=dg_RTM,
+                lon=self.ori_P['x'].values,
+                lat=self.ori_P['y'].values,
+                dataset_key='rtm',
+                proj_dir=self.proj_dir,
+                overwrite=self.overwrite
+            )
+        except Exception as e:
+            print(f'Error saving dataset: {e}')
+            
         return dg_RTM
 
 
@@ -986,24 +993,17 @@ class TerrainQuantities:
             ind = self.indirect_effect_sequential()
         
         # Save indirect effect
-        save_to_netcdf(
-            data=ind,
-            lon=self.ori_P['x'].values,
-            lat=self.ori_P['y'].values,
-            dataset_key='IND',
-            proj_dir=self.proj_dir,
-            overwrite=self.overwrite
-        )
-        
-        # # Save zeta
-        # save_to_netcdf(
-        #     data=zeta,
-        #     lon=self.ori_P['x'].values,
-        #     lat=self.ori_P['y'].values,
-        #     dataset_key='zeta',
-        #     proj_dir=self.proj_dir,
-        #     overwrite=self.overwrite
-        # )
+        try:
+            save_to_netcdf(
+                data=ind,
+                lon=self.ori_P['x'].values,
+                lat=self.ori_P['y'].values,
+                dataset_key='IND',
+                proj_dir=self.proj_dir,
+                overwrite=self.overwrite
+            )
+        except Exception as e:
+            print(f'Error saving dataset: {e}')
         
         return ind
 
@@ -1175,14 +1175,17 @@ class TerrainQuantities:
         else:
             z_rtm = self.rtm_height_anomaly_sequential()
 
-        save_to_netcdf(
-            data=z_rtm,
-            lon=self.ori_P['x'].values,
-            lat=self.ori_P['y'].values,
-            dataset_key='z_rtm',
-            proj_dir=self.proj_dir,
-            overwrite=self.overwrite
-        )
+        try:
+            save_to_netcdf(
+                data=z_rtm,
+                lon=self.ori_P['x'].values,
+                lat=self.ori_P['y'].values,
+                dataset_key='zeta',
+                proj_dir=self.proj_dir,
+                overwrite=self.overwrite
+            )
+        except Exception as e:
+            print(f'Error saving dataset: {e}')
 
         return z_rtm
     
