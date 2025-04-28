@@ -191,7 +191,6 @@ class TerrainQuantities:
         self,
         i: int,
         j: int,
-        # window_mode: str = 'small',
         include_ref: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         '''
@@ -214,17 +213,6 @@ class TerrainQuantities:
         smallZ      : Windowed Z coordinates
         smallH_ref  : Windowed reference topography (if include_ref is True)
         '''
-        # if window_mode not in self.VALID_WINDOW_MODES:
-        #     raise ValueError(f'Invalid window mode: {window_mode}. Must be one of {sorted(self.VALID_WINDOW_MODES)}.')
-
-        # if window_mode == 'small':
-        #     dn = int(np.round(self.ncols - self.ori_P['z'].shape[1])) + 1
-        #     dm = int(np.round(self.nrows - self.ori_P['z'].shape[0])) + 1
-        # else:
-        #     dn = int(np.ceil(self.radius_deg / self.dlam)) * 2 + 1
-        #     dm = int(np.ceil(self.radius_deg / self.dphi)) * 2 + 1
-        #     dn = min(dn, self.ncols)
-        #     dm = min(dm, self.nrows)
         
         i_center = int(np.round((self.LatP[i, j] - self.ori_topo['y'].values[0]) / self.dphi))
         j_center = int(np.round((self.LonP[i, j] - self.ori_topo['x'].values[0]) / self.dlam))
@@ -234,8 +222,6 @@ class TerrainQuantities:
         j_end = min(self.ncols, j_start + self.dn)
         i_start = max(0, i_end - self.dm)
         j_start = max(0, j_end - self.dn)
-        # i_start = i_end - self.dm
-        # j_start = j_end - self.dn
 
         smallH = self.ori_topo['z'].values[i_start:i_end, j_start:j_end]
         smallX = self.X[i_start:i_end, j_start:j_end]
@@ -252,20 +238,10 @@ class TerrainQuantities:
         self, 
         i: int, 
         j: int, 
-        # window_mode: str = 'small'
     ) -> tuple[int, int, int, int]:
         '''
         Compute the window indices for parallel processing
         '''
-        # if window_mode == 'small':
-        #     dn = int(np.round(self.ncols - self.ori_P['z'].shape[1])) + 1
-        #     dm = int(np.round(self.nrows - self.ori_P['z'].shape[0])) + 1
-        # else:
-        #     radius_deg = self.km2deg(self.radius / 1000)
-        #     dn = int(np.ceil(radius_deg / self.dlam)) * 2 + 1
-        #     dm = int(np.ceil(radius_deg / self.dphi)) * 2 + 1
-        #     dn = min(dn, self.ncols)
-        #     dm = min(dm, self.nrows)
 
         i_center = int(np.round((self.LatP[i, j] - self.ori_topo['y'].values[0]) / self.dphi))
         j_center = int(np.round((self.LonP[i, j] - self.ori_topo['x'].values[0]) / self.dlam))
@@ -287,8 +263,6 @@ class TerrainQuantities:
         '''
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
-        # dn = np.round(self.ncols - ncols_P) + 1
-        # dm = np.round(self.nrows - nrows_P) + 1
         Hp   = self.ori_P['z'].values 
         
         if self.window_mode == 'small':
@@ -298,7 +272,6 @@ class TerrainQuantities:
                 m1 = 0
                 m2 = self.dn
                 for j in range(ncols_P):
-                    # smallH, smallX, smallY, smallZ = self.get_window(i, j)
                     smallH = self.ori_topo['z'].values[n1:n2, m1:m2]
                     smallX = self.X[n1:n2, m1:m2]
                     smallY = self.Y[n1:n2, m1:m2]
@@ -311,8 +284,6 @@ class TerrainQuantities:
                         self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
                     # Distances
                     d = np.hypot(x, y)
-                    # d[d > self.radius] = np.nan
-                    # d[d == 0] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
                     d3 = d * d * d
                     d5 = d3 * d * d
@@ -345,9 +316,6 @@ class TerrainQuantities:
                         self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
                     # Distances
                     d = np.hypot(x, y)
-                    # d = np.where(d <= self.radius, d, np.nan)
-                    # d[d > self.radius] = np.nan
-                    # d[d == 0] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
                     d3 = d * d * d
                     d5 = d3 * d * d
@@ -393,10 +361,6 @@ class TerrainQuantities:
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
         Hp = self.ori_P['z'].values
-        # dn = np.round(self.ncols - ncols_P) + 1
-        # dm = np.round(self.nrows - nrows_P) + 1
-
-        
 
         # Divide rows into chunks
         chunks = [
@@ -405,7 +369,7 @@ class TerrainQuantities:
         ]
 
         print('Computing terrain correction...') 
-        
+
         if progress:
             stop_signal = threading.Event()
             progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
@@ -416,11 +380,7 @@ class TerrainQuantities:
         for i in range(nrows_P):
             for j in range(ncols_P):
                 window_indices[i, j] = self.get_window_indices(i, j)
-        
-        # window_indices = [
-        #     self.get_window_indices(i, j, window_mode=self.window_mode)
-        #     for i in range(nrows_P) for j in range(ncols_P)
-        # ]
+
         results = Parallel(n_jobs=-1)(
             delayed(compute_tc_chunk)(
                 row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
@@ -428,25 +388,17 @@ class TerrainQuantities:
                 self.Yp, self.Zp, self.radius, self.G_rho_dxdy, window_indices
             ) for row_start, row_end in chunks
         )
-        # results = Parallel(n_jobs=-1)(
-        #     delayed(compute_tc_chunk)(
-        #         row_start, row_end, ncols_P, dm, dn, self.coslamp, self.sinlamp, self.cosphip, 
-        #         self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp, 
-        #         self.Yp, self.Zp, self.radius, self.G_rho_dxdy
-        #     ) for row_start, row_end in chunks
-        # )
-        
+
         if progress:
             stop_signal.set()
             progress_thread.join()
             print('\nCompleted.')
-        
+
         # Collect results
         for row_start, row_end, tc_chunk in results:
             tc[row_start:row_end, :] = tc_chunk
         return tc
 
-    
     def terrain_correction(
         self,
         parallel: bool=True,
@@ -501,7 +453,7 @@ class TerrainQuantities:
         
         Returns
         -------
-        dg_RTM   : Residual terrain (RTM) gravity anomalies [mgal]
+        dg_RTM    : Residual terrain (RTM) gravity anomalies [mgal]
         
         Reference
         ---------
@@ -546,7 +498,6 @@ class TerrainQuantities:
 
                     # Distances
                     d = np.hypot(x, y)
-                    # d[d > self.radius] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
                     d3 = d * d * d
                     d5 = d3 * d * d
@@ -590,7 +541,6 @@ class TerrainQuantities:
 
                     # Distances
                     d = np.hypot(x, y)
-                    # d[d > self.radius] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
                     d3 = d * d * d
                     d5 = d3 * d * d
@@ -775,9 +725,8 @@ class TerrainQuantities:
         '''
         nrows_P, ncols_P = self.ori_P['z'].shape
         ind  = np.zeros((nrows_P, ncols_P))
-        # zeta = np.zeros((nrows_P, ncols_P))
+
         # Normal gravity at the ellipsoid
-        
         gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)    
         Hp   = self.ori_P['z'].values 
 
@@ -830,8 +779,7 @@ class TerrainQuantities:
 
                     # Indirect effect
                     ind[i, j] = dV / gamma_0[i, j]
-                    # zeta[i, j] = 1 / 9.82 * dV2
-                    
+
                     # moving window
                     m1 += 1
                     m2 += 1
@@ -851,7 +799,6 @@ class TerrainQuantities:
 
                     # Distances
                     d = np.hypot(x, y)
-                    # d[d > self.radius] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
                     d3 = d * d * d
                     d5 = d3 * d * d
@@ -878,10 +825,9 @@ class TerrainQuantities:
 
                     # Indirect effect
                     ind[i, j] = dV / gamma_0[i, j]
-                    # zeta[i, j] = 1 / 9.82 * dV2
-                    
+
         return ind
-    
+
     def indirect_effect_parallel(
         self, 
         chunk_size: int=10, 
