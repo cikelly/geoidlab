@@ -5,6 +5,7 @@
 ############################################################
 
 import numpy as np
+from numba import njit
 
 def haversine(lon1, lat1, lon2, lat2, r=6371.0, unit='deg') -> float:
     '''
@@ -53,3 +54,18 @@ def haversine(lon1, lat1, lon2, lat2, r=6371.0, unit='deg') -> float:
     distance = c * UNIT_FACTORS[unit.lower()]
     
     return distance
+
+
+@njit
+def haversine_fast(lon1, lat1, lon2, lat2, unit='deg') -> float:
+    '''Numba-optimized haversine function.'''
+    if unit == 'deg':
+        lon1 = np.radians(lon1)
+        lat1 = np.radians(lat1)
+        lon2 = np.radians(lon2)
+        lat2 = np.radians(lat2)
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return np.degrees(c) if unit == 'deg' else c

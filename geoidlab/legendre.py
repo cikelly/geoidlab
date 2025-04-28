@@ -160,7 +160,7 @@ def legendre_poly_fast(theta=None, t=None, nmax=60) -> np.ndarray:
     if np.isscalar(t):
         t = np.array([t])
     else:
-        t = np.asarray(t)
+        t = np.asarray(t).ravel()
     
     N = len(t)
     Pn = np.zeros((N, nmax + 1))
