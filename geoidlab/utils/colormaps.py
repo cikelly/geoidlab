@@ -10,9 +10,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
-def parula_cmap(reverse=False) -> LinearSegmentedColormap:
+def parula_cmap() -> LinearSegmentedColormap:
     '''
     Create MATLAB's parula colormap
     
@@ -40,7 +40,38 @@ def parula_cmap(reverse=False) -> LinearSegmentedColormap:
     [0.9589, 0.8949, 0.1353], [0.9598, 0.9218, 0.1208], [0.9661, 0.9514, 0.1050], [0.9763, 0.9831, 0.0856]
     ])
     
-    if reverse:
-        return LinearSegmentedColormap.from_list('parula', np.flipud(parula_colors))
+    # if reverse:
+    #     return LinearSegmentedColormap.from_list('parula', np.flipud(parula_colors))
     
     return LinearSegmentedColormap.from_list('parula', parula_colors)
+
+def bright_rainbow_cmap(n=256) -> ListedColormap:
+    '''
+    Create a bright rainbow colormap
+    
+    Returns
+    -------
+    cmap      : LinearSegmentedColormap
+                Bright rainbow colormap
+    '''
+    colors = np.array([
+        [1.0, 0.0, 0.0],   # Red
+        [1.0, 0.5, 0.0],   # Orange
+        [1.0, 1.0, 0.0],   # Yellow
+        [0.0, 1.0, 0.0],   # Green
+        [0.0, 1.0, 1.0],   # Cyan
+        [0.0, 0.0, 1.0],   # Blue
+        [1.0, 0.0, 1.0]    # Magenta
+    ])
+    
+    # Interpolation
+    xp = np.linspace(0, 1, colors.shape[0])  # original stops
+    x = np.linspace(0, 1, n)  # desired resolution
+    R = np.interp(x, xp, colors[:, 0])
+    G = np.interp(x, xp, colors[:, 1])
+    B = np.interp(x, xp, colors[:, 2])
+
+    cmap_array = np.vstack([R, G, B]).T
+    cmap = ListedColormap(cmap_array)
+    
+    return cmap
