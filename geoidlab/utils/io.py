@@ -73,62 +73,71 @@ def save_to_netcdf(
     -------
     None
     '''
-    # Set up working directory
-    if proj_dir is None:
-        proj_dir = Path.cwd()
-    else:
-        proj_dir = Path(proj_dir)
-    
-    # Select configuration
-    config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
-    
-    # Set up save directory and filename
-    save_dir = proj_dir / 'results'
-    save_dir.mkdir(parents=True, exist_ok=True)
-    filename = save_dir / Path(config['fname'] + '.nc')
-    
-    # Ensure lon and lat are 1D arrays
-    if lon.ndim == 2:
-        lon = lon[0, :]
-        lat = lat[:, 0]
-    
-    # Create xarray Dataset
-    ds = xr.Dataset(
-        data_vars={
-            config['var_name']: (
-                ['lat', 'lon'], 
-                data, 
-                {
-                    'units': config['units'],
-                    'long_name': config['long_name'],
-                }
-            ),
-        },
-        coords={
-            'lat': (['lat'], lat, {'long_name': 'latitude'}),
-            'lon': (['lon'], lon, {'long_name': 'longitude'}),
-        },
-        attrs={
-            'units': config['units'],
-            'description': config['description'],
-            'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'created_by': 'geoidlab',
-            'website': 'https://github.com/cikelly/geoidlab',
-            'copyright': f'Copyright (c) {datetime.now().year}, Caleb Kelly',
-        }
-    )
-    
-    # Save to NetCDF file
-    if filename.exists() and not overwrite:
-        print(f'File {filename} already exists. Use overwrite=True to replace it.')
-        return
-    
-    if filename.exists() and overwrite:
-        try:
-            ds.to_netcdf(filename, mode='w')
-        except PermissionError:
-            print(f'Permission denied: {filename}. Please close the file and try again.')
+    try:
+        # Set up working directory
+        if proj_dir is None:
+            proj_dir = Path.cwd()
+        else:
+            proj_dir = Path(proj_dir)
+        
+        # Select configuration
+        config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
+        
+        # Set up save directory and filename
+        save_dir = proj_dir / 'results'
+        save_dir.mkdir(parents=True, exist_ok=True)
+        filename = save_dir / Path(config['fname'] + '.nc')
+        
+        # Ensure lon and lat are 1D arrays
+        if lon.ndim == 2:
+            lon = lon[0, :]
+            lat = lat[:, 0]
+        
+        # Create xarray Dataset
+        ds = xr.Dataset(
+            data_vars={
+                config['var_name']: (
+                    ['lat', 'lon'], 
+                    data, 
+                    {
+                        'units': config['units'],
+                        'long_name': config['long_name'],
+                    }
+                ),
+            },
+            coords={
+                'lat': (['lat'], lat, {'long_name': 'latitude'}),
+                'lon': (['lon'], lon, {'long_name': 'longitude'}),
+            },
+            attrs={
+                'units': config['units'],
+                'description': config['description'],
+                'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'created_by': 'geoidlab',
+                'website': 'https://github.com/cikelly/geoidlab',
+                'copyright': f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+            }
+        )
+        
+        # Save to NetCDF file
+        if filename.exists() and not overwrite:
+            print(f'File {filename} already exists. Use overwrite=True to replace it.')
             return
+
+        ds.to_netcdf(filename, mode='w')
+            
+    except PermissionError as e:
+        print(f'Warning: Permission denined: {filename}. Please close the file and try again.')
+        print(f'Error details: {str(e)}')
+        return
+    except OSError as e:
+        print(f'Warning: Failed to write to {filename}.')
+        print(f'Error details: {str(e)}')
+        return
+    except Exception as e:
+        print(f'Warning: An unexpected error occurred while saving {filename}.')
+        print(f'Error details: {str(e)}')
+        return
     # ds.to_netcdf(filename, mode='w')
 
 
