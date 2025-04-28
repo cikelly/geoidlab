@@ -23,6 +23,7 @@ class ResidualGeoid:
     '''
     VALID_METHODS = {'hg', 'wg', 'og', 'ml'}  # Valid integration methods
     VALID_WINDOW_MODES = {'small', 'cap'}
+    VALID_ELLIPSOIDS = {'wgs84', 'grs80'}
     
     def __init__(
         self,
@@ -32,7 +33,8 @@ class ResidualGeoid:
         method: str = 'hg',
         ellipsoid: str = 'wgs84',
         nmax: int = None,
-        window_mode: str = 'small'
+        window_mode: str = 'small',
+        overwrite: bool = True
     ) -> None:
         '''
         Initialize the ResidualGeoid class.
@@ -50,6 +52,16 @@ class ResidualGeoid:
         ellipsoid  : reference ellipsoid for normal gravity calculation
         nmax       : maximum degree of spherical harmonic expansion
                     (required for 'hg' and 'wg' methods)
+        window_mode: window mode for integration. Options are: 'small' or 'cap'
+        overwrite  : whether to overwrite existing data files
+        
+        Returns
+        -------
+        None
+        
+        Reference
+        ---------
+        1. Hofmann-Wellenhof & Moritz (2005): Physical Geodesy (Section 2.21)
         '''
         # Validate window_mode
         window_mode = window_mode.lower()
@@ -80,7 +92,25 @@ class ResidualGeoid:
                 raise ValueError(f'nmax must be provided for method {method}')
             if not isinstance(nmax, int) or nmax <= 0:
                 raise ValueError(f'nmax must be a positive integer, got {nmax}')
-            
+        
+        # Validate ellipsoid
+        if ellipsoid.lower() not in self.VALID_ELLIPSOIDS:
+            raise ValueError(f'Invalid ellipsoid: {ellipsoid}. Supported ellipsoids: {sorted(self.VALID_ELLIPSOIDS)}')
+        
+        # Validate res_anomaly
+        if not isinstance(res_anomaly, xr.Dataset):
+            raise TypeError('res_anomaly must be an xarray Dataset')
+        if 'Dg' not in res_anomaly.data_vars:
+            raise ValueError('res_anomaly must contain a \'Dg\' variable for gravity anomalies')
+        if 'lon' not in res_anomaly.coords or 'lat' not in res_anomaly.coords:
+            raise ValueError('res_anomaly must have \'lon\' and \'lat\' coordinates')
+        
+        # Ensure sub_grid is within the bounds of res_anomaly
+        lon_min, lon_max = res_anomaly['lon'].min().item(), res_anomaly['lon'].max().item()
+        lat_min, lat_max = res_anomaly['lat'].min().item(), res_anomaly['lat'].max().item()
+        if (min_lon < lon_min or max_lon > lon_max or min_lat < lat_min or max_lat > lat_max):
+            raise ValueError(f'sub_grid {sub_grid} is outside res_anomaly bounds (lon: [{lon_min}, {lon_max}], lat: [{lat_min}, {lat_max}])')
+        
         # Store validated parameters as float64/int
         self.sub_grid = tuple(float(x) for x in sub_grid)
         self.res_anomaly = res_anomaly
@@ -111,8 +141,8 @@ class ResidualGeoid:
         self.LonP, self.LatP = np.meshgrid(lon_p, lat_p)
         
         # Calculate normal gravity at the ellipsoid
-        self.gamma0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)
-        self.gamma0 = (self.gamma0 * 1e5).astype(np.float64)  # Convert to mGal
+        self.gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)
+        self.gamma_0 = (self.gamma_0 * 1e5).astype(np.float64)  # Convert to mGal
         
         # Create full grid meshgrid
         lon_full = self.res_anomaly['lon'].values.astype(np.float64)
@@ -121,25 +151,25 @@ class ResidualGeoid:
         
         # Pre-compute constants
         self.R = np.float64(earth()['radius'])  # Earth radius
-        self.k = (1 / (4 * np.pi * self.gamma0 * self.R)).astype(np.float64)
+        self.k = (1 / (4 * np.pi * self.gamma_0 * self.R)).astype(np.float64)
         
-        # Window size calculation
+        # Window size calculation: Precompute window size
         self.nrows_P, self.ncols_P = self.res_anomaly_P['Dg'].shape
         if self.window_mode == 'small':
-            dn = int(np.round(self.ncols - self.ncols_P)) + 1
-            dm = int(np.round(self.nrows - self.nrows_P)) + 1
+            self.dn = int(np.round(self.ncols - self.ncols_P)) + 1
+            self.dm = int(np.round(self.nrows - self.nrows_P)) + 1
         else:
             # Window size based on spherical cap
-            dn = int(np.ceil(self.sph_cap / self.dlam)) * 2 + 1 # Ensure cap is fully covered
-            dm = int(np.ceil(self.sph_cap / self.dphi)) * 2 + 1
+            self.dn = int(np.ceil(self.sph_cap / self.dlam)) * 2 + 1 # Ensure cap is fully covered
+            self.dm = int(np.ceil(self.sph_cap / self.dphi)) * 2 + 1
             # Ensure window does not exceed full grid
-            dn = min(dn, self.ncols)
-            dm = min(dm, self.nrows)
+            self.dn = min(self.dn, self.ncols)
+            self.dm = min(self.dm, self.nrows)
         
         # Pre-allocate arrays for compute_geoid
         self.N_inner = np.zeros((self.nrows_P, self.ncols_P), dtype=np.float64)
         self.N_far = np.zeros_like(self.N_inner)
-        self._smallDg = np.empty((dn, dm), dtype=np.float64)
+        self._smallDg = np.empty((self.dm, self.dn), dtype=np.float64)  # Changed from (dn, dm)
         self._smallphi = np.empty_like(self._smallDg)
         self._smalllon = np.empty_like(self._smallDg)
         self._A_k = np.empty_like(self._smallDg)
@@ -181,6 +211,37 @@ class ResidualGeoid:
             
         return S_k
 
+    def get_window(
+        self, 
+        i: int, 
+        j: int
+    ) -> None:
+        '''
+        Compute windowed data based on window mode ('small' or 'cap')
+        '''
+        i_center = int(np.round((self.LatP[i, j] - self.res_anomaly['lat'].values[0]) / self.dphi))
+        j_center = int(np.round((self.LonP[i, j] - self.res_anomaly['lon'].values[0]) / self.dlam))
+        i_start = max(0, i_center - self.dm // 2)
+        i_end = min(self.nrows, i_start + self.dm)
+        j_start = max(0, j_center - self.dn // 2)
+        j_end = min(self.ncols, j_start + self.dn)
+        i_start = max(0, i_end - self.dm)
+        j_start = max(0, j_end - self.dn)
+        
+        # Extract window data
+        window_Dg = self.res_anomaly['Dg'].values[i_start:i_end, j_start:j_end]
+        window_phi = np.radians(self.Lat[i_start:i_end, j_start:j_end])
+        window_lon = np.radians(self.Lon[i_start:i_end, j_start:j_end])
+        if window_Dg.shape != (self.dm, self.dn):
+            di, dj = window_Dg.shape
+            pad_width = ((0, self.dm - di), (0, self.dn - dj))
+            window_Dg = np.pad(window_Dg, pad_width, mode='constant', constant_values=np.nan)
+            window_phi = np.pad(window_phi, pad_width, mode='constant', constant_values=np.nan)
+            window_lon = np.pad(window_lon, pad_width, mode='constant', constant_values=np.nan)
+        np.copyto(self._smallDg, window_Dg)
+        np.copyto(self._smallphi, window_phi)
+        np.copyto(self._smalllon, window_lon)
+    
     def compute_geoid(self) -> np.ndarray:
         '''
         Compute the residual geoid height
@@ -190,31 +251,25 @@ class ResidualGeoid:
         cosphip = np.cos(phip)
         
         # Near zone computation
-        self.N_inner = self.R / self.gamma0 * np.sqrt(
+        self.N_inner = self.R / self.gamma_0 * np.sqrt(
             cosphip * np.radians(self.dphi) * np.radians(self.dlam) / np.pi
         ) * self.res_anomaly_P['Dg'].values
+        
+        # self.N_inner = (self.R / (2 * self.gamma_0)) * np.sqrt(
+        #     cosphip * np.radians(self.dphi) * np.radians(self.dlam)
+        # ) * self.res_anomaly_P['Dg'].values
         
         # Far zone computation
         psi0 = np.radians(self.sph_cap)
         dm, dn = self._smallDg.shape
-
+        
+        # if self.window_mode == 'small':
+        # n1 = 0
+        # n2 = self.dm
         for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
             for j in range(self.ncols_P):
-                # Compute window indices dynamically
-                i_center = int(np.round((self.LatP[i, j] - self.res_anomaly['lat'].values[0]) / self.dphi))
-                j_center = int(np.round((self.LonP[i, j] - self.res_anomaly['lon'].values[0]) / self.dlam))
-                i_start = max(0, i_center - dm // 2)
-                i_end = min(self.nrows, i_start + dm)
-                j_start = max(0, j_center - dn // 2)
-                j_end = min(self.ncols, j_start + dn)
-                i_start = i_end - dm  # Adjust to match window size
-                j_start = j_end - dn
-
                 # Extract window data
-                np.copyto(self._smallDg, self.res_anomaly['Dg'].values[i_start:i_end, j_start:j_end])
-                np.copyto(self._smallphi, np.radians(self.Lat[i_start:i_end, j_start:j_end]))
-                np.copyto(self._smalllon, np.radians(self.Lon[i_start:i_end, j_start:j_end]))
-
+                self.get_window(i, j)
                 # Surface area
                 np.subtract(self._smallphi, np.radians(self.dphi) / 2, out=self._lat1)
                 np.add(self._smallphi, np.radians(self.dphi) / 2, out=self._lat2)
@@ -225,7 +280,7 @@ class ResidualGeoid:
                     np.abs(self._lon2 - self._lon1) * np.abs(np.sin(self._lat2) - np.sin(self._lat1)),
                     out=self._A_k
                 )
-
+                
                 # Stokes' kernel
                 self.stokes_calculator = Stokes4ResidualGeoid(
                     lonp=lonp[i,j],
@@ -237,7 +292,7 @@ class ResidualGeoid:
                 )
                 S_k = self.stokes_kernel() if self.method != 'og' else self.stokes_kernel()[0]
                 S_k = S_k.reshape(self._smallDg.shape)
-
+                
                 # Spherical distance
                 sd = haversine(
                     np.degrees(lonp[i, j]),
@@ -247,9 +302,55 @@ class ResidualGeoid:
                     unit='deg'
                 )
                 sd[sd > self.sph_cap] = np.nan
+                sd[sd == 0] = np.nan
                 S_k[np.isnan(sd)] = np.nan
-
-                # Compute contribution
+                
+                # Far zone contribution
                 self.N_far[i, j] = bn.nansum(self._A_k * S_k * self._smallDg) * self.k[i, j]
+        # else:
+        #     # Window size based on spherical cap
+        #     for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
+        #         for j in range(self.ncols_P):
+        #             self.get_window(i, j)
+        #             # Surface area
+        #             np.subtract(self._smallphi, np.radians(self.dphi) / 2, out=self._lat1)
+        #             np.add(self._smallphi, np.radians(self.dphi) / 2, out=self._lat2)
+        #             np.subtract(self._smalllon, np.radians(self.dlam) / 2, out=self._lon1)
+        #             np.add(self._smalllon, np.radians(self.dlam) / 2, out=self._lon2)
+        #             np.multiply(
+        #                 self.R**2,
+        #                 np.abs(self._lon2 - self._lon1) * np.abs(np.sin(self._lat2) - np.sin(self._lat1)),
+        #                 out=self._A_k
+        #             )
 
-        return self.N_inner + self.N_far
+        #             # Stokes' kernel
+        #             self.stokes_calculator = Stokes4ResidualGeoid(
+        #                 lonp=lonp[i,j],
+        #                 latp=phip[i,j],
+        #                 lon=self._smalllon.flatten(),
+        #                 lat=self._smallphi.flatten(),
+        #                 psi0=psi0,
+        #                 nmax=self.nmax
+        #             )
+        #             S_k = self.stokes_kernel() if self.method != 'og' else self.stokes_kernel()[0]
+        #             S_k = S_k.reshape(self._smallDg.shape)
+
+        #             # Spherical distance
+        #             sd = haversine(
+        #                 np.degrees(lonp[i, j]),
+        #                 np.degrees(phip[i, j]),
+        #                 np.degrees(self._smalllon),
+        #                 np.degrees(self._smallphi),
+        #                 unit='deg'
+        #             )
+        #             sd[sd > self.sph_cap] = np.nan
+        #             sd[sd == 0] = np.nan
+        #             S_k[np.isnan(sd)] = np.nan
+
+        #             # Far zone contribution
+        #             self.N_far[i, j] = bn.nansum(self._A_k * S_k * self._smallDg) * self.k[i, j]
+        
+        # Residual geoid: Combine near and far zone contributions
+        N_res = self.N_inner + self.N_far
+        
+        return N_res
