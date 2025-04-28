@@ -55,6 +55,7 @@ def save_to_netcdf(
     lat: np.ndarray,
     dataset_key: str,
     proj_dir: str = None, 
+    overwrite: bool = True,
 ) -> None:
     '''
     Save a dataset to a NetCDF file using predefined or default configuration
@@ -66,6 +67,7 @@ def save_to_netcdf(
     lat       : latitude
     proj_dir  : Directory to save data to
     filename  : Name of file to use for the saved data
+    overwrite : Overwrite existing file if it exists
     
     Returns
     -------
@@ -117,7 +119,17 @@ def save_to_netcdf(
     )
     
     # Save to NetCDF file
-    ds.to_netcdf(filename)
+    if filename.exists() and not overwrite:
+        print(f'File {filename} already exists. Use overwrite=True to replace it.')
+        return
+    
+    if filename.exists() and overwrite:
+        try:
+            ds.to_netcdf(filename, mode='w')
+        except PermissionError:
+            print(f'Permission denied: {filename}. Please close the file and try again.')
+            return
+    # ds.to_netcdf(filename, mode='w')
 
 
 
