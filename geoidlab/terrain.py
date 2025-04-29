@@ -14,7 +14,7 @@ import threading
 
 from geoidlab import constants
 from geoidlab.coordinates import geodetic2cartesian
-from geoidlab.utils.parallel_utils import (
+from geoidlab.utils.numba.terrain import (
     compute_tc_chunk, 
     compute_rtm_tc_chunk, 
     compute_ind_chunk, 

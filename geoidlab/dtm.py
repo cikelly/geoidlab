@@ -1,5 +1,5 @@
 ############################################################
-# Utilities for calculating reference geoid                #
+# Utilities for digital terrain modeling                   #
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
@@ -8,7 +8,7 @@ import lzma
 from pathlib import Path
 from geoidlab import coordinates as co
 from geoidlab.legendre import ALF, ALFsGravityAnomaly
-from geoidlab.utils.parallel_utils import compute_harmonic_sum
+from geoidlab.utils.numba.dtm import compute_harmonic_sum
 from tqdm import tqdm
 
 from multiprocessing import Pool, cpu_count
