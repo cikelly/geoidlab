@@ -14,13 +14,22 @@ class MATLABIO():
     '''
     Class to read and write mat files
     '''
-    def __init__(self, filename:str = None, xr_data: xr.Dataset = None, save_filename:str = None) -> None:
+    def __init__(
+        self, 
+        filename:str = None, 
+        xr_data: xr.Dataset = None, 
+        save_filename:str = None,
+        **kwargs
+    ) -> None:
         '''
         Initialize
         
         Parameters
         ----------
-        filename  : (str) path to the mat file
+        filename      : (str) path to the mat file
+        xr_data       : (xr.Dataset) xarray dataset
+        save_filename : (str) path to save the mat file
+        **kwargs      : additional keyword arguments for use in write_xarray
         
         Returns
         -------
@@ -30,6 +39,7 @@ class MATLABIO():
         self.xrdata = xr_data
         self.filename = filename
         self.save_filename = save_filename
+        self.kwargs = kwargs
         
     def read_mat_v5(self) -> None:
         '''
@@ -128,26 +138,8 @@ class MATLABIO():
             _read_v7()
         except OSError:
             _read_v5()
-        
-    def _to_xarray(self) -> xr.Dataset:
-        '''
-        Convert to xarray dataset object
-        
-        Returns
-        -------
-        xr_dataset
-        '''
-        xr_dataset = xr.Dataset(
-            self.data_vars,
-            coords={
-                'lat': self.lat,
-                'lon': self.lon,
-            }
-        )
-        
-        return xr_dataset
     
-    def read_mat(self, to_xarray: bool=True) -> xr.Dataset | None:
+    def read_mat(self, to_xarray=True) -> xr.Dataset | None:
         '''
         Read mat file
         
@@ -169,9 +161,55 @@ class MATLABIO():
         if self.data is not None:
             return self.data  # Return single variable directly
         elif to_xarray:
-            return self._to_xarray()
+            return self.write_xarray()
         else:
             return None
+
+    def write_xarray(self, anomaly_var=None, anomaly=False) -> xr.Dataset:
+        '''
+        Convert to xarray dataset object
+        
+        Parameters
+        ----------
+        anomaly_var : name of the anomaly variable (fall back to **kwargs in __init__)
+        anomaly     : flag for whether data is gravity anomalies (fall back to **kwargs in __init__)
+        
+        Returns
+        -------
+        xr_dataset
+        
+        Notes
+        -----
+        1. Designed to output data ready for Stokes' formula if gravity anomaly data is provided
+        '''
+        if self.data_vars is None:
+            raise ValueError('No data variables available. Run read_mat first.')
+        
+        # Extract anomaly parameters
+        anomaly_var = anomaly_var if anomaly_var is not None else self.kwargs.get('anomaly_var', None)
+        anomaly     = anomaly if anomaly else self.kwargs.get('anomaly', False)
+        
+        # Handle anomaly variable renaming
+        if anomaly and anomaly_var is not None:
+            if anomaly_var in self.data_vars:
+                self.data_vars['Dg'] = self.data_vars.pop(anomaly_var)
+            elif 'dg' in self.data_vars:
+                self.data_vars['Dg'] = self.data_vars.pop('dg')
+        elif 'dg' in self.data_vars:
+            self.data_vars['Dg'] = self.data_vars.pop('dg')
+            
+        try:
+            xr_dataset = xr.Dataset(
+                self.data_vars,
+                coords={
+                    'lat': (['lat'], self.lat),
+                    'lon': (['lon'], self.lon),
+                }
+            )
+        except Exception as e:
+            raise ValueError(f'Failed to create xarray Dataset: {str(e)}')
+        
+        return xr_dataset
     
     def write_mat(self) -> None:
         '''
@@ -187,3 +225,4 @@ class MATLABIO():
         for var in self.xrdata.data_vars:
             data_vars[var] = self.xrdata[var].values
         savemat(self.save_filename, data_vars)
+        
