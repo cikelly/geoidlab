@@ -38,6 +38,18 @@ def compute_legendre_chunk(vartheta, n, Pnm) -> np.ndarray:
 
 @njit(parallel=True)
 def leg_poly_numba(t, nmax) -> np.ndarray:
+    '''
+    Compute Legendre polynomials using Numba for optimization
+
+    Parameters
+    ----------
+    t         : cos(theta)
+    nmax      : maximum degree of expansion
+
+    Returns
+    -------
+    Pn        : Legendre polynomials
+    '''
     Pn = np.zeros(nmax + 1)
     Pn[0] = 1.0
     if nmax >= 1:
@@ -47,6 +59,24 @@ def leg_poly_numba(t, nmax) -> np.ndarray:
     return Pn
 
 def legendre_poly_numba(theta=None, t=None, nmax=60) -> np.ndarray:
+    '''
+    Wrapper function to handle data and call the Numba-optimized leg_poly_numba
+
+    Parameters
+    ----------
+    theta    : colatitude (degrees)
+    t        : cos(theta)
+    nmax     : maximum degree of expansion
+
+    Returns
+    -------
+    Pn       : Legendre polynomials
+    '''
+    if theta is None and t is None:
+        raise ValueError('Either theta or t must be provided')
+    
+    # If theta is provided, overwrite t
     if theta is not None:
         t = np.cos(np.radians(theta))
+        
     return leg_poly_numba(t, nmax)
