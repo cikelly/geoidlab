@@ -213,16 +213,30 @@ class MATLABIO():
     
     def write_mat(self) -> None:
         '''
-        Write mat file
+        Write a MAT file from the xarray Dataset object
+        
+        Parameters
+        ----------
+        None
         
         Returns
         -------
         None
+        
+        Notes
+        -----
+        1. Writes a MAT file with the same structure as the input xarray Dataset object
         '''
+        # Create meshgrid of longitude and latitude arrays
         Lon, Lat = np.meshgrid(self.xrdata.lon.values, self.xrdata.lat.values)
         
+        # Initialize data dictionary
         data_vars = {'Long': Lon, 'Lat': Lat}
+        
+        # Iterate through data variables and add to dictionary
         for var in self.xrdata.data_vars:
             data_vars[var] = self.xrdata[var].values
+        
+        # Write data dictionary to MAT file
         savemat(self.save_filename, data_vars)
         
