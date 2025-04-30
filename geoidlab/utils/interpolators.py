@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from geoidlab.utils.lsc_helper_funcs import (
-    compute_spatial_covariance,
     fit_exponential_covariance,
     fit_gaussian_covariance,
     lsc_exponential,
@@ -25,10 +24,6 @@ from scipy.interpolate import (
 
 from typing import Union, Tuple, Optional
 
-
-
-# from sklearn.gaussian_process import GaussianProcessRegressor
-# from sklearn.gaussian_process.kernels import RBF as GPR_RBF, ConstantKernel as GPR_Constant
 
 def clean_data(df, key='Dg') -> pd.DataFrame:
     '''

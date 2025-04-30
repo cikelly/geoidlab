@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, Tuple, List, Optional
+from typing import Tuple, Optional
 
 import warnings
 warnings.filterwarnings(
