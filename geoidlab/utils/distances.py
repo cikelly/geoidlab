@@ -47,8 +47,13 @@ def haversine(lon1, lat1, lon2, lat2, r=6371.0, unit='deg') -> float:
     dlat = lat2 - lat1
     
     # Haversine formula
-    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
-    c = 2 * np.arcsin(np.sqrt(a))
+    a = (
+        np.sin(dlat / 2.0) ** 2 + 
+        np.cos(lat1) * np.cos(lat2) * 
+        np.sin(dlon / 2.0) ** 2
+    )
+    # c = 2 * np.arcsin(np.sqrt(a))
+    c = 2 * np.atan2(np.sqrt(a), np.sqrt(1 - a)) # more stable numerically
     
     # Convert to desired unit
     distance = c * UNIT_FACTORS[unit.lower()]
@@ -58,14 +63,29 @@ def haversine(lon1, lat1, lon2, lat2, r=6371.0, unit='deg') -> float:
 
 @njit
 def haversine_fast(lon1, lat1, lon2, lat2, unit='deg') -> float:
-    '''Numba-optimized haversine function.'''
-    if unit == 'deg':
-        lon1 = np.radians(lon1)
-        lat1 = np.radians(lat1)
-        lon2 = np.radians(lon2)
-        lat2 = np.radians(lat2)
+    '''
+    Numba-optimized haversine function.
+    
+    Parameters
+    ----------
+    lon1      : longitude of first point in degrees
+    lat1      : latitude of first point in degrees
+    lon2      : longitude of second point in degrees
+    lat2      : latitude of second point in degrees
+    unit      : unit of distance to return
+    '''
+    lon1 = np.radians(lon1)
+    lat1 = np.radians(lat1)
+    lon2 = np.radians(lon2)
+    lat2 = np.radians(lat2)
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
-    c = 2 * np.arcsin(np.sqrt(a))
+    a = (
+        np.sin(dlat / 2) ** 2 + 
+        np.cos(lat1) * np.cos(lat2) * 
+        np.sin(dlon / 2) ** 2
+    )
+    # c = 2 * np.arcsin(np.sqrt(a))
+    c = 2 * np.atan2( np.sqrt(a), np.sqrt(1 - a) ) # more stable numerically
+    
     return np.degrees(c) if unit == 'deg' else c
