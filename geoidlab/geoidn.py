@@ -5,8 +5,8 @@
 ############################################################
 import numpy as np
 import xarray as xr
-import warnings
-import bottleneck as bn
+# import warnings
+# import bottleneck as bn
 
 from geoidlab.utils.distances import haversine_fast, haversine_vectorized
 from geoidlab.gravity import normal_gravity_somigliana
@@ -43,10 +43,10 @@ class ResidualGeoid:
         sph_cap    : spherical cap for integration (degrees)
         sub_grid   : sub-grid to use for integration (min_lon, max_lon, min_lat, max_lat)
         method     : method for integration. Options are:
-                    'hg' : Heck and Gruninger's modification
-                    'wg' : Wong and Gore's modification
-                    'og' : original Stokes' function
-                    'ml' : Meissl's modification
+                        'hg' : Heck and Gruninger's modification
+                        'wg' : Wong and Gore's modification
+                        'og' : original Stokes' function
+                        'ml' : Meissl's modification
         ellipsoid  : reference ellipsoid for normal gravity calculation
         nmax       : maximum degree of spherical harmonic expansion
         window_mode: window mode for integration. Options are: 'fixed' or 'cap'
@@ -183,6 +183,10 @@ class ResidualGeoid:
         self.N_far = np.zeros_like(self.N_inner)
         psi0 = np.radians(self.sph_cap)
         
+        # Precompute np.radians(self.dphi) / 2 and np.radians(self.dlam) / 2
+        dphi_2 = np.radians(self.dphi) / 2
+        dlam_2 = np.radians(self.dlam) / 2
+        
         if self.window_mode == 'fixed':
             # Sub-window for integration
             dn = round(self.nrows - self.nrows_P) + 1
@@ -200,10 +204,10 @@ class ResidualGeoid:
                     smalllon = np.radians(self.Lon[n1:n2, m1:m2])
                     
                     # Compute surface area on the sphere
-                    lat1 = smallphi - np.radians(self.dphi) / 2
-                    lat2 = smallphi + np.radians(self.dphi) / 2
-                    lon1 = smalllon - np.radians(self.dlam) / 2
-                    lon2 = smalllon + np.radians(self.dlam) / 2
+                    lat1 = smallphi - dphi_2
+                    lat2 = smallphi + dphi_2
+                    lon1 = smalllon - dlam_2
+                    lon2 = smalllon + dlam_2
                     A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
                     
                     self.stokes_calculator = Stokes4ResidualGeoid(
@@ -272,25 +276,13 @@ class ResidualGeoid:
                     smalllon = np.where(mask, smalllon, np.nan)
                     
                     # Compute surface area on the sphere
-                    lat1 = smallphi - np.radians(self.dphi) / 2
-                    lat2 = smallphi + np.radians(self.dphi) / 2
-                    lon1 = smalllon - np.radians(self.dlam) / 2
-                    lon2 = smalllon + np.radians(self.dlam) / 2
+                    lat1 = smallphi - dphi_2
+                    lat2 = smallphi + dphi_2
+                    lon1 = smalllon - dlam_2
+                    lon2 = smalllon + dlam_2
                     A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
                     A_k = np.where(np.isfinite(smallDg), A_k, np.nan)
-                    # cos_dlam = (
-                    #     np.cos(smalllon) * np.cos(self.lonp[i, j]) +
-                    #     np.sin(smalllon) * np.sin(self.lonp[i, j])
-                    # )
-                    # cos_psi  = (
-                    #     np.sin(self.phip[i, j]) * np.sin(smallphi) +
-                    #     np.cos(self.phip[i, j]) * np.cos(smallphi) * cos_dlam
-                    # )
-                    # sin2_psi_2 = (
-                    #     np.sin((self.phip[i, j] - smallphi)/2)**2 +
-                    #     np.sin((self.lonp[i, j] - smalllon)/2)**2 *
-                    #     np.cos(self.phip[i, j]) * np.cos(smallphi)
-                    # )
+                    
                     
                     self.stokes_calculator = Stokes4ResidualGeoid(
                         lonp=self.lonp[i, j],
