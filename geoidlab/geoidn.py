@@ -231,6 +231,15 @@ class ResidualGeoid:
                         unit='deg'
                     )
                     
+                    # Prone to rounding errors
+                    # sd = haversine_fast(
+                    #     lon1=self.lonp[i, j] * 180. / np.pi,
+                    #     lat1=self.phip[i, j] * 180. / np.pi,
+                    #     lon2=smalllon * 180. / np.pi,
+                    #     lat2=smallphi * 180. / np.pi,
+                    #     unit='deg'
+                    # )
+                    
                     sd[sd > self.sph_cap] = np.nan
                     
                     # Mask S_k for points beyond self.scap
@@ -238,7 +247,6 @@ class ResidualGeoid:
                     
                     # Outer (far) zone
                     c_k = A_k * S_k
-                    
                     self.N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
                     
                     # Move window
@@ -282,8 +290,8 @@ class ResidualGeoid:
                     lon2 = smalllon + dlam_2
                     A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
                     A_k = np.where(np.isfinite(smallDg), A_k, np.nan)
-                    
-                    
+
+
                     self.stokes_calculator = Stokes4ResidualGeoid(
                         lonp=self.lonp[i, j],
                         latp=self.phip[i, j],
@@ -292,25 +300,24 @@ class ResidualGeoid:
                         psi0=psi0,
                         nmax=self.nmax
                     )
-                    
+
                     S_k = self.stokes_kernel()
-                    
                     # Apply mask to S_k (use mask from get_cap_window)
                     S_k = np.where(mask, S_k, np.nan)
                     
+                    # Outer (far) zone
                     c_k = A_k * S_k
-                    
-                    self.N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)                    
-            
+                    self.N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
+
         N_res = self.N_inner + self.N_far
         self.N_res = N_res
-        
+
         return N_res
 
     def get_cap_window(self, row_p, col_p) -> tuple[bool, tuple[int, int, int, int]]:
         '''
         Get indices of points within spherical cap
-        
+
         Parameters
         ----------
         row_p       : row index of computation point
