@@ -108,7 +108,7 @@ class Stokes4ResidualGeoid:
         sum_term = np.dot(Pn_all[:, 2:], coefficients)
         
         # Apply the modification
-        S_wg = S - sum_term
+        S_wg = S - sum_term.reshape(S.shape)
         
         return S_wg
     
