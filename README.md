@@ -1,7 +1,7 @@
 # GeoidLab
 
 <div align="center">
-  <img src="docs/logo/image1.png" alt="Logo" width="200"/>
+  <img src="docs/logo/logo.png" alt="Logo" width="200"/>
 </div>
 
 <p></p>
