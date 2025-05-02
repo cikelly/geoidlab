@@ -11,6 +11,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+from pathlib import Path
+
+
 
 def parula_cmap() -> LinearSegmentedColormap:
     '''
@@ -73,5 +76,40 @@ def bright_rainbow_cmap(n=256) -> ListedColormap:
 
     cmap_array = np.vstack([R, G, B]).T
     cmap = ListedColormap(cmap_array)
+    
+    return cmap
+
+def cpt_cmap(cpt_name: str = 'GMT_rainbow') -> LinearSegmentedColormap:
+    '''
+    Load a GMT .cpt file as a Matplotlib colormap
+    
+    Parameters
+    ----------
+    name      : Name of .cpt file
+    
+    Returns
+    -------
+    cmap      : LinearSegmentedColormap
+                Matplotlib colormap
+                
+    Notes
+    -----
+    1. Uses `
+    '''
+    from .map.get_cpt import get_cmap
+    
+    CPT_BASE_DIR = Path(__file__).resolve().parent / 'map/cpt'
+    VALID_CPT_FILES = [f.stem for f in CPT_BASE_DIR.iterdir() if f.suffix == '.cpt']
+    
+    cpt_name = Path(cpt_name)
+    if cpt_name.suffix != '.cpt':
+        cpt_name = cpt_name.with_suffix('.cpt')
+
+    cpt_path = CPT_BASE_DIR / cpt_name
+    
+    if not cpt_path.exists():
+        raise FileNotFoundError(f'Could not find {cpt_name} in {CPT_BASE_DIR}. Valid cpt: {VALID_CPT_FILES}')
+    
+    cmap = get_cmap(str(cpt_path))
     
     return cmap
