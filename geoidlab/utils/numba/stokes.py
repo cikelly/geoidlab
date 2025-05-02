@@ -19,8 +19,8 @@ def stokes_kernel(lonp, latp, lon, lat) -> tuple:
     
     log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
     S = np.where(
-        log_arg <= 0,
-        0.0,
+        (sin2_psi_2 <= 0) | (log_arg <= 0),
+        np.nan,
         1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
     )
     return S, cos_psi

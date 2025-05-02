@@ -62,22 +62,29 @@ def haversine(lon1, lat1, lon2, lat2, r=6371.0, unit='deg') -> float:
 
 
 @njit
-def haversine_fast(lon1, lat1, lon2, lat2, unit='deg') -> float:
+def haversine_fast(lon1, lat1, lon2, lat2, in_unit='rad', out_unit='deg') -> float:
     '''
     Numba-optimized haversine function.
     
     Parameters
     ----------
-    lon1      : longitude of first point in degrees
-    lat1      : latitude of first point in degrees
-    lon2      : longitude of second point in degrees
-    lat2      : latitude of second point in degrees
+    lon1      : longitude of first point
+    lat1      : latitude of first point
+    lon2      : longitude of second point
+    lat2      : latitude of second point
+    in_unit   : unit of input coordinates
+    out_unit  : unit of distance to return
+    
+    Returns
+    -------
     unit      : unit of distance to return
     '''
-    lon1 = np.radians(lon1)
-    lat1 = np.radians(lat1)
-    lon2 = np.radians(lon2)
-    lat2 = np.radians(lat2)
+    if in_unit == 'deg':
+        lon1 = np.radians(lon1)
+        lat1 = np.radians(lat1)
+        lon2 = np.radians(lon2)
+        lat2 = np.radians(lat2)
+        
     dlon = lon2 - lon1
     dlat = lat2 - lat1
     a = (
@@ -88,11 +95,11 @@ def haversine_fast(lon1, lat1, lon2, lat2, unit='deg') -> float:
     # c = 2 * np.arcsin(np.sqrt(a))
     c = 2 * np.atan2( np.sqrt(a), np.sqrt(1 - a) ) # more stable numerically
     
-    return np.degrees(c) if unit == 'deg' else c
+    return np.degrees(c) if out_unit == 'deg' else c
 
 @vectorize
-def haversine_vectorized(lon1, lat1, lon2, lat2) -> float:
+def haversine_vectorized(lon1, lat1, lon2, lat2, in_unit='rad', out_unit='deg') -> float:
     '''
     Vectorized haversine function.
     '''
-    return haversine_fast(lon1, lat1, lon2, lat2)
+    return haversine_fast(lon1, lat1, lon2, lat2, in_unit, out_unit)

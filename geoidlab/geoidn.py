@@ -22,7 +22,7 @@ class ResidualGeoid:
     VALID_METHODS = {'hg', 'wg', 'og', 'ml'}  # Valid integration methods
     VALID_WINDOW_MODES = {'fixed', 'cap'}
     VALID_ELLIPSOIDS = {'wgs84', 'grs80'}
-    DEFAULT_WINDOW_MODE = 'fixed'
+    DEFAULT_WINDOW_MODE = 'cap'
     
     def __init__(
         self,
@@ -32,7 +32,7 @@ class ResidualGeoid:
         method: str = 'hg',
         ellipsoid: str = 'wgs84',
         nmax: int = None,
-        window_mode: str = 'fixed'
+        window_mode: str = 'cap'
     ) -> None:
         '''
         Initialize the ResidualGeoid class.
@@ -199,22 +199,22 @@ class ResidualGeoid:
                 m2 = dm
                 for j in range(self.ncols_P):
                     # Extract window data
-                    smallDg = self.res_anomaly['Dg'].values[n1:n2, m1:m2]
-                    smallphi = np.radians(self.Lat[n1:n2, m1:m2])
-                    smalllon = np.radians(self.Lon[n1:n2, m1:m2])
+                    win_Dg = self.res_anomaly['Dg'].values[n1:n2, m1:m2]
+                    win_phi = np.radians(self.Lat[n1:n2, m1:m2])
+                    win_lon = np.radians(self.Lon[n1:n2, m1:m2])
                     
                     # Compute surface area on the sphere
-                    lat1 = smallphi - dphi_2
-                    lat2 = smallphi + dphi_2
-                    lon1 = smalllon - dlam_2
-                    lon2 = smalllon + dlam_2
+                    lat1 = win_phi - dphi_2
+                    lat2 = win_phi + dphi_2
+                    lon1 = win_lon - dlam_2
+                    lon2 = win_lon + dlam_2
                     A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
                     
                     self.stokes_calculator = Stokes4ResidualGeoid(
                         lonp=self.lonp[i, j],
                         latp=self.phip[i, j],
-                        lon=smalllon,
-                        lat=smallphi,
+                        lon=win_lon,
+                        lat=win_phi,
                         psi0=psi0,
                         nmax=self.nmax
                     )
@@ -224,19 +224,28 @@ class ResidualGeoid:
                     
                     # Spherical Distance
                     sd = haversine_fast(
-                        lon1=np.degrees(self.lonp[i, j]),
-                        lat1=np.degrees(self.phip[i, j]),
-                        lon2=np.degrees(smalllon),
-                        lat2=np.degrees(smallphi),
-                        unit='deg'
+                        lon1=self.lonp[i, j],
+                        lat1=self.phip[i, j],
+                        lon2=win_lon,
+                        lat2=win_phi,
+                        in_unit='rad',
+                        out_unit='rad'
                     )
+                    sd = sd * 180 / np.pi
+                    # sd = haversine_fast(
+                    #     lon1=np.degrees(self.lonp[i, j]),
+                    #     lat1=np.degrees(self.phip[i, j]),
+                    #     lon2=np.degrees(win_lon),
+                    #     lat2=np.degrees(win_phi),
+                    #     unit='deg'
+                    # )
                     
                     # Prone to rounding errors
                     # sd = haversine_fast(
                     #     lon1=self.lonp[i, j] * 180. / np.pi,
                     #     lat1=self.phip[i, j] * 180. / np.pi,
-                    #     lon2=smalllon * 180. / np.pi,
-                    #     lat2=smallphi * 180. / np.pi,
+                    #     lon2=win_lon * 180. / np.pi,
+                    #     lat2=win_phi * 180. / np.pi,
                     #     unit='deg'
                     # )
                     
@@ -247,7 +256,7 @@ class ResidualGeoid:
                     
                     # Outer (far) zone
                     c_k = A_k * S_k
-                    self.N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
+                    self.N_far[i, j] = np.nansum(c_k * win_Dg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
                     
                     # Move window
                     m1 += 1
@@ -274,29 +283,29 @@ class ResidualGeoid:
                     mask, (row_min, row_max, col_min, col_max) = self.get_cap_window(row_p, col_p)
                     
                     # Extract window data
-                    smallDg = self.res_anomaly['Dg'].values[row_min:row_max, col_min:col_max]
-                    smallphi = np.radians(self.Lat[row_min:row_max, col_min:col_max])
-                    smalllon = np.radians(self.Lon[row_min:row_max, col_min:col_max])
+                    win_Dg = self.res_anomaly['Dg'].values[row_min:row_max, col_min:col_max]
+                    win_phi = np.radians(self.Lat[row_min:row_max, col_min:col_max])
+                    win_lon = np.radians(self.Lon[row_min:row_max, col_min:col_max])
                     
                     # Apply mask to windowed data
-                    smallDg = np.where(mask, smallDg, np.nan)
-                    smallphi = np.where(mask, smallphi, np.nan)
-                    smalllon = np.where(mask, smalllon, np.nan)
+                    win_Dg = np.where(mask, win_Dg, np.nan)
+                    win_phi = np.where(mask, win_phi, np.nan)
+                    win_lon = np.where(mask, win_lon, np.nan)
                     
                     # Compute surface area on the sphere
-                    lat1 = smallphi - dphi_2
-                    lat2 = smallphi + dphi_2
-                    lon1 = smalllon - dlam_2
-                    lon2 = smalllon + dlam_2
+                    lat1 = win_phi - dphi_2
+                    lat2 = win_phi + dphi_2
+                    lon1 = win_lon - dlam_2
+                    lon2 = win_lon + dlam_2
                     A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
-                    A_k = np.where(np.isfinite(smallDg), A_k, np.nan)
+                    A_k = np.where(np.isfinite(win_Dg), A_k, np.nan)
 
 
                     self.stokes_calculator = Stokes4ResidualGeoid(
                         lonp=self.lonp[i, j],
                         latp=self.phip[i, j],
-                        lon=smalllon,
-                        lat=smallphi,
+                        lon=win_lon,
+                        lat=win_phi,
                         psi0=psi0,
                         nmax=self.nmax
                     )
@@ -307,7 +316,7 @@ class ResidualGeoid:
                     
                     # Outer (far) zone
                     c_k = A_k * S_k
-                    self.N_far[i, j] = np.nansum(c_k * smallDg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
+                    self.N_far[i, j] = np.nansum(c_k * win_Dg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
 
         N_res = self.N_inner + self.N_far
         self.N_res = N_res
@@ -353,7 +362,7 @@ class ResidualGeoid:
         lon_window = self.Lon[row_min:row_max, col_min:col_max] 
         
         # Compute distances within window
-        distances = haversine_vectorized(lon_p, lat_p, lon_window, lat_window)
+        distances = haversine_vectorized(lon_p, lat_p, lon_window, lat_window, 'deg', 'deg')
         
         # Mask points within spherical cap
         mask = distances <= self.sph_cap

@@ -77,12 +77,13 @@ class Stokes4ResidualGeoid:
         cos_psi    = np.sin(latp) * np.sin(lat) + np.cos(latp) * np.cos(lat) * cos_dlam
         sin2_psi_2 = np.sin((latp - lat)/2)**2 + np.sin((lonp - lon)/2)**2 * np.cos(latp) * np.cos(lat)
 
+        # Setting numerical issues to nan lets us use the same function for all modifications
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=RuntimeWarning)
             log_arg = np.sqrt(sin2_psi_2) + sin2_psi_2
             S = np.where(
-                log_arg <= 0,
-                0,
+                (sin2_psi_2 <= 0) | (log_arg <= 0),
+                np.nan,
                 1 / np.sqrt(sin2_psi_2) - 6 * np.sqrt(sin2_psi_2) + 1 - 5 * cos_psi - 3 * cos_psi * np.log(log_arg)
             )
 
