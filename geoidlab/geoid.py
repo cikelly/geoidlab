@@ -5,8 +5,6 @@
 ############################################################
 import numpy as np
 import xarray as xr
-# import warnings
-# import bottleneck as bn
 
 from geoidlab.utils.distances import haversine_fast, haversine_vectorized
 from geoidlab.gravity import normal_gravity_somigliana
@@ -229,25 +227,9 @@ class ResidualGeoid:
                         lon2=win_lon,
                         lat2=win_phi,
                         in_unit='rad',
-                        out_unit='rad'
+                        out_unit='deg'
                     )
-                    sd = sd * 180 / np.pi
-                    # sd = haversine_fast(
-                    #     lon1=np.degrees(self.lonp[i, j]),
-                    #     lat1=np.degrees(self.phip[i, j]),
-                    #     lon2=np.degrees(win_lon),
-                    #     lat2=np.degrees(win_phi),
-                    #     unit='deg'
-                    # )
                     
-                    # Prone to rounding errors
-                    # sd = haversine_fast(
-                    #     lon1=self.lonp[i, j] * 180. / np.pi,
-                    #     lat1=self.phip[i, j] * 180. / np.pi,
-                    #     lon2=win_lon * 180. / np.pi,
-                    #     lat2=win_phi * 180. / np.pi,
-                    #     unit='deg'
-                    # )
                     
                     sd[sd > self.sph_cap] = np.nan
                     
