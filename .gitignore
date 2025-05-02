@@ -17,3 +17,6 @@ Coefficients
 src_old
 MATLAB
 geoidlab.egg-info
+geoid1.py
+legendre1.py
+stokes_func1.py
