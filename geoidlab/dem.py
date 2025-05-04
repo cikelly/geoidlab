@@ -128,7 +128,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                 return 'merged_dem.nc'
             else:
                 print(f'{downloads_dir}/merged_dem.nc exists but does not cover bbox. Deleting ...\n')
-                (downloads_dir / 'merged_dem.nc').unlink()
+                (downloads_dir / 'merged_dem.nc').unlink(missing_ok=True)
                 print(f'Downloading and merging {len(urls)} tiles ...\n')
         
     filepaths: list[str] = []
@@ -138,27 +138,49 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         # Check if the file already exists
         if filepath.exists():
             try:
-                response_head: requests.Response = requests.head(url, verify=False)
-                total_size: int = int(response_head.headers.get('content-length', 0))
-                # Check if the existing file size matches the expected size
-                if filepath.stat().st_size == total_size:
-                    print(f'{filename} already exists and is complete. Skip download\n')
+            # 1. If file exists and is readable, use it
+                _ = netCDF4.Dataset(filepath)
+                if check_bbox_contains(filepath, bbox):
+                    print(f'{filename} exists, is readable, and covers bbox. Using local copy.\n')
                     filepaths.append(filepath)
-                    continue
+                    continue  # Skip download
                 else:
-                    print(f'{filename} already exists but is incomplete. Redownloading ...\n')
-                    filepath.unlink()
-            except requests.exceptions.RequestException:
-                print(f'Unable to check if {filename} is complete. {filename} in {downloads_dir} will be used ...\n')
-                filepaths.append(filepath)
-                continue
+                    print(f'{filename} exists, is readable, but does NOT cover bbox. Redownloading ...\n')
+                    filepath.unlink(missing_ok=True)
+            except Exception:
+                print(f'{filename} exists but is unreadable. Redownloading ...\n')
+                filepath.unlink(missing_ok=True)
+            # # 2. Try to download (only if needed)
+            # try:
+            #     response_head: requests.Response = requests.head(url, verify=False)
+            #     # response_head: requests.Response = requests.head(url, verify=certifi.where(), stream=True, timeout=30)
+            #     response_head.raise_for_status()
+            #     total_size: int = int(response_head.headers.get('content-length', 0))
+            #     # Check if the existing file size matches the expected size
+            #     if filepath.stat().st_size == total_size:
+            #         print(f'{filename} exists and is complete. Skip download\n')
+            #         filepaths.append(filepath)
+            #         continue
+            #     else:
+            #         print(f'{filename} exists but is incomplete. Redownloading ...\n')
+            #         filepath.unlink(missing_ok=True)
+            # except requests.exceptions.RequestException:
+            #     print(f'Unable to check if {filename} is complete.')
+            #     try:
+            #         _ = netCDF4.Dataset(filepath)
+            #         print(f'{filename} appears to be complete and will be used ...\n')
+            #         filepaths.append(filepath)
+            #     except OSError:
+            #         print(f'{filename} may be damaged. Redownloading ...\n')
+            #         filepath.unlink(missing_ok=True)
+            #     continue
                 
         print(f'Downloading {filename} to: \n\t{downloads_dir} ...')
         # Download NetCDF file
         try:
-            response: requests.Response = requests.get(url, verify=certifi.where(), stream=True)
+            response: requests.Response = requests.get(url, verify=certifi.where(), stream=True, timeout=30)
+            response.raise_for_status()
             total_size = int(response.headers.get('content-length', 0))
-
             with tqdm(
                 total=total_size,
                 unit='iB',
@@ -173,11 +195,28 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                         f.flush()
                         sys.stdout.flush()
             print('\n')
+            # Try to open the file after the download to verify
+            _ = netCDF4.Dataset(filepath)
+            filepaths.append(filepath)
         except Exception as e:
-            raise RuntimeError(f'Download failed: {e}. Are you connected to the internet?')
+            print(f'Download failed for {filename}: {e}.')
+            # If file exists but is unreadable, keep it
+            if not filepath.exists():
+                continue
+            else:
+                print(f'File {filename} exists but is unreadable and could not be replaced due to download failure.')
+                continue
+            # raise RuntimeError(f'Download failed: {e}. Are you connected to the internet?')
 
         filepaths.append(filepath)
 
+    # Check if any files were downloaded
+    if not filepaths:
+        raise RuntimeError(
+            'No DEM files were downloaded. '
+            'Check your internet connection or the availability of the remote server.'
+        )
+    
     # If multiple files were downloaded, merge them
     if len(filepaths) > 1:
         print('Merging downloaded tiles...')
