@@ -261,7 +261,8 @@ def dem4geoid(
     ncfile=None, 
     bbox_off=1, 
     downloads_dir=None,
-    resolution=30
+    resolution=30,
+    fallback=False
 ) -> xr.Dataset:
     '''
     Prepare a DEM for geoid calculation.
@@ -294,7 +295,28 @@ def dem4geoid(
         raise ValueError('Bounding box must be provided')
     
     if not ncfile:
-        ncfile = download_srtm30plus(bbox=bbox, downloads_dir=downloads_dir)
+        try:
+            ncfile = download_srtm30plus(bbox=bbox, downloads_dir=downloads_dir)
+        except Exception as e:
+            print(f'SRTM30PLUS download failed: {e}. Falling back to COG download.')
+            dem = download_dem_cog(
+                bbox=bbox, 
+                model='srtm', 
+                downloads_dir=downloads_dir, 
+                bbox_off=bbox_off, 
+                resolution=resolution,
+                fallback=True
+            )
+            urls = fetch_url(bbox)
+            if len(urls) > 1:
+                tile_name = 'merged_dem.nc'
+            else:
+                tile_name = urls[0].split('/')[-1]
+            ncfile = downloads_dir / Path(tile_name)
+            dem.to_netcdf(str(ncfile))
+            return dem
+            
+            
     
     if downloads_dir:
         downloads_dir = Path(downloads_dir)
@@ -345,9 +367,13 @@ def dem4geoid(
     return dem
 
 def download_dem_cog(
-    bbox, model='None', cog_url=None,
+    bbox, 
+    model='None', 
+    cog_url=None,
     downloads_dir=None,
-    bbox_off=2, resolution=30
+    bbox_off=2, 
+    resolution=30,
+    fallback=False
 ) -> xr.Dataset:
     '''
     Download DEM using Cloud Optimized GeoTIFF (COG) format
@@ -401,43 +427,60 @@ def download_dem_cog(
         print('No model or COG URL provided. SRTM30Plus will be downloaded...\n')
         return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
     
-    if model.lower() == 'srtm' and resolution*3600 >= 30:
+    if model.lower() == 'srtm' and resolution*3600 >= 30 and not fallback:
         print(f'You have requested SRTM at {resolution * 3600} arc-second resolution. SRTM30Plus will be downloaded...\n')
-        dem = dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+        try:
+            dem = dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+            return dem
+        except Exception as e:
+            print(f'Failed to download SRTM30Plus. Reverting to COG.\n Error: {e}')
 
-        return dem
     
     if model is None and cog_url == models_url['srtm']:
         if resolution == 30/3600:
             print(f'You have requested 30 arc-second resolution. SRTM30Plus will be downloaded...\n')
-            return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+            try:
+                return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+            except Exception as e:
+                print(f'Failed to download SRTM30Plus. Reverting to COG.\n Error: {e}')
         else:
             print(f'You have requested {resolution} arc-second resolution. SRTM30Plus will be downloaded...\n')
-            return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+            try:
+                return dem4geoid(bbox=bbox, bbox_off=bbox_off, downloads_dir=downloads_dir, resolution=resolution*3600)
+            except Exception as e:
+                print(f'Failed to download SRTM30Plus. Reverting to COG.\n Error: {e}')
     
     # Read the COG
     print(f'Accessing COG ...\n')
     ds = rxr.open_rasterio(f'/vsicurl/{cog_url}')
     
-    print(f'Subsetting DEM to bbox ...\n')
+    # print(f'Subsetting DEM to bbox ...\n')
+    # bbox_subset = [
+    #     bbox[0] - bbox_off - resolution,
+    #     bbox[1] - bbox_off - resolution,
+    #     bbox[2] + bbox_off + resolution,
+    #     bbox[3] + bbox_off + resolution
+    # ]
     bbox_subset = [
-        bbox[0] - bbox_off - resolution,
-        bbox[1] - bbox_off - resolution,
-        bbox[2] + bbox_off + resolution,
-        bbox[3] + bbox_off + resolution
+        bbox[0] - bbox_off,
+        bbox[1] - bbox_off,
+        bbox[2] + bbox_off,
+        bbox[3] + bbox_off
     ]
     dem = ds.rio.clip_box(minx=bbox_subset[0], maxx=bbox_subset[2], miny=bbox_subset[1], maxy=bbox_subset[3])
-    # dem = ds.sel(x=slice(bbox_subset[0], bbox_subset[2]), y=slice(bbox_subset[1], bbox_subset[3]))
     
     # Resample to desired resolution
-    print(f'Resampling DEM to: {int(resolution*3600)} arc-seconds ...\n')
+    # print(f'Resampling DEM to: {int(resolution*3600)} arc-seconds ...\n')
     
-    dem = dem.rio.reproject(
-        dem.rio.crs, resolution=resolution, 
-        resampling=Resampling.nearest
-    )
-
-    dem = dem.to_dataset(name='z')
+    # if dem.rio.crs is not None and dem.rio.crs.to_epsg() == 4326:
+    #     pass
+    # else:
+    #     dem = dem.rio.reproject(
+    #         dem.rio.crs, resolution=resolution, 
+    #         resampling=Resampling.nearest
+    #     )
+    if not isinstance(dem, xr.Dataset):
+        dem = dem.to_dataset(name='z')
     
     # Intercept the nodata value before accessing it
     try:
@@ -446,7 +489,7 @@ def download_dem_cog(
         nodata_value = np.finfo(np.float32).max
         dem['z'].rio.write_nodata(nodata_value, inplace=True)
     
-    # Convert the nodata value to a manageable value
+    # Convert nodata value to a manageable value
     if nodata_value is None and nodata_value > np.finfo(np.float32).max:
         nodata_value = np.finfo(np.float32).max
         dem['z'].rio.write_nodata(nodata_value, inplace=True)
@@ -458,12 +501,12 @@ def download_dem_cog(
     
     print(f'Interpolating DEM ...')
     
-    bbox_subset = [
-        bbox[0] - bbox_off,
-        bbox[1] - bbox_off,
-        bbox[2] + bbox_off,
-        bbox[3] + bbox_off
-    ]
+    # bbox_subset = [
+    #     bbox[0] - bbox_off,
+    #     bbox[1] - bbox_off,
+    #     bbox[2] + bbox_off,
+    #     bbox[3] + bbox_off
+    # ]
     
     minx, maxx = bbox_subset[0], bbox_subset[2]
     miny, maxy = bbox_subset[1], bbox_subset[3]
