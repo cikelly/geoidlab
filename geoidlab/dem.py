@@ -287,7 +287,7 @@ def dem4geoid(
         raise ValueError(f'Invalid DEM model: {model}. Must be one of:\n{VALID_MODELS}.')
     
     # dictionary of DEM models and function calls
-    inps = {
+    params = {
         'bbox'         : bbox,
         'model'        : model,
         'downloads_dir': downloads_dir,
@@ -297,10 +297,10 @@ def dem4geoid(
     
     models_dict = {
         'srtm30plus': lambda: download_srtm30plus(bbox=bbox, downloads_dir=downloads_dir),
-        'srtm'      : lambda: download_dem_cog(**inps),
-        'cop'       : lambda: download_dem_cog(**inps),
-        'nasadem'   : lambda: download_dem_cog(**inps),
-        'gebco'     : lambda: download_dem_cog(**inps)
+        'srtm'      : lambda: download_dem_cog(**params),
+        'cop'       : lambda: download_dem_cog(**params),
+        'nasadem'   : lambda: download_dem_cog(**params),
+        'gebco'     : lambda: download_dem_cog(**params)
     }
 
     if downloads_dir:
