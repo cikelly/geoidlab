@@ -5,7 +5,7 @@
 ############################################################
 # import constants
 from geoidlab.coordinates import geodetic2spherical
-from geoidlab.utils.numba.legendre import compute_legendre_chunk
+from geoidlab.numba.legendre import compute_legendre_chunk
 from numba_progress import ProgressBar
 
 import numpy as np

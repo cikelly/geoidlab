@@ -90,9 +90,9 @@ def cpt_cmap(cpt_name: str = 'GMT_rainbow') -> LinearSegmentedColormap:
     cmap      : LinearSegmentedColormap
                 Matplotlib colormap
     '''
-    from .map.get_cpt import get_cmap
+    from .get_cpt import get_cmap
     
-    CPT_BASE_DIR = Path(__file__).resolve().parent / 'map/cpt'
+    CPT_BASE_DIR = Path(__file__).resolve().parent / 'cpt'
     VALID_CPT_FILES = [f.stem for f in CPT_BASE_DIR.iterdir() if f.suffix == '.cpt']
     
     cpt_name = Path(cpt_name)
