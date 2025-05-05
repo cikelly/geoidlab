@@ -88,6 +88,83 @@ def compute_tc_chunk(
 
     return row_start, row_end, tc_chunk
 
+@njit
+def compute_tc_chunk_cap(
+    row_start: int, row_end: int, ncols_P: int, coslamp: np.ndarray, sinlamp: np.ndarray,
+    cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, Xp: np.ndarray, Yp: np.ndarray,
+    Zp: np.ndarray, radius: float, G_rho_dxdy: float, window_data: np.ndarray
+) -> tuple[int, int, np.ndarray]:
+    '''
+    Compute a chunk of rows for the terrain correction matrix in cap mode.
+
+    Parameters
+    ----------
+    row_start  : Starting row index (inclusive).
+    row_end    : Ending row index (exclusive).
+    ncols_P    : Number of columns in the sub-grid.
+    coslamp, 
+    sinlamp, 
+    cosphip, 
+    sinphip    : Trigonometric arrays for coordinate transformation.
+    Hp         : Height of computation points (sub-grid topography).
+    Xp, 
+    Yp, 
+    Zp         : Cartesian coordinates of the sub-grid.
+    radius     : Integration radius [m].
+    G_rho_dxdy : Precomputed constant (G * rho * dx * dy).
+    window_data: Array of shape (row_end-row_start, ncols_P, 4, max_rows, max_cols) containing
+                [win_H, win_X, win_Y, win_Z] for each computation point, pre-masked with NaNs.
+
+    Returns
+    -------
+    row_start : Starting row index.
+    row_end   : Ending row index.
+    tc_chunk  : 2D array of terrain correction values for the chunk [mGal].
+    '''
+    tc_chunk = np.zeros((row_end - row_start, ncols_P))
+
+    for i in range(row_start, row_end):
+        coslamp_i = coslamp[i, :]
+        sinlamp_i = sinlamp[i, :]
+        cosphip_i = cosphip[i, :]
+        sinphip_i = sinphip[i, :]
+
+        for j in range(ncols_P):
+            # Extract pre-masked windowed data
+            win_H = window_data[i - row_start, j, 0, :, :]
+            win_X = window_data[i - row_start, j, 1, :, :]
+            win_Y = window_data[i - row_start, j, 2, :, :]
+            win_Z = window_data[i - row_start, j, 3, :, :]
+
+            # Local coordinates (x, y)
+            x = coslamp_i[j] * (win_Y - Xp[i, j]) - sinlamp_i[j] * (win_X - Xp[i, j])
+            y = cosphip_i[j] * (win_Z - Zp[i, j]) - \
+                coslamp_i[j] * sinphip_i[j] * (win_X - Xp[i, j]) - \
+                sinlamp_i[j] * sinphip_i[j] * (win_Y - Yp[i, j])
+
+            # Distances
+            d = np.hypot(x, y)
+            # Mask computation point (already masked by get_cap_window, but ensure safety)
+            for k in range(d.shape[0]):
+                for l in range(d.shape[1]):
+                    if d[k, l] == 0:
+                        d[k, l] = np.nan
+
+            d3 = d * d * d
+            d5 = d3 * d * d
+            d7 = d5 * d * d
+
+            # Integrate the terrain correction
+            DH2 = (win_H - Hp[i, j]) ** 2
+            DH4 = DH2 * DH2
+            DH6 = DH4 * DH2
+
+            c1 = 0.5 * G_rho_dxdy * np.nansum(DH2 / d3)      # 1/2
+            c2 = -0.375 * G_rho_dxdy * np.nansum(DH4 / d5)   # 3/8
+            c3 = 0.3125 * G_rho_dxdy * np.nansum(DH6 / d7)   # 5/16
+            tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
+
+    return row_start, row_end, tc_chunk
 
 @njit
 def compute_rtm_tc_chunk(
