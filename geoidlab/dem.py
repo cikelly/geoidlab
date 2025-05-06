@@ -16,8 +16,11 @@ import rioxarray as rxr
 import numpy as np
 from tqdm import tqdm
 from rasterio.enums import Resampling
+from rasterio.errors import RasterioIOError
 
 warnings.simplefilter('ignore')
+
+VALID_INTERP_METHODS = {'linear', 'nearest', 'slinear', 'cubic', 'quintic'}
 
 def get_readme_path() -> Path:
     '''
@@ -80,14 +83,25 @@ def identify_relevant_tiles(bbox, tiles) -> list:
     -------
     relevant_tiles : list of tile names that intersect with the bounding box.
     '''
+    # Validate bbox
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        raise ValueError('bbox must be a list or tuple of 4 values: [min_lon, min_lat, max_lon, max_lat]')
     min_lon, min_lat, max_lon, max_lat = bbox
+    
+    # Ensure bbox is valid: W, S, E, N
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, min_lat, max_lon, max_lat]')
+    
+    if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180 and -90 <= min_lat <= 90 and -90 <= max_lat <= 90):
+        raise ValueError('bbox coordinates must be within valid geographic ranges: [-180, 180] for lon, [-90, 90] for lat')
+    
     relevant_tiles: list = []
 
     for tile in tiles:
         if not (tile['max_lat'] < min_lat or tile['min_lat'] > max_lat or
                 tile['max_lon'] < min_lon or tile['min_lon'] > max_lon):
             relevant_tiles.append(tile['tile'])
-
+    
     return relevant_tiles
 
 def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
@@ -104,9 +118,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     -------
     merged_filepath : str
         Filepath of the merged DEM file if multiple tiles were downloaded.
-    file_exists     : bool
     '''
-    file_exists = False
     if bbox is None and url is None:
         raise ValueError('Either bbox or url must be provided.')
     
@@ -144,7 +156,6 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                 _ = netCDF4.Dataset(filepath)
                 if check_bbox_contains(filepath, bbox):
                     print(f'{filename} exists, is readable, and covers bbox. Using local copy.\n')
-                    file_exists = True
                     filepaths.append(filepath)
                     continue  # Skip download
                 else:
@@ -157,7 +168,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         print(f'Downloading {filename} to: \n\t{downloads_dir} ...')
         # Download NetCDF file
         try:
-            response: requests.Response = requests.get(url, verify=certifi.where(), stream=True, timeout=30)
+            response: requests.Response = requests.get(url, verify=certifi.where(), stream=True, timeout=(30, 60))
             response.raise_for_status()
             total_size = int(response.headers.get('content-length', 0))
             with tqdm(
@@ -174,9 +185,13 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
                         f.flush()
                         sys.stdout.flush()
             print('\n')
-            # Try to open the file after the download to verify
-            _ = netCDF4.Dataset(filepath)
-            filepaths.append(filepath)
+            # Try to open the file after the download to verify. Skip if unreadable
+            try:
+                _ = netCDF4.Dataset(filepath)
+                filepaths.append(filepath)
+            except Exception:
+                print(f'Skipping unreadable file {filename}.')
+                
         except Exception as e:
             print(f'Download failed for {filename}: {e}.')
             # If file exists but is unreadable, keep it
@@ -203,9 +218,9 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         merged_dataset.to_netcdf(merged_filepath)
         return merged_filepath.parts[-1]
     else:
-        return filepaths[0].parts[-1], file_exists
+        return filepaths[0].parts[-1]
 
-
+_tiles_cache = None
 def fetch_url(bbox) -> list[str]:
     '''
     Fetch the URLs of all relevant tiles based on the given bounding box.
@@ -220,11 +235,27 @@ def fetch_url(bbox) -> list[str]:
     -------
     urls      : url of the srtm30plus tiles
     '''
-    readme_path: Path = get_readme_path() 
+    # Validate bbox
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        raise ValueError('bbox must be a list or tuple of length 4')
+    min_lon, min_lat, max_lon, max_lat = bbox
+
+    # Ensure bbox is valid: W, N, E, S
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, min_lat, max_lon, max_lat]')
+    
+    # Read the README file
+    global _tiles_cache
+    if _tiles_cache is None:
+        readme_path: Path = get_readme_path() 
+        _tiles_cache = parse_readme(readme_path)
     tiles: list = parse_readme(readme_path)
 
     # Identify relevant tiles for the given bbox
     relevant_tiles: list = identify_relevant_tiles(bbox, tiles) 
+    
+    if not relevant_tiles:
+        raise ValueError(f'No SRTM30PLUS tiles found for bbox: {bbox}')
 
     # Construct the URLs
     base_url = 'https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/'
@@ -239,7 +270,7 @@ def dem4geoid(
     downloads_dir=None,
     resolution=30,
     model='srtm30plus',
-    fallback=False
+    interp_method='slinear'
 ) -> xr.Dataset:
     '''
     Prepare a DEM for geoid calculation.
@@ -258,10 +289,9 @@ def dem4geoid(
                      - srtm
                      - cop
                      - nasadem
-                     - gebco
-    fallback      : if True, and model download fails, 
-                will try to download and use any of the other models
-    
+                     - gebco   
+    interp_method : interpolation method
+     
     Returns
     -------
     dem       : xarray dataset of the DEM
@@ -283,13 +313,20 @@ def dem4geoid(
     if model not in VALID_MODELS:
         raise ValueError(f'Invalid DEM model: {model}. Must be one of:\n{VALID_MODELS}.')
     
+    if resolution <=0:
+        raise ValueError('Resolution must be a positive integer.')
+    
+    if interp_method not in VALID_INTERP_METHODS:
+        raise ValueError(f'Invalid interp_method: {interp_method}. Must be one of: {VALID_INTERP_METHODS}')
+    
     # dictionary of DEM models and function calls
     params = {
         'bbox'         : bbox,
         'model'        : model,
         'downloads_dir': downloads_dir,
         'bbox_off'     : bbox_off,
-        'resolution'   : resolution
+        'resolution'   : resolution,
+        'interp_method': interp_method
     }
     
     models_dict = {
@@ -333,7 +370,7 @@ def dem4geoid(
     if not ncfile:
         try:
             if model == 'srtm30plus':
-                ncfile, file_exists = models_dict[model]()
+                ncfile = models_dict[model]()
             else:
                 dem = models_dict[model]()
                 ncfile = expected_filename
@@ -375,7 +412,7 @@ def dem4geoid(
     dem = ds.interp(
         x=np.linspace(minx, maxx, num_x_points),
         y=np.linspace(miny, maxy, num_y_points),
-        method='slinear'
+        method=interp_method
     )
     
     if dem.rio.crs is None:
@@ -390,6 +427,7 @@ def download_dem_cog(
     bbox_off=2, 
     resolution=30,
     downloads_dir=None,
+    interp_method='slinear'
 ) -> xr.Dataset:
     '''
     Download DEM using Cloud Optimized GeoTIFF (COG) format
@@ -407,6 +445,7 @@ def download_dem_cog(
     downloads_dir : directory to download the file to
     bbox_off      : offset for bounding box (in degrees)
     resolution    : resolution to resample the DEM (in seconds)
+    interp_method : interpolation method for resampling
     
     Returns
     -------
@@ -428,6 +467,9 @@ def download_dem_cog(
         'nasadem': 'https://opentopography.s3.sdsc.edu/raster/NASADEM/NASADEM_be.vrt',
         'gebco'  : 'https://opentopography.s3.sdsc.edu/raster/GEBCOIceTopo/GEBCOIceTopo.vrt'
     }
+    if interp_method not in VALID_INTERP_METHODS:
+        raise ValueError(f'Invalid interp_method: {interp_method}. Must be one of: {VALID_INTERP_METHODS}')
+    
     # Set up downloads directory
     if downloads_dir:
         downloads_dir = Path(downloads_dir).resolve()
@@ -451,12 +493,24 @@ def download_dem_cog(
         try:
             cog_url = model_urls[model.lower()]
         except KeyError:
-            print('Supported models are:\nsrtm\ncop\netopo\nnasadem')
+            print('Supported models are:\nsrtm\ncop\nnasadem\ngebco.')
             raise ValueError(f'Unsupported model: {model}')
     
     # Read the COG
     print(f'Accessing {model.upper()} COG at {model_urls[model.lower()]}\n')
-    ds = rxr.open_rasterio(f'/vsicurl/{cog_url}')
+    
+    for attempt in range(3):
+        try:
+            ds = rxr.open_rasterio(f'/vsicurl/{cog_url}')
+            break
+        except RasterioIOError as e:
+            print(f'Attempt {attempt+1} failed. Error: {e}.')
+            if attempt < 2:
+                import time
+                print(f'Retrying in 5 seconds...')
+                time.sleep(5)
+            else:
+                raise RuntimeError(f'Failed to access COG for {model}: {e}.')
 
     bbox_subset = [
         bbox[0] - bbox_off,
@@ -497,7 +551,7 @@ def download_dem_cog(
     dem = dem.interp(
         x=np.linspace(minx, maxx, num_x_points),
         y=np.linspace(miny, maxy, num_y_points),
-        method='nearest'
+        method=interp_method
     )
     
     dem.to_netcdf(ncfile)
@@ -507,8 +561,26 @@ def download_dem_cog(
 
 
 def check_bbox_contains(netcdf_file, bbox) -> bool:
+    '''
+    Check if a NetCDF file contains a bounding box
+    
+    Parameters
+    ----------
+    netcdf_file : path to the NetCDF file
+    bbox        : bounding box of the area of interest (W, S, E, N)
+    
+    Returns
+    -------
+    contains    : bool
+    '''
     # Load the NetCDF file
-    ds = xr.open_dataset(netcdf_file)
+    try:
+        ds = xr.open_dataset(netcdf_file)
+    except Exception as e:
+        raise RuntimeError(f'Failed to open {netcdf_file}: {e}')
+    
+    if 'x' not in ds.coords or 'y' not in ds.coords:
+        raise ValueError(f'NetCDF file {netcdf_file} does not contain x and y coordinates')
     
     # Extract the bounding box coordinates from the NetCDF file
     x_min = ds['x'].min().item()
