@@ -185,9 +185,6 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             else:
                 print(f'File {filename} exists but is unreadable and could not be replaced due to download failure.')
                 continue
-            # raise RuntimeError(f'Download failed: {e}. Are you connected to the internet?')
-
-        # filepaths.append(filepath)
 
     # Check if any files were downloaded
     if not filepaths:
@@ -223,11 +220,11 @@ def fetch_url(bbox) -> list[str]:
     -------
     urls      : url of the srtm30plus tiles
     '''
-    readme_path: Path = get_readme_path()  # Assuming get_readme_path() is already defined
-    tiles: list = parse_readme(readme_path)  # Assuming parse_readme() is already defined
+    readme_path: Path = get_readme_path() 
+    tiles: list = parse_readme(readme_path)
 
     # Identify relevant tiles for the given bbox
-    relevant_tiles: list = identify_relevant_tiles(bbox, tiles)  # Assuming identify_relevant_tiles() is already defined
+    relevant_tiles: list = identify_relevant_tiles(bbox, tiles) 
 
     # Construct the URLs
     base_url = 'https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/'
@@ -383,20 +380,16 @@ def dem4geoid(
     
     if dem.rio.crs is None:
         dem.rio.write_crs('EPSG:4326', inplace=True)
-    
-    # if resolution and resolution != 30:
-    #     print(f'Resampling DEM to {resolution} arc-seconds...')
-    #     dem = dem.rio.reproject(dem.rio.crs, resolution=resolution/3600, resampling=Resampling.nearest)
+
     return dem
 
 def download_dem_cog(
     bbox, 
     model='None', 
     cog_url=None,
-    downloads_dir=None,
     bbox_off=2, 
     resolution=30,
-    # fallback=False
+    downloads_dir=None,
 ) -> xr.Dataset:
     '''
     Download DEM using Cloud Optimized GeoTIFF (COG) format
@@ -435,6 +428,22 @@ def download_dem_cog(
         'nasadem': 'https://opentopography.s3.sdsc.edu/raster/NASADEM/NASADEM_be.vrt',
         'gebco'  : 'https://opentopography.s3.sdsc.edu/raster/GEBCOIceTopo/GEBCOIceTopo.vrt'
     }
+    # Set up downloads directory
+    if downloads_dir:
+        downloads_dir = Path(downloads_dir).resolve()
+    else:
+        downloads_dir = Path.cwd() / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check if DEM exists and contains bounding box
+    ncfile = downloads_dir / f'{model}_dem.nc'
+
+    if ncfile.exists():
+        if check_bbox_contains(ncfile, bbox):
+            print(f'{ncfile} already exists and contains bounding box. Skipping download')
+            return xr.open_dataset(ncfile)
+    
+    print(f'Downloading {model} DEM to {downloads_dir} ...')  
     
     resolution = resolution / 3600 # convert seconds to degrees
     
@@ -491,6 +500,8 @@ def download_dem_cog(
         method='nearest'
     )
     
+    dem.to_netcdf(ncfile)
+
     return dem
 
 
