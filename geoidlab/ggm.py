@@ -16,7 +16,7 @@ from geoidlab import(
 
 
 from geoidlab.legendre import ALFsGravityAnomaly, ALF
-from geoidlab.numba.ggm_tools import (
+from geoidlab.numba.ggm import (
     compute_gravity_chunk, 
     compute_disturbance_chunk,
     compute_disturbing_potential_chunk,

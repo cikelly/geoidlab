@@ -148,7 +148,7 @@ class GeoidTideSystemConverter:
         Parameters
         ----------
         phi       : geodetic latitude (degrees)
-        geoid     : geoid model (output of ggm_tools.reference_geoid())
+        geoid     : geoid model (output of ggm.reference_geoid())
         ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
         '''
         
