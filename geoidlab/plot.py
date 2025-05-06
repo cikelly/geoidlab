@@ -13,7 +13,7 @@ from geoidlab.utils.interpolators import Interpolators
 from mpl_toolkits.basemap import Basemap
 
 from geoidlab import gravity as pygrav
-from geoidlab.ggm_tools import GlobalGeopotentialModel
+from geoidlab.ggm import GlobalGeopotentialModel
 
 class GeoidLabPlot:
     '''

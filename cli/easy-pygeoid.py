@@ -11,7 +11,7 @@ sys.path.append(str(src_path))
 
 from geoidlab.dem import dem4geoid
 from geoidlab.geoid import ResidualGeoid
-from geoidlab.ggm_tools import GlobalGeopotentialModel
+from geoidlab.ggm import GlobalGeopotentialModel
 from geoidlab.terrain import TerrainQuantities
 from geoidlab.tide import GravityTideSystemConverter
 from geoidlab.utils.interpolators import Interpolators

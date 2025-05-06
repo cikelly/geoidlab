@@ -597,7 +597,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        geoid         : Geoid model (output of ggm_tools.reference_geoid())
+        geoid         : Geoid model (output of ggm.reference_geoid())
         GM            : Gravity constant of the GGM
         zeta_or_geoid : 'zeta' or 'geoid'
         Returns
