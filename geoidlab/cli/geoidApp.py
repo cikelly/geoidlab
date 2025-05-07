@@ -37,6 +37,7 @@ STEP_FUNCTIONS = {
     'restore'      : lambda ellipsoid: _restore_geoid(ellipsoid)
 }
 
+VALID_TIDE_SYSTEMS = ['zero', 'mean', 'tide-free']
 
 @app.command(
     help=(
@@ -79,20 +80,20 @@ STEP_FUNCTIONS = {
 
 # Define main program
 def run(
-    ctx: typer.Context,
-    do: Optional[str] = typer.Option(None, help=f'Execute a single processing step. Available steps:\n [{", ".join(ALL_STEPS)}]'),
-    start: Optional[str] = typer.Option(None, help='Start step in processing sequence (inclusive).'),
-    end: Optional[str] = typer.Option(None, help='End step in processing sequence (inclusive).'),
-    ellipsoid: Annotated[str, typer.Option(help='Reference ellipsoid for calculations. Options: [wgs84, grs80]')] = 'wgs84',
+    ctx           : typer.Context,
+    do            : Optional[str] = typer.Option(None, help=f'Execute a single processing step. Available steps:\n [{", ".join(ALL_STEPS)}]'),
+    start         : Optional[str] = typer.Option(None, help='Start step in processing sequence (inclusive).'),
+    end           : Optional[str] = typer.Option(None, help='End step in processing sequence (inclusive).'),
+    tide_target   : Optional[str] = typer.Option('tide-free', help=f'Target tide system for the geoid model. Options: {VALID_TIDE_SYSTEMS}'),
+    tide_gravity  : Optional[str] = typer.Option(None, help=f'Tide system of the gravity data (if known). Options: {VALID_TIDE_SYSTEMS}'),
+    ellipsoid     : Annotated[str, typer.Option(help='Reference ellipsoid for calculations. Options: [wgs84, grs80]')] = 'wgs84',
 ) -> None:
+    # Print help message if user executes geoidApp without arguments
     if not any([do, start, end]):
         typer.echo(ctx.get_help())
         raise typer.Exit()
     
-    # if do is None and start is None and end is None:
-    #     typer.echo(ctx.get_help())
-    #     raise typer.Exit()
-    
+    # Validate CLI call with 
     if do and (start or end):
         typer.echo('Use either --do or --start/--end, not both.')
         raise typer.Exit(code=1)
