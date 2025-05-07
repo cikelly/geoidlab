@@ -1,12 +1,40 @@
-import sys
+############################################################
+# Geoid workflow CLI interface                             #
+# Copyright (c) 2024, Caleb Kelly                          #
+# Author: Caleb Kelly  (2024)                              #
+############################################################
+
 import typer
+
 from typing import List, Optional
 from typing_extensions import Annotated
+from dataclasses import dataclass
+from pathlib import Path
 
 from geoidlab.ggm import GlobalGeopotentialModel
+from geoidlab.icgem import get_ggm_tide_system
+from geoidlab.tide import GravityTideSystemConverter
+
+
+
 
 typer.rich_utils.STYLE_HELPTEXT = ""
 app = typer.Typer(rich_markup_mode='rich', no_args_is_help=True) # print help message if ran without arguments
+
+VALID_TIDE_SYSTEMS = ['zero_tide', 'mean_tide', 'tide_free']
+VALID_ELLIPSOIDS = ['wgs84', 'grs80']
+
+@dataclass
+class WorkflowContext:
+    '''Stores workflow state for geoid computation.'''
+    ellipsoid: str
+    ggm: Optional[GlobalGeopotentialModel] = None
+    ggm_tide_system: Optional[str] = None
+    tide_target: str = 'tide_free'
+    tide_gravity: Optional[str] = None # if unknown, probably mean_tide
+    data: dict = None # Stores file paths or lightweight data (e.g., tide system)
+    project_dir: Path = None
+
 
 ALL_STEPS = [
     'free-air',         # Compute the Free-air anomalies (Dg)
@@ -21,6 +49,7 @@ ALL_STEPS = [
     'reference',        # Compute reference geoid from GGM (N_ggm)
     'restore',          # Add all components to get geoid (N = N_res + N_ggm + N_ind)
 ]
+
 
 # Step function registry
 STEP_FUNCTIONS = {
@@ -37,7 +66,6 @@ STEP_FUNCTIONS = {
     'restore'      : lambda ellipsoid: _restore_geoid(ellipsoid)
 }
 
-VALID_TIDE_SYSTEMS = ['zero', 'mean', 'tide-free']
 
 @app.command(
     help=(
@@ -84,9 +112,13 @@ def run(
     do            : Optional[str] = typer.Option(None, help=f'Execute a single processing step. Available steps:\n [{", ".join(ALL_STEPS)}]'),
     start         : Optional[str] = typer.Option(None, help='Start step in processing sequence (inclusive).'),
     end           : Optional[str] = typer.Option(None, help='End step in processing sequence (inclusive).'),
-    tide_target   : Optional[str] = typer.Option('tide-free', help=f'Target tide system for the geoid model. Options: {VALID_TIDE_SYSTEMS}'),
-    tide_gravity  : Optional[str] = typer.Option(None, help=f'Tide system of the gravity data (if known). Options: {VALID_TIDE_SYSTEMS}'),
-    ellipsoid     : Annotated[str, typer.Option(help='Reference ellipsoid for calculations. Options: [wgs84, grs80]')] = 'wgs84',
+    tide_target   : Optional[str] = typer.Option('tide_free', help=f'Target tide system for the geoid model. Options: {VALID_TIDE_SYSTEMS}'),
+    tide_gravity  : Optional[str] = typer.Option(None, help=f'Tide system of the gravity data. If unknown, assume mean_tide. Options: {VALID_TIDE_SYSTEMS}'),
+    ggm           : Optional[str] = typer.Option(None, help='Path to Global Geopotential Model (GGM) or name of GGM'),
+    ellipsoid     : Annotated[str, typer.Option(help=f'Reference ellipsoid for calculations. Options: {VALID_ELLIPSOIDS}')] = 'wgs84',
+    gravity_data  : Optional[str] = typer.Option(None, help='Path to gravity data file (CSV, TXT, XLSX, XLS)'),
+    output        : Optional[str] = typer.Option(None, help='Output file for final geoid (default: <project-dir>/results/geoid.nc)'),
+    project_dir   : Optional[str] = typer.Option(None, help='Project directory containing downloads and results subdirectories (default: current directory')
 ) -> None:
     # Print help message if user executes geoidApp without arguments
     if not any([do, start, end]):
@@ -98,9 +130,59 @@ def run(
         typer.echo('Use either --do or --start/--end, not both.')
         raise typer.Exit(code=1)
     
+    if ellipsoid not in VALID_ELLIPSOIDS:
+        typer.echo(f'Invalid ellipsoid: {ellipsoid}')
+        raise typer.Exit(code=1)
+
+    if tide_target not in VALID_TIDE_SYSTEMS:
+        typer.echo(f'Invalid tide target: {tide_target}')
+        raise typer.Exit(code=1)
+
+    if tide_gravity and tide_gravity not in VALID_TIDE_SYSTEMS:
+        typer.echo(f'Invalid tide gravity: {tide_gravity}')
+        raise typer.Exit(code=1)
+    
+    if gravity_data and not Path(gravity_data).exists():
+        typer.echo(f'Gravity data file not found: {gravity_data}')
+        raise typer.Exit(code=1)
+    
+    # Set up project directory
+    project_dir = Path(project_dir).resolve() if project_dir else Path.cwd()
+    downloads_dir = project_dir / 'downloads'
+    results_dir = project_dir / 'results'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    
+    
+    # Initialize worflow context
+    context = WorkflowContext(
+        ellipsoid=ellipsoid,
+        tide_target=tide_target,
+        tide_gravity=tide_gravity,
+        data={}, # Initialize empty data store
+        project_dir=project_dir
+    )
+    
+    # Load gravity data if provided
+    if gravity_data:
+        try:
+            converter = GravityTideSystemConverter(path_to_data=gravity_data)
+            gravity_file = results_dir / 'gravity.csv'
+            converter.data.to_csv(gravity_file, index=False)
+            context.data['gravity'] = str(gravity_file)
+        except Exception as e:
+            typer.echo(f'Failed to load gravity data: {e}')
+            raise typer.Exit(code=1)
+    
+    # Load GGM and fetch tide system if provided
+    if ggm:
+        context.ggm, context.ggm_tide_system = _load_ggm(ggm)
+        typer.echo(f'Loaded GGM: {ggm}, Tide System: {context.ggm_tide_system}')
+    
+    # Single step mode
     if do:
         if do not in ALL_STEPS:
-            typer.echo(f'Invalid step: {do}')
+            typer.echo(f'Invalid step: {do}. Supported:\n[{", ".join(ALL_STEPS)}')
             raise typer.Exit(code=1)
         _run_step(do, ellipsoid=ellipsoid)
         return
@@ -120,16 +202,21 @@ def run(
         steps_copy.remove(step)  # Remove the processed step
         remaining = ', '.join(steps_copy) if steps_copy else 'None'
         typer.echo(f'Completed step: {step}.\nRemaining steps: [{remaining}].')
-    
-def _run_step(step: str, ellipsoid: str) -> None:
+
+
+def _load_ggm(ggm: str) -> tuple[GlobalGeopotentialModel, str]:
+    '''Load GGM and fetch its tide system.'''
+    pass
+
+def _run_step(step: str, context: WorkflowContext) -> None:
+    '''Execute a single processing step with context.'''
     func = STEP_FUNCTIONS.get(step)
-    
     if not func:
         typer.echo(f'Invalid step: {step}')
         raise typer.Exit(code=1)
     
     typer.echo(f'Running step: {step}...')
-    func(ellipsoid=ellipsoid)
+    func(context)
     
 # === Stub functions for each step ===
 def _free_air(ellipsoid: str) -> None:
