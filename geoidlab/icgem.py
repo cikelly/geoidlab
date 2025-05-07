@@ -217,3 +217,30 @@ def read_icgem(icgem_file:str, model_dir='downloads') -> dict:
     shc['tide_sys'] = values.get('tide_system')
 
     return shc
+
+
+from pathlib import Path
+
+def get_ggm_tide_system(icgem_file: str) -> str:
+    '''
+    Extract the permanent tide system from an ICGEM .gfc file.
+
+    Parameters
+    ----------
+    icgem_file : The path to the ICGEM .gfc file.
+
+    Returns
+    -------
+    tide_sys: The permanent tide system of the model (e.g., 'zero', 'free', 'mean').
+    '''
+    icgem_file = Path(icgem_file).resolve()
+    
+    if not icgem_file.exists():
+        raise FileNotFoundError(f'{icgem_file} does not exist.')
+
+    with open(icgem_file, 'r', encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            if 'tide_system' in line:
+                return line.split()[1]
+
+    raise ValueError('Tide system not found in the file.')
