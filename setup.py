@@ -18,11 +18,10 @@ setup(
     license=lincense_text,
     entry_points={
         'console_scripts': [
-            'geoidlab=cli.geoidlab:main',
-            'geoidlab-download=cli.tools.download_data:main',
-            'geoidlab-gravity=cli.tools.gravity_reduction:main',
-            'geoidlab-reference=cli.tools.reference_quantities:main',
-            'geoidlab-terrain=cli.tools.terrain_quantities:main',
+            'geoidlab=geoidlab.cli.geoidApp:app',
+            'geoidApp=geoidlab.cli.geoidApp:app',
+            'ggmApp=geoidlab.cli.ggmApp:app',
+            'terrainApp=geoidlab.cli.terrainApp:app'
         ],
     },
 )
