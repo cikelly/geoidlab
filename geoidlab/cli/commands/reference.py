@@ -34,8 +34,8 @@ def download(model: str, model_dir: str | Path = None) -> dict:
 
     if not model_path.exists():
         download_ggm(model, model_dir) 
-    else:
-        print(f'{model} already exists in {model_dir}')
+    # else:
+    #     print(f'{model} already exists in {model_dir}')
 
     return {'status': 'success', 'output_file': str(model_path)}
 
@@ -129,7 +129,8 @@ def compute_geoid(
     -------
     dict      : Dictionary with status and output file path
     '''
-    print(f'Computing reference anomalies and geoid heights with max_deg={max_deg}, ellipsoid={ellipsoid}')
+    print(f'Reference geoid heights will be computed with max_deg={max_deg}, ellipsoid={ellipsoid}')
+    
     output_dir = Path(output_dir) / 'N_ref.nc'
     return {'status': 'success', 'output_file': 'N_ref.nc'}
 
