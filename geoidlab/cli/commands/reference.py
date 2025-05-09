@@ -67,15 +67,38 @@ def compute_gravity_anomaly(
     -------
     dict        : Dictionary with status and output file path
     '''
+    from geoidlab.ggm import GlobalGeopotentialModel
+    
     output_file = Path(output_dir) / 'Dg_ggm.csv'
+    
     print(f'\nGravity anomalies will be computed with max_deg={max_deg}, ellipsoid={ellipsoid}')
     
+    # Directory setup
     model_dir = Path('.') if model_dir is None else Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
     model_path = (model_dir / model).with_suffix('.gfc')
     
-    print(f'\nReading {model_path.stem} file...')
-    shc = read_icgem(model_path, model_dir)
+    # Compute gravity anomalies
+    print(f'Computing gravity anomalies...')
+    model = GlobalGeopotentialModel(
+        model_name=model_path.stem, 
+        grav_data=lonlatheight,
+        nmax=max_deg,
+        zonal_harmonics=True, 
+        ellipsoid=ellipsoid,
+        model_dir=model_dir,
+        chunk_size=chunk_size
+    )
+    Dg_ggm = model.gravity_anomaly(parallel=parallel)
+    
+    print(f'Processing complete. Writing to {output_file}...')
+    
+    # Create DataFrame and save to CSV
+    df = pd.DataFrame({'lon': lonlatheight['lon'], 'lat': lonlatheight['lat'], 'h': lonlatheight['height'], 'Dg': Dg_ggm})
+    
+    df.to_csv(output_file, index=False)
+    
+    print(f'Reference gravity anomalies written to {output_file}\n')
     
     return {'status': 'success', 'output_file': str(output_file)}
     
@@ -120,7 +143,9 @@ def compute(
     parallel: bool = True,
     ellipsoid: str = 'wgs84',
     output_dir: str|Path = 'results',
-    do: str = 'all'
+    do: str = 'all',
+    start: str = None,
+    end: str = None
 ) -> None:
     '''
     Compute reference gravity anomalies and/or geoid heights for geoid computation
@@ -136,6 +161,8 @@ def compute(
     ellipsoid   : Reference ellipsoid
     output_dir  : Directory to write outputs to
     do          : Computation steps to perform ('download', 'gravity-anomaly', 'reference-geoid)
+    start       : First step to perform
+    end         : Last step to perform
     
     Returns
     -------
@@ -143,33 +170,53 @@ def compute(
     '''
     results = {}
     
+    # Define the workflow order
+    workflow = ['download', 'gravity-anomaly', 'reference-geoid']
+    
     if do == 'download' or do == 'all':
         results['download'] = download(model, model_dir)
     
-    if do == 'gravity-anomaly' or do == 'all':
-        if lonlatheight is None:
-            raise ValueError('lonlatheight data is required for gravity-anomaly task')
-        results['gravity-anomaly'] = compute_gravity_anomaly(
-            max_deg, 
-            model,
-            lonlatheight,
-            model_dir,
-            chunk_size,
-            parallel,
-            ellipsoid,
-            output_dir
-        )
+    # Determine tasks to run
+    tasks = []
+    if do != 'all' and (start or end):
+        raise ValueError('Cannot specify both --do and --start/--end')
     
-    if do == 'reference-geoid' or do == 'all':
-        results['reference-geoid'] = compute_geoid(
-            max_deg, 
-            model,
-            model_dir,
-            chunk_size,
-            parallel,
-            ellipsoid,
-            output_dir
-        )
+    if do == 'all':
+        tasks = workflow
+    elif start or end:
+        start_idx = 0 if start is None else workflow.index(start)
+        end_idx = len(workflow) - 1 if end is None else workflow.index(end)
+        if start_idx > end_idx:
+            raise ValueError('Start task must come before end task in workflow')
+        tasks = workflow[start_idx:end_idx+1]
+    else:
+        tasks = [do]
+    
+    # Execute tasks
+    for task in tasks:
+        if task == 'download':
+            results['download'] = download(model, model_dir)
+        elif task == 'gravity-anomaly':
+            results['gravity-anomaly'] = compute_gravity_anomaly(
+                max_deg, 
+                model,
+                lonlatheight,
+                model_dir,
+                chunk_size,
+                parallel,
+                ellipsoid,
+                output_dir
+            )
+        elif task == 'reference-geoid':
+            results['reference-geoid'] = compute_geoid(
+                max_deg, 
+                model,
+                model_dir,
+                chunk_size,
+                parallel,
+                ellipsoid,
+                output_dir
+            )
     
     output_files = [result['output_file'] for result in results.values()]
     
@@ -192,6 +239,8 @@ def main() -> None:
     )
     parser.add_argument('--do', type=str, default='all', choices=['download', 'gravity-anomaly', 'reference-geoid', 'all'], 
                         help='Computation steps to perform: [download, gravity-anomaly, reference-geoid, or all (default: all)]')
+    parser.add_argument('--start', type=str, default=None, help='Start processing from this step: [download, gravity-anomaly, reference-geoid]')
+    parser.add_argument('--end', type=str, default=None, help='End processing at this step: [download, gravity-anomaly, reference-geoid]')
     parser.add_argument('--max-deg', type=int, default=90, help='Maximum degree of truncation for the computations')
     parser.add_argument('--model', type=str, required=True, help='GGM name with (e.g., EGM2008.gfc) or without .gfc extension (e.g., EGM2008)')
     parser.add_argument('--input-file', type=str, help='Input file with lon, lat, and height data (required for gravity-anomaly)')
@@ -200,6 +249,7 @@ def main() -> None:
     parser.add_argument('--parallel', action='store_true', default=False, help='Enable parallel processing')
     parser.add_argument('--ellipsoid', type=str, default='wgs84', help='Reference ellipsoid. Supported: [wgs84, grs80]')
     parser.add_argument('--proj-name', type=str, default='GeoidProject', help='Project directory where downloads and results subdirectories are created')
+    
     args = parser.parse_args()
     
     model_dir = Path(args.model_dir) if args.model_dir is not None else Path(args.proj_name) / 'downloads'
