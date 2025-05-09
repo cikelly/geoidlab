@@ -100,8 +100,7 @@ class GravityTideSystemConverter:
         if not (self.data['lon'].between(-180, 180).all()):
             raise ValueError('Longitude must be between -180 and 180 degrees.')
         if not (self.data['gravity'].between(974_000, 984_000)).all():
-            raise ValueError('Gravity values must be between 974,000 and 984,000 mGal. Ensure values are in mGal and physically plausible.')
-        
+            raise ValueError('Gravity values must be between 974,000 and 984,000 mGal.\nEnsure values are in mGal and physically plausible.')
         
         # Precompute terms in bracket
         SIN2PHI = np.sin(np.radians(self.data['lat'])) ** 2
