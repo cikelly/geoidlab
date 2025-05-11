@@ -28,6 +28,7 @@ setup(
             'geoidlab=geoidlab.cli.geoidApp:app',
             'geoidApp=geoidlab.cli.geoidApp:app',
             'ggmApp=geoidlab.cli.commands.reference:main',
+            'reductionApp=geoidlab.cli.commands.faye:main',
             'terrainApp=geoidlab.cli.terrainApp:app'
         ],
     },

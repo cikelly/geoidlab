@@ -185,8 +185,9 @@ class GlobalGeopotentialModel:
             vartheta_chunk = self.vartheta[start_idx:end_idx]
             Dg_chunk = np.zeros(len(lon_chunk))
             
-            clear_output(wait=True)  # Clear the output in Jupyter notebook
-            print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
+            clear_output(wait=True)  # Clear the output in Jupyter Notebook
+            # print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r') # for notebook
+            print(f'Processing chunk {i + 1} of {n_chunks}...')
             Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
@@ -194,7 +195,7 @@ class GlobalGeopotentialModel:
                 Dg_chunk += compute_gravity_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
             
             Dg[start_idx:end_idx] = Dg_chunk
-            print('\n')
+            # print('\n') # for Jupyter Notebook
         
         return GM / self.r ** 2 * Dg * 10**5  # Convert to mGal
     
