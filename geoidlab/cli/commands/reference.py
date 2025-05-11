@@ -94,8 +94,6 @@ def compute_gravity_anomaly(
     
     output_file = output_dir / 'Dg_ggm.csv' if lonlatheight is not None else output_dir / 'Dg_ggm.nc'
     
-    print(f'\nGravity anomalies will be computed with max_deg={max_deg}, ellipsoid={ellipsoid}')
-    
     # Directory setup
     model_dir = Path('.') if model_dir is None else Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +101,7 @@ def compute_gravity_anomaly(
     
     # Convert lonlatheight to DataFrame if necessary
     if lonlatheight is not None:
+        print(f'\nGravity anomalies will be computed with max_deg={max_deg}, ellipsoid={ellipsoid} at the provided locations...')
         if isinstance(lonlatheight, np.ndarray):
             lonlatheight = pd.DataFrame(lonlatheight, columns=['lon', 'lat', 'height'])
         
@@ -176,6 +175,8 @@ def compute_gravity_anomaly(
         max_lon += bbox_offset
         max_lat += bbox_offset
         grid_extent = (min_lon, max_lon, min_lat, max_lat)
+        
+        print(f'\nGravity anomalies will be computed with max_deg={max_deg}, ellipsoid={ellipsoid} over {grid_extent} (W, E, S, N)...')
         
         lon_grid, lat_grid = get_grid_lon_lat(grid_extent, grid_size, grid_unit)
         
