@@ -116,8 +116,8 @@ class GGMSynthesis():
             if not (min_lon <= max_lon and min_lat <= max_lat):
                 raise ValueError('Invalid bbox: west must be <= east, south <= north')
             
-    def _process_input(self) -> None:
-        '''Load input file or generate grid.'''
+    def _process_input(self, task: str = None) -> None:
+        '''Load input file or generate grid. Apply bbox_offset only for gravity-anomaly.'''
         if self.input_file:
             input_path = Path(self.input_file)
             if input_path.suffix == '.csv':
@@ -132,10 +132,13 @@ class GGMSynthesis():
                 raise ValueError(f'Unsupported file format: {input_path.suffix}')
         elif self.bbox and self.grid_size and self.grid_unit:
             min_lon, max_lon, min_lat, max_lat = self.bbox
-            min_lon -= self.bbox_offset
-            max_lon += self.bbox_offset
-            min_lat -= self.bbox_offset
-            max_lat += self.bbox_offset
+            # Apply bbox_offset only for gravity-anomaly
+            print(task)
+            offset = self.bbox_offset if task == 'gravity anomaly' else 0.0
+            min_lon -= offset
+            max_lon += offset
+            min_lat -= offset
+            max_lat += offset
             grid_extent = (min_lon, max_lon, min_lat, max_lat)
             self.lon_grid, self.lat_grid = get_grid_lon_lat(grid_extent, self.grid_size, self.grid_unit)
             self.lonlatheight = pd.DataFrame({
@@ -170,13 +173,13 @@ class GGMSynthesis():
     
     def _compute_functional(self, ggm_method: str, task_name: str, output_key: str, output_file: str, icgem: bool = None) -> dict:
         '''Compute a gravity functional using GlobalGeopotentialModel.'''
-        print(f'\nComputing {task_name} with max_deg={self.max_deg}, ellipsoid={self.ellipsoid}')
+        print(f'\nComputing {task_name.title()} with max_deg={self.max_deg}, ellipsoid={self.ellipsoid}')
         model_path = (self.model_dir / self.model).with_suffix('.gfc')
         output_file = self.output_dir / f'{output_file}.{'csv' if self.input_file else 'nc'}'
 
         # Process input if not already done
         if self.lonlatheight is None:
-            self._process_input()
+            self._process_input(task=task_name.lower())
 
         # Handle tide conversion
         # if self.input_file:
@@ -227,7 +230,7 @@ class GGMSynthesis():
     def compute_gravity_anomaly(self) -> dict:
         return self._compute_functional(
             ggm_method='gravity_anomaly',
-            task_name='Gravity anomalies',
+            task_name='Gravity anomaly',
             output_key='Dg_ggm',
             output_file='Dg_ggm'
         )
@@ -296,7 +299,7 @@ def main() -> 0:
     parser.add_argument('--bbox', type=float, nargs=4, default=[None, None, None, None], 
                         help='Bounding box [W,E,S,N] in degrees')
     parser.add_argument('--bbox-offset', type=float, default=1.0, 
-                        help='Offset around bounding box')
+                        help='Offset around bounding box (applied only for gravity-anomaly)')
     parser.add_argument('--input-file', type=str, 
                         help='Input file with lon, lat, height')
     parser.add_argument('--chunk-size', type=int, default=500, 

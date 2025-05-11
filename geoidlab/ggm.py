@@ -549,7 +549,7 @@ class GlobalGeopotentialModel:
         
         return zeta
     
-    def geoid(self, T=None, icgem: bool = False, parallel: bool = False) -> np.ndarray:
+    def geoid(self, T=None, icgem: bool = False, parallel: bool = False) -> np.ndarray: #, n_workers: int = None
         '''
         Geoid heights based on Bruns' method
         
@@ -583,7 +583,7 @@ class GlobalGeopotentialModel:
             print('ICGEM version requested. Computing N_topo')
             from geoidlab.dtm import DigitalTerrainModel
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
-            H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)
+            H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False) #, n_workers=n_workers)
             N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
         
         N -= N_topo
