@@ -18,6 +18,7 @@ from geoidlab.cli.commands.utils.common import (
     get_grid_lon_lat
 )
 from geoidlab.icgem import download_ggm, get_ggm_tide_system
+from geoidlab.utils.io import save_to_netcdf
 
 def download(model: str, model_dir: str | Path = None) -> dict:
     '''
@@ -213,19 +214,19 @@ def compute_gravity_anomaly(
         df.to_csv(output_file, index=False)
     else:
         Dg_ggm = Dg_ggm.reshape(lon_grid.shape)
-        # Convert to xarray dataset and write to Netcdf file
-        ds = xr.Dataset(
-            data_vars={'Dg_ggm': (['lat', 'lon'], Dg_ggm)},
-            coords={
-                'lon': (['lon'], np.unique(lon_grid.flatten())),
-                'lat': (['lat'], np.unique(lat_grid.flatten()))
-            }
+        
+        status = save_to_netcdf(
+            data=Dg_ggm,
+            lon=lon_grid,
+            lat=lat_grid,
+            dataset_key='Dg_ggm',
+            filepath=output_file
         )
 
-        
-        ds.to_netcdf(output_file)
-    
-    print(f'Reference gravity anomalies written to {output_file}\n')
+    if status == 'Success':
+        print(f'Reference gravity anomalies written to {output_file}\n')
+    else:
+        print(f'Failed to write reference gravity anomalies to {output_file}\n')
     
     return {'status': 'success', 'output_file': str(output_file)}
     
