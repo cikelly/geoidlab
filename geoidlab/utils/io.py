@@ -38,6 +38,13 @@ DATASET_CONFIG = {
         'fname'      : 'zeta',
         'long_name'  : 'Height anomaly',
     },
+    'Dg_ggm': {
+        'var_name'   : 'Dg',
+        'units'      : 'mGal',
+        'description': 'Gravity anomaly synthesized from a global geopotential model (GGM)',
+        'fname'      : 'Dg_ggm',
+        'long_name'  : 'GGM Gravity anomaly',
+    },
     # Add more datasets as needed
 }
 
@@ -46,7 +53,8 @@ DEFAULT_CONFIG = {
     'var_name'       : 'data',
     'units'          : 'unknown',
     'description'    : 'Generic Dataset',
-    'fname'          : 'Generic'
+    'fname'          : 'Generic',
+    'long_name'      : 'Generic Dataset',
 }
 
 def save_to_netcdf(
@@ -56,6 +64,7 @@ def save_to_netcdf(
     dataset_key: str,
     proj_dir: str = None, 
     overwrite: bool = True,
+    filepath: str = None
 ) -> None:
     '''
     Save a dataset to a NetCDF file using predefined or default configuration
@@ -66,27 +75,30 @@ def save_to_netcdf(
     lon       : longitude 
     lat       : latitude
     proj_dir  : Directory to save data to
-    filename  : Name of file to use for the saved data
+    filepath  : If filepath is provided, prefer it over proj_dir
     overwrite : Overwrite existing file if it exists
     
     Returns
     -------
     None
     '''
+    # Select configuration
+    config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
+    
     try:
-        # Set up working directory
-        if proj_dir is None:
-            proj_dir = Path.cwd()
+        # Set up working directory (optional)
+        if filepath is None:
+            if proj_dir is None:
+                proj_dir = Path.cwd()
+            else:
+                proj_dir = Path(proj_dir)
+            
+            # Set up save directory and filename
+            save_dir = proj_dir / 'results'
+            save_dir.mkdir(parents=True, exist_ok=True)
+            filename = save_dir / Path(config['fname'] + '.nc')
         else:
-            proj_dir = Path(proj_dir)
-        
-        # Select configuration
-        config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
-        
-        # Set up save directory and filename
-        save_dir = proj_dir / 'results'
-        save_dir.mkdir(parents=True, exist_ok=True)
-        filename = save_dir / Path(config['fname'] + '.nc')
+            filename = Path(filepath)
         
         # Ensure lon and lat are 1D arrays
         if lon.ndim == 2:
@@ -125,19 +137,23 @@ def save_to_netcdf(
             return
 
         ds.to_netcdf(filename, mode='w')
-            
+        
+        return 'Success'
+    
     except PermissionError as e:
         print(f'Warning: Permission denined: {filename}. Please close the file and try again.')
         print(f'Error details: {str(e)}')
-        return
+        # return
     except OSError as e:
         print(f'Warning: Failed to write to {filename}.')
         print(f'Error details: {str(e)}')
-        return
+        # return
     except Exception as e:
         print(f'Warning: An unexpected error occurred while saving {filename}.')
         print(f'Error details: {str(e)}')
-        return
+        # return
+    
+    return 'Failed'
     # ds.to_netcdf(filename, mode='w')
 
 
