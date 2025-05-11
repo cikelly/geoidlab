@@ -549,7 +549,7 @@ class GlobalGeopotentialModel:
         
         return zeta
     
-    def geoid(self, T=None, icgem=False) -> np.ndarray:
+    def geoid(self, T=None, icgem: bool = False, parallel: bool = False) -> np.ndarray:
         '''
         Geoid heights based on Bruns' method
         
@@ -572,7 +572,7 @@ class GlobalGeopotentialModel:
         '''
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
 
-        T = self.disturbing_potential(r_or_R='R') if T is None else T
+        T = self.disturbing_potential(r_or_R='R', parallel=parallel) if T is None else T
         gamma0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
@@ -580,6 +580,7 @@ class GlobalGeopotentialModel:
         # Remove topographic effect if requested
         N_topo = np.zeros_like(N)
         if icgem:
+            print('ICGEM version requested. Computing N_topo')
             from geoidlab.dtm import DigitalTerrainModel
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
             H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)

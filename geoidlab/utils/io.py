@@ -45,6 +45,13 @@ DATASET_CONFIG = {
         'fname'      : 'Dg_ggm',
         'long_name'  : 'GGM Gravity anomaly',
     },
+    'N_ref': {
+        'var_name'   : 'N_ref',
+        'units'      : 'm',
+        'description': 'Geoid height synthesized from a global geopotential model (GGM)',
+        'fname'      : 'N_ref',
+        'long_name'  : 'GGM Geoid Height',
+    },
     # Add more datasets as needed
 }
 
