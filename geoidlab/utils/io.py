@@ -34,7 +34,7 @@ DATASET_CONFIG = {
     'zeta': {
         'var_name'   : 'zeta',
         'units'      : 'meters',
-        'description': 'Height anomaly due to residual topography',
+        'description': 'Height anomaly estimated from a global geopotential model',
         'fname'      : 'zeta',
         'long_name'  : 'Height anomaly',
     },
@@ -51,6 +51,13 @@ DATASET_CONFIG = {
         'description': 'Geoid height synthesized from a global geopotential model (GGM)',
         'fname'      : 'N_ref',
         'long_name'  : 'GGM Geoid Height',
+    },
+    'dg': {
+        'var_name'   : 'dg',
+        'units'      : 'mGal',
+        'description': 'Gravity disturbance synthesized from a global geopotential model (GGM)',
+        'fname'      : 'dg',
+        'long_name'  : 'GGM Gravity Disturbance',
     },
     # Add more datasets as needed
 }
