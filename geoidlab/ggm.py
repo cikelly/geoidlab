@@ -270,7 +270,7 @@ class GlobalGeopotentialModel:
             dg_chunk = np.zeros(len(lon_chunk))
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
-            print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
+            print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
@@ -278,7 +278,7 @@ class GlobalGeopotentialModel:
                 dg_chunk += compute_disturbance_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
 
             dg[start_idx:end_idx] = dg_chunk
-            print('\n')
+            # print('\n')
         
         return GM / self.r ** 2 * dg * 10**5  # [mGal]
     
@@ -366,7 +366,7 @@ class GlobalGeopotentialModel:
             T_chunk = np.zeros(len(lon_chunk))
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
-            print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
+            print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
@@ -374,7 +374,7 @@ class GlobalGeopotentialModel:
                 T_chunk += compute_disturbing_potential_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
 
             T[start_idx:end_idx] = T_chunk
-            print('\n')
+            # print('\n')
         
         T = GM / r * T # [m2/s2]
         
@@ -454,7 +454,7 @@ class GlobalGeopotentialModel:
             Tzz_chunk = np.zeros(len(lon_chunk))
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
-            print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
+            print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
@@ -462,7 +462,7 @@ class GlobalGeopotentialModel:
                 Tzz_chunk += compute_second_radial_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
 
             Tzz[start_idx:end_idx] = Tzz_chunk
-            print('\n')
+            # print('\n')
         
         
         return GM / self.r ** 3 * Tzz * 10**9 # [E = Eötvös]
