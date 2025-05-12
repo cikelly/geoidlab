@@ -9,7 +9,7 @@ import sys
 
 import pandas as pd
 import numpy as np
-import xarray as xr
+# import xarray as xr
 
 from pathlib import Path
 
@@ -133,7 +133,6 @@ class GGMSynthesis():
         elif self.bbox and self.grid_size and self.grid_unit:
             min_lon, max_lon, min_lat, max_lat = self.bbox
             # Apply bbox_offset only for gravity-anomaly
-            print(task)
             offset = self.bbox_offset if task == 'gravity anomaly' else 0.0
             min_lon -= offset
             max_lon += offset
@@ -265,6 +264,10 @@ class GGMSynthesis():
         for task in tasks:
             if task not in self.TASK_CONFIG:
                 raise ValueError(f'Unknown task: {task}')
+            # Reset grid attributes before each task to ensure task specific grid generation
+            self.lonlatheight = None
+            self.lon_grid = None
+            self.lat_grid = None
             config = self.TASK_CONFIG[task]
             method = getattr(self, config['method'])
             results[task] = method()
@@ -299,10 +302,10 @@ def main() -> 0:
     parser.add_argument('--bbox', type=float, nargs=4, default=[None, None, None, None], 
                         help='Bounding box [W,E,S,N] in degrees')
     parser.add_argument('--bbox-offset', type=float, default=1.0, 
-                        help='Offset around bounding box (applied only for gravity-anomaly)')
+                        help='Offset around bounding box (applied only for gravity anomaly)')
     parser.add_argument('--input-file', type=str, 
                         help='Input file with lon, lat, height')
-    parser.add_argument('--chunk-size', type=int, default=500, 
+    parser.add_argument('--chunk-size', type=int, default=1000, 
                         help='Chunk size for parallel processing')
     parser.add_argument('--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
