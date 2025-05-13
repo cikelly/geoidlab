@@ -77,7 +77,7 @@ def bright_rainbow_cmap(n=256) -> ListedColormap:
     
     return cmap
 
-def cpt_cmap(cpt_name: str = 'GMT_rainbow') -> LinearSegmentedColormap:
+def cpt_cmap(cpt_name: str = 'GMT_rainbow', cpt_list=False) -> LinearSegmentedColormap:
     '''
     Load a GMT .cpt file as a Matplotlib colormap
     
@@ -104,4 +104,7 @@ def cpt_cmap(cpt_name: str = 'GMT_rainbow') -> LinearSegmentedColormap:
     if not cpt_path.exists():
         raise FileNotFoundError(f'Could not find {cpt_name} in {CPT_BASE_DIR}. \nValid cpt: {VALID_CPT_FILES}')
     
-    return get_cmap(str(cpt_path))
+    if cpt_list:
+        return VALID_CPT_FILES
+    else:
+        return get_cmap(str(cpt_path))

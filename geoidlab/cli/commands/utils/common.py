@@ -55,8 +55,13 @@ def directory_setup(project_dir: str = None) -> None:
     # Sub-directories
     downloads_dir = project_dir / 'downloads'
     results_dir = project_dir / 'results'
+    figures_dir = results_dir / 'figures'
+    
+    # Create sub-directories
+    figures_dir.mkdir(parents=True, exist_ok=True)
     downloads_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
+    
     
 def get_grid_lon_lat(grid_extent, grid_resolution, unit) -> tuple[np.ndarray, np.ndarray]:
     '''

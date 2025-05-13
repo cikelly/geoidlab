@@ -111,11 +111,17 @@ class GGMSynthesis():
             raise ValueError('Ellipsoid must be \'wgs84\' or \'grs80\'')
         if self.tide_system and self.tide_system not in ['mean_tide', 'zero_tide', 'tide_free']:
             raise ValueError('Tide system must be one of: mean_tide, zero_tide, tide_free')
-        if self.bbox and len(self.bbox) == 4:
+        if not self.input_file:
+            if any(x is None for x in self.bbox):
+                raise ValueError('bbox must contain four numbers [W,E,S,N] when input-file is not provided or --grid is used')
+            if len(self.bbox) != 4:
+                raise ValueError('bbox must contain exactly four numbers [W,E,S,N]')
             min_lon, max_lon, min_lat, max_lat = self.bbox
+            if not all(isinstance(x, (int, float)) for x in self.bbox):
+                raise ValueError('bbox values must be numbers')
             if not (min_lon <= max_lon and min_lat <= max_lat):
                 raise ValueError('Invalid bbox: west must be <= east, south <= north')
-            
+
     def _process_input(self, task: str = None) -> None:
         '''Load input file or generate grid. Apply bbox_offset only for gravity-anomaly.'''
         if self.input_file:
@@ -161,6 +167,8 @@ class GGMSynthesis():
                 self.lonlatheight.to_csv(converted_data_path, index=False)
                 print(f'Converted data saved to {converted_data_path}')
                 return converted_data_path
+            else:
+                print('Surface gravity and GGM have the same tide system. Skipping conversion.')
         return None
     
     def download(self) -> dict:
@@ -281,41 +289,41 @@ def main() -> 0:
             'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance.'
         )
     )
-    parser.add_argument('--model', type=str, required=True, 
+    parser.add_argument('-m', '--model', type=str, required=True, 
                         help='GGM name (e.g., EGM2008)')
-    parser.add_argument('--model-dir', type=str, default=None, 
+    parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for GGM files')
     parser.add_argument('--do', type=str, default='all', 
                         choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'all'],
                         help='Computation steps to perform')
-    parser.add_argument('--start', type=str, default=None, 
+    parser.add_argument('-s', '--start', type=str, default=None, 
                         help='Start task')
-    parser.add_argument('--end', type=str, default=None, 
+    parser.add_argument('-e', '--end', type=str, default=None, 
                         help='End task')
-    parser.add_argument('--max-deg', type=int, default=90, 
+    parser.add_argument('-n', '--max-deg', type=int, default=90, 
                         help='Maximum degree of truncation')
-    parser.add_argument('--grid-size', type=float, default=None, 
+    parser.add_argument('-g', '--grid-size', type=float, default=None, 
                         help='Grid size in degrees, minutes, or seconds')
-    parser.add_argument('--grid-unit', type=str, default=None, 
+    parser.add_argument('-gu', '--grid-unit', type=str, default=None, 
                         choices=['degrees', 'minutes', 'seconds'],
                         help='Unit of grid size')
-    parser.add_argument('--bbox', type=float, nargs=4, default=[None, None, None, None], 
+    parser.add_argument('-b', '--bbox', type=float, nargs=4, default=[None, None, None, None], 
                         help='Bounding box [W,E,S,N] in degrees')
-    parser.add_argument('--bbox-offset', type=float, default=1.0, 
+    parser.add_argument('-bo', '--bbox-offset', type=float, default=1.0, 
                         help='Offset around bounding box (applied only for gravity anomaly)')
-    parser.add_argument('--input-file', type=str, 
+    parser.add_argument('-i','--input-file', type=str, 
                         help='Input file with lon, lat, height')
-    parser.add_argument('--chunk-size', type=int, default=1000, 
+    parser.add_argument('-cs', '--chunk-size', type=int, default=1000, 
                         help='Chunk size for parallel processing')
-    parser.add_argument('--parallel', action='store_true', default=False, 
+    parser.add_argument('-p','--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
-    parser.add_argument('--ellipsoid', type=str, default='wgs84', 
+    parser.add_argument('-ell','--ellipsoid', type=str, default='wgs84', 
                         help='Reference ellipsoid: wgs84, grs80')
-    parser.add_argument('--proj-name', type=str, default='GeoidProject', 
+    parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Project directory')
-    parser.add_argument('--gravity-tide', type=str, default=None, 
+    parser.add_argument('-gt', '--gravity-tide', type=str, default=None, 
                         help='Tide system: mean_tide, zero_tide, tide_free')
-    parser.add_argument('--converted', action='store_true', default=False,
+    parser.add_argument('-c', '--converted', action='store_true', default=False,
                         help='Input data is in target tide system')
     parser.add_argument('--icgem', action='store_true', default=False,
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
