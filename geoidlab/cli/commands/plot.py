@@ -115,7 +115,6 @@ def main() -> None:
         
         # Convert units
         if args.unit is not None and args.unit != 'm':
-            print(units)
             if units == 'meters':
                 data = data * UNIT_CONVERSIONS[args.unit]
                 units = f'{args.unit}'
