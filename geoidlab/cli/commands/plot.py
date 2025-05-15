@@ -16,6 +16,12 @@ CUSTOM_CMAPS = {
     'bright_rainbow': bright_rainbow_cmap()
 }
 
+# Unit conversion from meters
+UNIT_CONVERSIONS = {
+    'cm': 100,
+    'mm': 1000
+}
+
 cpt_list = cpt_cmap(cpt_list=True)
 
 def get_colormap(cmap_name: str) -> Colormap:
@@ -71,6 +77,7 @@ def main() -> None:
     parser.add_argument('--scalebar', action='store_true', help='Show scalebar')
     parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
+    parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
     
     args = parser.parse_args()
     
@@ -103,9 +110,18 @@ def main() -> None:
         ax = axes[row, col]
         lon, lat = var.coords['lon'].values, var.coords['lat'].values
         data = var.values
+        
+        units = var.attrs.get('units', '')
+        
+        # Convert units
+        if args.unit is not None and args.unit != 'm':
+            print(units)
+            if units == 'meters':
+                data = data * UNIT_CONVERSIONS[args.unit]
+                units = f'{args.unit}'
+            
         pcm = ax.pcolormesh(lon, lat, data, cmap=get_colormap(args.cmap), shading='auto', vmin=args.vmin, vmax=args.vmax)
         long_name = var.attrs.get('long_name', var.name)
-        units = var.attrs.get('units', '')
         ax.set_title(f'{long_name}', fontweight='bold', fontsize=args.title_font_size)
         ax.grid(which='both', linewidth=0.01)
         ax.minorticks_on()
