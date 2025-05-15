@@ -98,3 +98,16 @@ def get_grid_lon_lat(grid_extent, grid_resolution, unit) -> tuple[np.ndarray, np
     lon_grid, lat_grid = np.meshgrid(lon_grid, lat_grid)
     
     return lon_grid, lat_grid
+
+def to_seconds(resolution, unit) -> float:
+    '''
+    Convert resolution to seconds
+    '''
+    if unit == 'minutes':
+        resolution *= 60.0
+    elif unit == 'degrees':
+        resolution *= 3600.0
+    else:
+        resolution = resolution
+        
+    return resolution

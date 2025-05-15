@@ -117,9 +117,9 @@ class TerrainQuantities:
         # Define sub-grid and extract data
         lon = self.ori_topo['x'].values
         lat = self.ori_topo['y'].values
+        self.radius_deg = self.km2deg((self.radius / 1000))
         if sub_grid is None:
             # print(f'Defining sub-grid based on integration radius: {radius} km')
-            self.radius_deg = self.km2deg((self.radius / 1000))
             min_lat = round(min(lat) + self.radius_deg)
             max_lat = round(max(lat) - self.radius_deg)
             min_lon = round(min(lon) + self.radius_deg)

@@ -162,6 +162,27 @@ class GGMSynthesis():
             if ggm_tide != self.tide_system:
                 print(f'Converting input data from {self.tide_system} to {ggm_tide} system...')
                 converter = GravityTideSystemConverter(data=self.lonlatheight)
+                # Map tide system pairs to conversion methods
+                conversion_map = {
+                    ('mean_tide', 'tide_free'): 'mean2free',
+                    ('tide_free', 'mean_tide'): 'free2mean',
+                    ('mean_tide', 'zero_tide'): 'mean2zero',
+                    ('zero_tide', 'mean_tide'): 'zero2mean',
+                    ('zero_tide', 'tide_free'): 'zero2free',
+                    ('tide_free', 'zero_tide'): 'free2zero'
+                }
+                conversion_key = (self.tide_system, ggm_tide)
+                if conversion_key not in conversion_map:
+                    raise ValueError(f'No conversion defined from {self.tide_system} to {ggm_tide}')
+                
+                # Perform conversion
+                conversion_method = getattr(converter, conversion_map[conversion_key])
+                converted_data = conversion_method()
+                
+                # Update lonlatheight with converted gravity and height
+                self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
+                self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
+                
                 input_filename = Path(self.input_file).stem if self.input_file else 'lonlatheight'
                 converted_data_path = self.output_dir / f'{input_filename}_{ggm_tide}.csv'
                 self.lonlatheight.to_csv(converted_data_path, index=False)

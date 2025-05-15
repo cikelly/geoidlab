@@ -43,22 +43,29 @@ DATASET_CONFIG = {
         'units'      : 'mGal',
         'description': 'Gravity anomaly synthesized from a global geopotential model (GGM)',
         'fname'      : 'Dg_ggm',
-        'long_name'  : 'GGM Gravity anomaly',
+        'long_name'  : 'Gravity anomaly',
     },
     'N_ref': {
         'var_name'   : 'N_ref',
         'units'      : 'm',
         'description': 'Geoid height synthesized from a global geopotential model (GGM)',
         'fname'      : 'N_ref',
-        'long_name'  : 'GGM Geoid Height',
+        'long_name'  : 'Geoid Height',
     },
     'dg': {
         'var_name'   : 'dg',
         'units'      : 'mGal',
         'description': 'Gravity disturbance synthesized from a global geopotential model (GGM)',
         'fname'      : 'dg',
-        'long_name'  : 'GGM Gravity Disturbance',
+        'long_name'  : 'Gravity Disturbance',
     },
+    'zeta_rtm':{
+        'var_name'   : 'zeta_rtm',
+        'units'      : 'm',
+        'description': 'RTM height anomaly',
+        'fname'      : 'zeta_rtm',
+        'long_name'  : 'RTM Height Anomaly'
+    }
     # Add more datasets as needed
 }
 

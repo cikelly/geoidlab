@@ -85,8 +85,8 @@ def identify_relevant_tiles(bbox, tiles) -> list:
     '''
     # Validate bbox
     if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-        raise ValueError('bbox must be a list or tuple of 4 values: [min_lon, min_lat, max_lon, max_lat]')
-    min_lon, min_lat, max_lon, max_lat = bbox
+        raise ValueError('bbox must be a list or tuple of 4 values: [min_lon, max_lon, min_lat, max_lat]')
+    min_lon, max_lon, min_lat, max_lat = bbox
     
     # Ensure bbox is valid: W, S, E, N
     if min_lon > max_lon or min_lat > max_lat:
@@ -238,7 +238,7 @@ def fetch_url(bbox) -> list[str]:
     # Validate bbox
     if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
         raise ValueError('bbox must be a list or tuple of length 4')
-    min_lon, min_lat, max_lon, max_lat = bbox
+    min_lon, max_lon, min_lat, max_lat = bbox
 
     # Ensure bbox is valid: W, N, E, S
     if min_lon > max_lon or min_lat > max_lat:
@@ -394,8 +394,8 @@ def dem4geoid(
     
     bbox_subset = [
         bbox[0] - bbox_off,
-        bbox[1] - bbox_off,
-        bbox[2] + bbox_off,
+        bbox[1] + bbox_off,
+        bbox[2] - bbox_off,
         bbox[3] + bbox_off
     ]
     # dem = ds.sel(
@@ -514,8 +514,8 @@ def download_dem_cog(
 
     bbox_subset = [
         bbox[0] - bbox_off,
-        bbox[1] - bbox_off,
-        bbox[2] + bbox_off,
+        bbox[1] + bbox_off,
+        bbox[2] - bbox_off,
         bbox[3] + bbox_off
     ]
     dem = ds.rio.clip_box(minx=bbox_subset[0], maxx=bbox_subset[2], miny=bbox_subset[1], maxy=bbox_subset[3])
@@ -589,7 +589,7 @@ def check_bbox_contains(netcdf_file, bbox) -> bool:
     y_max = ds['y'].max().item()
     
     # Given bounding box coordinates (WSEN)
-    bbox_w, bbox_s, bbox_e, bbox_n = bbox
+    bbox_w, bbox_e, bbox_s, bbox_n = bbox
     
     # Check for intersection
     # intersects = not (bbox_e < x_min or bbox_w > x_max or bbox_n < y_min or bbox_s > y_max)

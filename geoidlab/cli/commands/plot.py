@@ -1,4 +1,5 @@
 import argparse
+import sys
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -39,8 +40,16 @@ def list_colormaps() -> None:
 def nice_scale_length(range_size: float) -> float:
     '''Return a nice scalebar length (e.g., 10, 50, 100) based on range size'''
     candidates = [1, 2, 5, 10, 20, 50, 100, 200, 250]
-    target = range_size * 0.1  # 10% of the range
+    target = range_size * 0.2  # 10% of the range
     return min(candidates, key=lambda x: abs(x - target))
+
+def add_north_arrow(ax, x=0.95, y=0.95, size=30, color='black') -> None:
+    ax.annotate('N', xy=(x, y), xytext=(0, size),
+               arrowprops=dict(arrowstyle='->', color=color),
+               xycoords=ax.transAxes, textcoords='offset points',
+               ha='center', va='center', fontsize=size//2, 
+               fontweight='bold', color=color)
+    
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='Plot a NetCDF file')
@@ -59,7 +68,9 @@ def main() -> None:
     parser.add_argument('--proj-name', type=str, default='GeoidProject', help='Name of the project')
     parser.add_argument('--xlim', type=float, nargs=2, default=None, help='X-axis limits')
     parser.add_argument('--ylim', type=float, nargs=2, default=None, help='Y-axis limits')
-    parser.add_argument('--scalebar-units', type=str, default='km', help='Scalebar units')
+    parser.add_argument('--scalebar', action='store_true', help='Show scalebar')
+    parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
+    parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     
     args = parser.parse_args()
     
@@ -104,28 +115,76 @@ def main() -> None:
         cbar = fig.colorbar(pcm, ax=ax, label=f'{long_name} [{units}]' if units else long_name)
         
         # Add scalebar
-        lon_range = args.xlim if args.xlim else (lon.min(), lon.max())
-        scale_length = nice_scale_length(lon_range[1] - lon_range[0])
-        if args.scalebar_units == 'km':
-            mean_lat = np.mean(lat) if args.ylim is None else np.mean(args.ylim)
-            scale_length_km = scale_length * 111.11 * np.cos(np.deg2rad(mean_lat))
-            scale_label = f'{int(scale_length_km)} km'
-        else:
-            scale_label = f'{int(scale_length)} {args.scalebar_units}°'
-            
-        scale_bar = AnchoredSizeBar(
-            ax.transData,
-            scale_length,  # Size in data coordinates (degrees)
-            scale_label,
-            'lower left',  # Position
-            pad=0.35,
-            color='black',
-            frameon=True,
-            size_vertical=0.03,  # Thickness (height of scalebar)
-            fontproperties={'size': 8},
-            alpha=0.25
-        )
-        ax.add_artist(scale_bar)
+        if args.scalebar:
+            lon_range = args.xlim if args.xlim else (lon.min(), lon.max())
+            scale_length = nice_scale_length(lon_range[1] - lon_range[0])
+            if args.scalebar_units == 'km':
+                mean_lat = np.mean(lat) if args.ylim is None else np.mean(args.ylim)
+                scale_length_km = scale_length * 111.11 * np.cos(np.deg2rad(mean_lat))
+                scale_label = f'{int(scale_length_km)} km'
+            else:
+                scale_label = f'{int(scale_length)} {args.scalebar_units}°'
+                
+            if args.scalebar_fancy:
+                # Create a segmented scalebar with alternating colors
+                
+                n_segments = 4  # e.g., black, white, black
+                segment_length = scale_length / n_segments
+                colors = ['black', 'white'] * n_segments
+                colors = colors[:n_segments]  # Alternating colors
+                scale_bars = []
+
+                # Calculate segment width in axes coordinates (0 to 1)
+                lon_range = lon.max() - lon.min()
+                segment_width_axes = segment_length / lon_range  # Fraction of x-axis
+
+                for i in range(n_segments):
+                    # Create a segment of the scalebar
+                    sb = AnchoredSizeBar(
+                        ax.transData,
+                        segment_length,  # Length in data coordinates (degrees)
+                        '',  # Label only on last segment
+                        'lower left',  # Position
+                        pad=0.35,
+                        color=colors[i],
+                        frameon=False,  # No frame for segments
+                        size_vertical=0.04,  # Thickness
+                        fontproperties={'size': 8},
+                        alpha=0.25,
+                        borderpad=0.5,
+                        bbox_to_anchor=(i * segment_width_axes, 0),  # Offset in axes coordinates
+                        bbox_transform=ax.transAxes  # Use axes coordinates for positioning
+                    )
+                    scale_bars.append(sb)
+                    ax.add_artist(sb)
+                    
+                    # Add centered label below the entire scalebar
+                    ax.text(
+                        0.6 * (n_segments * segment_width_axes),  # Center of scalebar
+                        0.035,  # Lower left
+                        scale_label,  # Label (e.g., "50°")
+                        transform=ax.transAxes,
+                        fontsize=8,
+                        color='black',
+                        ha='center',  # Center horizontally
+                        va='top',  # Place below
+                        bbox=dict(facecolor='none', edgecolor='none')
+                    )
+            else:
+                sb = AnchoredSizeBar(
+                    ax.transData,
+                    scale_length,  # Length in data coordinates (degrees)
+                    scale_label,  # Label
+                    'lower left',  # Position
+                    pad=0.35,
+                    color='black',
+                    frameon=True,  # No frame for segments
+                    size_vertical=0.04,  # Thickness
+                    fontproperties={'size': 8},
+                    alpha=0.25,
+                    borderpad=0.5,
+                )
+                ax.add_artist(sb)
     
     # Hide unused subplots
     for i in range(len(variables), nrows * ncols):
@@ -143,4 +202,4 @@ def main() -> None:
         plt.show()
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
