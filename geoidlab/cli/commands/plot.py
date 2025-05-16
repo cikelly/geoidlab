@@ -56,9 +56,8 @@ def add_north_arrow(ax, x=0.95, y=0.95, size=30, color='black') -> None:
                ha='center', va='center', fontsize=size//2, 
                fontweight='bold', color=color)
     
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description='Plot a NetCDF file')
+def add_plot_arguments(parser) -> None:
+    '''Add plotting arguments to an ArgumentParser instance'''
     parser.add_argument('-f', '--filename', type=str, help='NetCDF file to plot')
     parser.add_argument('-v', '--variable', action='append', type=str, help='Variable name(s) to plot')
     parser.add_argument('-c', '--cmap', type=str, help='Colormap to use. For GMT .cpt files, use the file name with extension.', default='viridis')
@@ -79,11 +78,22 @@ def main() -> None:
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
     
-    args = parser.parse_args()
+
+def main(args=None) -> None:
+    if args is None:
+        parser = argparse.ArgumentParser(description='Plot a NetCDF file')
+        add_plot_arguments(parser)
+        args = parser.parse_args()
+        
     
     if args.list_cmaps:
         list_colormaps()
-        return
+        return 0
+    
+    # Ensure we have a filename
+    if not args.filename:
+        print('Error: No filename specified. Use -f or --filename to specify a NetCDF file.')
+        return 1
     
     directory_setup(args.proj_name)
 
@@ -115,7 +125,7 @@ def main() -> None:
         
         # Convert units
         if args.unit is not None and args.unit != 'm':
-            if units == 'meters':
+            if units == 'meters' or units == 'm':
                 data = data * UNIT_CONVERSIONS[args.unit]
                 units = f'{args.unit}'
             

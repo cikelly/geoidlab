@@ -255,17 +255,7 @@ class TopographicQuantities:
         output_files = [result['output_file'] for result in results.values() if result.get('output_file')]
         return {'status': 'success', 'output_files': output_files}
 
-
-def main() -> int:
-    '''
-    Main function to parse arguments and run topographic quantities computation.
-    '''
-    parser = argparse.ArgumentParser(
-        description=(
-        'Calculate topographic quantities from DEM.'
-        'Supported tasks: download, terrain-correction, rtm-anomaly, indirect-effect, height-anomaly.'
-        )
-    )
+def add_topo_arguments(parser) -> None:
     parser.add_argument('--topo', type=str, required=True, choices=['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'], 
                         help='DEM model (e.g., srtm, srtm30plus, cop, nasadem, gebco)')
     parser.add_argument('--bbox', type=float, nargs=4, required=True, 
@@ -301,7 +291,19 @@ def main() -> int:
     parser.add_argument('--interpolation-method', type=str, default='slinear', choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
                         help='Interpolation method to resample the DEM to --resolution')
 
-    args = parser.parse_args()
+def main(args=None) -> int:
+    '''
+    Main function to parse arguments and run topographic quantities computation.
+    '''
+    if args is None:
+        parser = argparse.ArgumentParser(
+            description=(
+            'Calculate topographic quantities from DEM.'
+            'Supported tasks: download, terrain-correction, rtm-anomaly, indirect-effect, height-anomaly.'
+            )
+        )
+        add_topo_arguments(parser)
+        args = parser.parse_args()
 
     # Define workflow
     workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly']

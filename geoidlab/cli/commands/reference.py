@@ -303,13 +303,7 @@ class GGMSynthesis():
         output_files = [result['output_file'] for result in results.values() if result.get('output_file')]
         return {'status': 'success', 'output_files': output_files}
 
-def main() -> 0:
-    parser = argparse.ArgumentParser(
-        description=(
-            'Calculate gravity functionals and geoid heights from a Global Geopotential Model (GGM). '
-            'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance.'
-        )
-    )
+def add_reference_arguments(parser) -> None:
     parser.add_argument('-m', '--model', type=str, required=True, 
                         help='GGM name (e.g., EGM2008)')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
@@ -349,8 +343,16 @@ def main() -> 0:
     parser.add_argument('--icgem', action='store_true', default=False,
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
 
-    args = parser.parse_args()
-
+def main(args=None) -> int:
+    if args is None:
+        parser = argparse.ArgumentParser(
+            description=(
+                'Calculate gravity functionals and geoid heights from a Global Geopotential Model (GGM). '
+                'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance.'
+            )
+        )
+        args = parser.parse_args()
+        
     workflow = ['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance']
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
