@@ -92,6 +92,10 @@ DEFAULT_CONFIG = {
     'long_name'      : 'Generic Dataset',
 }
 
+TIDE_SYSTEM_DATASETS = {'Dg_ggm', 'N_ref', 'dg', 'N_res', 'N', 'zeta'}
+
+METHOD_DATASETS = {'N', 'N_res', 'N_ref'}
+
 def save_to_netcdf(
     data: np.ndarray,
     lon: np.ndarray,
@@ -99,23 +103,28 @@ def save_to_netcdf(
     dataset_key: str,
     proj_dir: str = None, 
     overwrite: bool = True,
-    filepath: str = None
-) -> None:
+    filepath: str = None,
+    tide_system: str = None,
+    method: str = None
+) -> str:
     '''
     Save a dataset to a NetCDF file using predefined or default configuration
     
     Parameters
     ----------
-    data      : the data to save
-    lon       : longitude 
-    lat       : latitude
-    proj_dir  : Directory to save data to
-    filepath  : If filepath is provided, prefer it over proj_dir
-    overwrite : Overwrite existing file if it exists
+    data        : the data to save
+    lon         : longitude 
+    lat         : latitude
+    proj_dir    : Directory to save data to
+    filepath    : If filepath is provided, prefer it over proj_dir
+    overwrite   : Overwrite existing file if it exists
+    tide_system : Tide system of the data (only for specific datasets)
+    method      : Method used to compute the data (only for specific datasets)
+    dataset_key : Key to select the dataset configuration from DATASET_CONFIG
     
     Returns
     -------
-    None
+    str         : 'Success' or 'Failed'
     '''
     # Select configuration
     config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
@@ -165,6 +174,14 @@ def save_to_netcdf(
                 'copyright': f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             }
         )
+        
+        # Add tide system information only for relevant datasets
+        if dataset_key in TIDE_SYSTEM_DATASETS and tide_system is not None:
+            ds.attrs['tide_system'] = tide_system
+        
+        # Add method
+        if dataset_key in METHOD_DATASETS:
+            ds.attrs['method'] = method if method is not None else 'Unspecified method'
         
         # Save to NetCDF file
         if filename.exists() and not overwrite:

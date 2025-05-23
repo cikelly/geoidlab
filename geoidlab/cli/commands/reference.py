@@ -157,8 +157,9 @@ class GGMSynthesis():
         
     def _convert_tide_system(self, model_path: Path) -> Path | None:
         '''Convert input data to GGM tide system.'''
+        ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
+        self.ggm_tide = ggm_tide
         if not self.converted and self.tide_system:
-            ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
             if ggm_tide != self.tide_system:
                 print(f'Converting input data from {self.tide_system} to {ggm_tide} system...')
                 converter = GravityTideSystemConverter(data=self.lonlatheight)
@@ -245,7 +246,9 @@ class GGMSynthesis():
                 lon=self.lon_grid,
                 lat=self.lat_grid,
                 dataset_key=output_key,
-                filepath=output_file
+                filepath=output_file,
+                tide_system=self.ggm_tide,
+                method='Topographic correction applied (ICGEM method)' if icgem else 'Regular method (no correction applied)'
             )
 
         print(f'{task_name} written to {output_file}\n')

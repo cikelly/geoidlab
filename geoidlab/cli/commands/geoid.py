@@ -18,12 +18,12 @@ from geoidlab.geoid import ResidualGeoid
 from geoidlab.icgem import get_ggm_tide_system
 from geoidlab.utils.io import save_to_netcdf
 
-# METHODS_DICT = {
-#     'hg': 'Heck & Gruninger',
-#     'wg': 'Wong & Gore',
-#     'og': 'Original Stokes\'',
-#     'ml': 'Meissl'
-# }
+METHODS_DICT = {
+    'hg': "Heck & Gruninger's modification",
+    'wg': "Wong & Gore's modification",
+    'og': "Original Stokes'",
+    'ml': "Meissl's modification",
+}
 def copy_arguments(src_parser, dst_parser, exclude=None) -> None:
     '''
     Copy arguments from one src_parser to dst_parser, skipping duplicates based on dest
@@ -127,6 +127,9 @@ def main(args=None) -> None:
     grid_size = args.grid_size
     grid_unit = args.grid_unit
     
+    model_path = (Path(model_dir) / Path(args.model)).with_suffix('.gfc')
+    ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=args.model_dir)
+    
     # Step 1: Calculate Helmert/Faye anomalies (Dg)
     gravity_reduction = GravityReduction(
         input_file=args.input_file,
@@ -213,12 +216,11 @@ def main(args=None) -> None:
         lon=residual_geoid.res_anomaly_P['lon'].values,
         lat=residual_geoid.res_anomaly_P['lat'].values,
         dataset_key='N_res',
-        filepath=output_dir / 'N_res.nc'
+        filepath=output_dir / 'N_res.nc',
+        tide_system=ggm_tide,
+        method=METHODS_DICT[args.method],
     )
-    # N_res_ds = xr.Dataset(
-    #     {'N_res': (['lat', 'lon'], N_res)},
-    #     coords={'lon': residual_geoid.res_anomaly_P['lon'], 'lat': residual_geoid.res_anomaly_P['lat']}
-    # )
+
     print('Residual geoid computation completed.\n')
     
     # Step 5: Calculate reference geoid (N_ggm)
@@ -276,14 +278,6 @@ def main(args=None) -> None:
         print('Resampling indirect effect to the same grid as the reference and residual geoids...')
         N_ind = N_ind.interp(lon=N_ggm_ds['lon'], lat=N_ggm_ds['lat'], method='linear')
     
-    # print(type(N_ggm))
-    # print(type(N_res))
-    # print(type(N_ind))
-    
-    # #     <class 'xarray.core.dataarray.DataArray'>
-    # # <class 'numpy.ndarray'>
-    # # <class 'xarray.core.dataarray.DataArray'>
-    
     
     print('Calculating total geoid as the sum of reference, residual, and indirect effects...')
     N = N_ggm.values + N_res + N_ind.values
@@ -292,8 +286,8 @@ def main(args=None) -> None:
     
     
     # Convert tide system if needed
-    model_path = (Path(model_dir) / Path(args.model)).with_suffix('.gfc')
-    ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=args.model_dir)
+    
+    
     if args.target_tide_system != ggm_tide:
         from geoidlab.tide import GeoidTideSystemConverter
         import numpy as np
@@ -324,7 +318,9 @@ def main(args=None) -> None:
         lon=N_ggm['lon'].values,
         lat=N_ggm['lat'].values,
         dataset_key='N',
-        filepath=output_file
+        filepath=output_file,
+        tide_system=args.target_tide_system if args.target_tide_system else ggm_tide,
+        method=METHODS_DICT[args.method],
     )
 
     print(f'Geoid heights written to {output_file}.\n')
