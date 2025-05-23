@@ -15,6 +15,7 @@ from geoidlab.cli.commands.faye import add_faye_arguments, GravityReduction
 from geoidlab.cli.commands.topo import add_topo_arguments, TopographicQuantities
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab.geoid import ResidualGeoid
+from geoidlab.icgem import get_ggm_tide_system
 from geoidlab.utils.io import save_to_netcdf
 
 # METHODS_DICT = {
@@ -88,6 +89,8 @@ def add_geoid_arguments(parser) -> None:
                         help='Geoid computation method (default: hg). Options: Heck & Gruninger (hg), Wong & Gore (wg), Meissl (ml), original (og)')
     parser.add_argument('--ind-grid-size', type=float, default=30,
                         help='Grid resolution for computing indirect effect. Keep this in seconds. Default: 30 seconds')
+    parser.add_argument('--target-tide-system', type=str, default='tide_free', choices=['mean_tide', 'tide_free', 'zero_tide'],
+                        help='The tide system that the final geoid should be in. Default: tide_free')
     
 def main(args=None) -> None:
     '''
@@ -286,8 +289,36 @@ def main(args=None) -> None:
     N = N_ggm.values + N_res + N_ind.values
     
     output_file = output_dir / 'N.nc'
-    print(f'Writing geoid to {output_file}')
     
+    
+    # Convert tide system if needed
+    model_path = (Path(model_dir) / Path(args.model)).with_suffix('.gfc')
+    ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=args.model_dir)
+    if args.target_tide_system != ggm_tide:
+        from geoidlab.tide import GeoidTideSystemConverter
+        import numpy as np
+        print(f'Converting geoid from {ggm_tide} to {args.target_tide_system} tide system...')
+        phi, _ = np.meshgrid(N_ggm_ds['lat'], N_ggm_ds['lon'])
+        # phi = phi.flatten()
+        converter = GeoidTideSystemConverter(phi=phi, geoid=N)
+        conversion_map = {
+            ('mean_tide', 'tide_free'): 'mean2free',
+            ('tide_free', 'mean_tide'): 'free2mean',
+            ('mean_tide', 'zero_tide'): 'mean2zero',
+            ('zero_tide', 'mean_tide'): 'zero2mean',
+            ('zero_tide', 'tide_free'): 'zero2free',
+            ('tide_free', 'zero_tide'): 'free2zero'
+        }
+        conversion_key = (ggm_tide, args.target_tide_system)
+        if conversion_key not in conversion_map:
+            raise ValueError(f'No conversion defined from {ggm_tide} to {args.target_tide_system}')
+        
+        # Perform conversion
+        conversion_method = getattr(converter, conversion_map[conversion_key])
+        N = conversion_method()
+        print(f'Geoid converted to {args.target_tide_system} tide system.')
+    
+    print(f'Writing geoid to {output_file}')
     save_to_netcdf(
         data=N,
         lon=N_ggm['lon'].values,
@@ -295,12 +326,7 @@ def main(args=None) -> None:
         dataset_key='N',
         filepath=output_file
     )
-    
-    # geoid_ds = xr.Dataset({'N': N}, coords=N_ggm_ds.coords)
-    
-    # # Save the final geoid result
-    # output_file = output_dir / 'geoid.nc'
-    # geoid_ds.to_netcdf(output_file)
+
     print(f'Geoid heights written to {output_file}.\n')
     
     print('Geoid computation completed successfully.\n\n\n')
