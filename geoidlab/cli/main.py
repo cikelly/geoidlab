@@ -5,7 +5,7 @@ from geoidlab.cli.commands.reference import add_reference_arguments, main as ggm
 from geoidlab.cli.commands.topo import add_topo_arguments, main as topo_main
 from geoidlab.cli.commands.faye import add_faye_arguments, main as faye_main
 from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
-
+from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -38,11 +38,19 @@ def main() -> None:
     add_plot_arguments(plot_parser)
     plot_parser.set_defaults(func=plot_main)
     
+    # Geoid
+    geoid_parser = subparsers.add_parser('geoid', help='Compute a geoid using the remove-compute-restore (RCR) method')
+    add_geoid_arguments(geoid_parser)
+    geoid_parser.set_defaults(func=geoid_main)
+    
     args = parser.parse_args()
+    
+    if not args.subcommand:
+        parser.print_help()
+        sys.exit(1)
+    
     return args.func(args)
     
     
-
-
 if __name__ == '__main__':
     sys.exit(main())

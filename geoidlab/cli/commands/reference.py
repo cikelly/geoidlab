@@ -317,7 +317,7 @@ def add_reference_arguments(parser) -> None:
                         help='End task')
     parser.add_argument('-n', '--max-deg', type=int, default=90, 
                         help='Maximum degree of truncation')
-    parser.add_argument('-g', '--grid-size', type=float, default=None, 
+    parser.add_argument('-gs', '--grid-size', type=float, default=None, 
                         help='Grid size in degrees, minutes, or seconds')
     parser.add_argument('-gu', '--grid-unit', type=str, default=None, 
                         choices=['degrees', 'minutes', 'seconds'],

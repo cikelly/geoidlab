@@ -20,6 +20,49 @@ from geoidlab.cli.commands.topo import TopographicQuantities
 from geoidlab.tide import GravityTideSystemConverter
 from geoidlab.icgem import get_ggm_tide_system
 
+
+def decimate_data(df: pd.DataFrame, n_points: int, verbose: bool = False) -> pd.DataFrame:
+    '''
+    Decimate a DataFrame to a specified number of points using KMeans clustering.
+    
+    Parameters
+    ----------
+    df        : Marine data with 'lon', 'lat', and 'Dg'.
+    n_points  : Number of points to retain after decimation.
+    verbose   : If True, print information about the decimation process.
+    
+    Returns
+    -------
+    Decimated DataFrame with n_points rows.
+    '''
+    from sklearn.cluster import KMeans
+    from scipy.spatial.distance import cdist
+    import numpy as np
+    
+    if n_points >= len(df):
+        if verbose:
+            print(f'Requested {n_points} points, but DataFrame has {len(df)} points. Skipping decimation...')
+        return df
+    
+    if n_points < 10:
+        raise ValueError(f'Requested number of points ({n_points}) is too low. Must be >= 10.')
+    
+    coords = np.column_stack((df['lon'], df['lat']))
+    if verbose:
+        print(f'Decimating marine gravity data from {len(df)} to {n_points} points using KMeans clustering...')
+    
+    kmeans = KMeans(n_clusters=n_points, random_state=42, n_init=10)
+    kmeans.fit(coords)
+    centers = kmeans.cluster_centers_
+    distances = cdist(coords, centers)
+    indices = np.argmin(distances, axis=0)
+    
+    decimated_df = df.iloc[indices].copy()
+    if verbose:
+        print(f'Decimation complete. Retained {len(decimated_df)} points.')
+    
+    return decimated_df
+
 class GravityReduction:
     '''Class to perform gravity reductions (Free-air, Bouguer, Faye/Helmert anomalies)'''
     TASK_CONFIG = {
@@ -42,6 +85,8 @@ class GravityReduction:
     def __init__(
         self,
         input_file: str,
+        model: str = None,
+        model_dir: str | Path = None,
         marine_data: str = None,
         gravity_tide: str = None,
         ellipsoid: str = 'wgs84',
@@ -49,7 +94,7 @@ class GravityReduction:
         grid: bool = False,
         grid_size: float = None,
         grid_unit: str = 'seconds',
-        grid_method: str = 'kriging',
+        grid_method: str = 'linear',
         bbox: list = [None, None, None, None],
         bbox_offset: float = 1.0,
         proj_name: str = 'GeoidProject',
@@ -59,9 +104,15 @@ class GravityReduction:
         interp_method: str = 'slinear',
         parallel: bool = False,
         chunk_size: int = 500,
-        atm: bool = False
+        atm: bool = False,
+        window_mode: str = 'radius',
+        tc_grid_size: float = 30.0,
+        decimate: bool = False,
+        decimate_threshold: int = 600
     ) -> None:
         self.input_file = input_file
+        self.model = model
+        self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.marine_data = marine_data
         self.gravity_tide = gravity_tide
         self.ellipsoid = ellipsoid
@@ -85,6 +136,10 @@ class GravityReduction:
         self.bouguer = None
         self.tc = None
         self.atm = atm
+        self.window_mode = window_mode
+        self.tc_grid_size = tc_grid_size
+        self.decimate = decimate
+        self.decimate_threshold = decimate_threshold
 
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +150,8 @@ class GravityReduction:
             raise ValueError(f'Input file {self.input_file} does not exist')
         if self.marine_data and not Path(self.marine_data).is_file():
             raise ValueError(f'Marine data file {self.marine_data} does not exist')
+        if self.gravity_tide and self.gravity_tide not in ['mean_tide', 'zero_tide', 'tide_free']:
+            raise ValueError('Gravity tide must be mean_tide, zero_tide, or tide_free')
         if self.ellipsoid not in ['wgs84', 'grs80']:
             raise ValueError('Ellipsoid must be wgs84 or grs80')
         if self.gravity_tide and self.gravity_tide not in ['mean_tide', 'zero_tide', 'tide_free']:
@@ -115,12 +172,14 @@ class GravityReduction:
             raise ValueError('--grid-unit must be one of: degrees, minutes, seconds')
         if self.interp_method not in ['linear', 'slinear', 'cubic', 'quintic']:
             raise ValueError('--interpolation-method must be one of: linear, slinear, cubic, quintic')
-        if self.faye and not (self.topo or self.tc_file):
-            raise ValueError('Either --topo or --tc-file must be provided for Faye anomalies')
         if self.grid_method not in ['linear', 'spline', 'kriging', 'rbf', 'idw', 'biharmonic', 'gpr', 'lsc']:
             raise ValueError("--grid-method must be one of: ['linear', 'spline', 'kriging', 'rbf', 'idw', 'biharmonic', 'gpr', 'lsc']")
-        if 'faye' in self.tasks and not (self.topo or self.tc_file):
-            raise ValueError('Either --topo or --tc-file must be provided for Faye anomalies')
+        if self.gravity_tide and not self.model:
+            raise ValueError('A GGM model must be specified with --model when --gravity-tide is used')
+        # if self.decimate and self.decimate < 10:
+        #     raise ValueError('decimate must be >= 10')
+        if self.decimate and self.decimate_threshold < 10:
+            raise ValueError('decimate_threshold must be >= 10')
 
     def _process_input(self) -> None:
         '''Load input file and marine data.'''
@@ -148,12 +207,13 @@ class GravityReduction:
         
 
     
-    def _convert_tide_system(self, model_path: Path) -> Path | None:
+    def _convert_tide_system(self) -> Path | None:
         '''Convert input data to GGM tide system.'''
-        if not self.converted and self.tide_system:
+        if not self.converted and self.gravity_tide and self.model:
+            model_path = (self.model_dir / self.model).with_suffix('.gfc')
             ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
-            if ggm_tide != self.tide_system:
-                print(f'Converting input data from {self.tide_system} to {ggm_tide} system...')
+            if ggm_tide != self.gravity_tide:
+                print(f'Converting input data from {self.gravity_tide} to {ggm_tide} system...')
                 converter = GravityTideSystemConverter(data=self.lonlatheight)
                 # Map tide system pairs to conversion methods
                 conversion_map = {
@@ -164,17 +224,34 @@ class GravityReduction:
                     ('zero_tide', 'tide_free'): 'zero2free',
                     ('tide_free', 'zero_tide'): 'free2zero'
                 }
-                conversion_key = (self.tide_system, ggm_tide)
+                conversion_key = (self.gravity_tide, ggm_tide)
                 if conversion_key not in conversion_map:
-                    raise ValueError(f'No conversion defined from {self.tide_system} to {ggm_tide}')
+                    raise ValueError(f'No conversion defined from {self.gravity_tide} to {ggm_tide}')
                 
                 # Perform conversion
                 conversion_method = getattr(converter, conversion_map[conversion_key])
                 converted_data = conversion_method()
                 
                 # Update lonlatheight with converted gravity and height
-                self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
-                self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
+                # print(converted_data.keys())
+                # self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
+                # self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
+                
+                # Determine target suffix (mean, free, or zero)
+                # Map GGM tide system to column suffix
+                tide_suffix_map = {
+                    'tide_free': 'free',
+                    'mean_tide': 'mean',
+                    'zero_tide': 'zero'
+                }
+                
+                target_suffix = tide_suffix_map[ggm_tide]
+                # print(target_suffix)
+                # print(f'height_{target_suffix}')
+                # Update lonlatheight with converted values
+                self.lonlatheight['height'] = converted_data[f'height_{target_suffix}']
+                if 'gravity' in converted_data.columns:
+                    self.lonlatheight['gravity'] = converted_data[f'g_{target_suffix}']
                 
                 input_filename = Path(self.input_file).stem if self.input_file else 'lonlatheight'
                 converted_data_path = self.output_dir / f'{input_filename}_{ggm_tide}.csv'
@@ -188,13 +265,19 @@ class GravityReduction:
     def _compute_terrain_correction(self) -> xr.Dataset:
         '''Compute or load terrain correction grid.'''
         if self.tc_file:
-            print(f'Loading terrain correctionf from {self.tc_file}')
+            print(f'Loading terrain correction from {self.tc_file}')
             tc_grid = xr.open_dataset(self.tc_file)
         else:
+            tc_file = self.output_dir / 'TC.nc'
+            if tc_file.exists():
+                print(f'Loading terrain correction from {tc_file}')
+                tc_grid = xr.open_dataset(tc_file)
+                return tc_grid
+            
             print(f'Computing terrain correction using {self.topo} DEM...')
             topo_workflow = TopographicQuantities(
                 topo=self.topo,
-                model_dir=self.output_dir / 'downloads',
+                model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
                 chunk_size=self.chunk_size,
@@ -202,9 +285,8 @@ class GravityReduction:
                 proj_name=self.proj_name,
                 bbox=self.bbox,
                 bbox_offset=self.bbox_offset,
-                grid_size=self.grid_size,
-                grid_unit=self.grid_unit,
-                window_mode='radius',
+                grid_size=self.tc_grid_size,
+                window_mode=self.window_mode,
                 parallel=self.parallel,
                 interp_method=self.interp_method
             )
@@ -216,17 +298,19 @@ class GravityReduction:
     
     def _interpolate_tc(self, tc_grid: xr.Dataset) -> np.ndarray:
         '''Interpolate terrain correction at lonlatheight locations'''
-        lon = self.lonlatheight['lon']
-        lat = self.lonlatheight['lat']
         tc_values = tc_grid['tc'].values
         interpolator = RegularGridInterpolator(
-            (lat, lon), tc_values, method=self.interp_method, bounds_error=False, fill_value=0
+            (tc_grid['lat'].values, tc_grid['lon'].values), 
+            tc_values, 
+            method=self.interp_method, 
+            bounds_error=False, 
+            fill_value=0
         )
         points = np.vstack((self.lonlatheight['lat'], self.lonlatheight['lon'])).T
         tc_interpolated = interpolator(points)
         return tc_interpolated
     
-    def _grid_anomalies(self, anomalies: dict) -> xr.Dataset:
+    def _grid_anomalies(self, anomalies_dataframes: dict) -> xr.Dataset:
         '''Grid anomalies over bbox with bbox_offset using Interpolators.'''
         grid_size = to_seconds(self.grid_size, self.grid_unit) / 3600.0
         grid_extent = (
@@ -236,37 +320,42 @@ class GravityReduction:
             self.bbox[3] + self.bbox_offset
         )
         
+        print(f'Gridding anomalies over {grid_extent} with grid size {grid_size} degrees. Interpolation method: {self.grid_method}...')
+        
         gridded_data = {}
-        for anomaly_type, values in anomalies.items():
-            df = pd.DataFrame({
-                'lon': self.lonlatheight['lon'],
-                'lat': self.lonlatheight['lat'],
-                'Dg': values
-            })
+        for var_name, df in anomalies_dataframes.items():
             interpolator = Interpolators(
                 dataframe=df,
                 grid_extent=grid_extent,
                 resolution=grid_size,
-                method=self.grid_method,
                 resolution_unit='degrees',
-                data_key='Dg'
+                data_key='Dg',
+                verbose=False
             )
-            lon, lat, gridded_values = interpolator.run(merge=True)
-            gridded_data[anomaly_type] = gridded_values
-            
-            ds = xr.Dataset(
-                gridded_data,
-                coords={'lon': lon[0, :], 'lat': lat[:, 0]},
-                dims=['lat', 'lon']
-            )
-            
-            return ds
+            if self.grid_method == 'kriging': 
+                lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True)
+            elif self.grid_method == 'lsc':
+                lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True, robust_covariance=True, covariance_model='exp')
+            elif self.grid_method == 'rbf':
+                lon, lat, gridded_values = interpolator.run(method='rbf', function='linear', merge=False) # quintic
+            else:
+                lon, lat, gridded_values = interpolator.run(method=self.grid_method, merge=True)
+                
+            gridded_data[var_name] = (['lat', 'lon'], gridded_values)
+        
+        ds = xr.Dataset(
+            gridded_data,
+            coords={'lon': lon[0, :], 'lat': lat[:, 0]}
+        )
+        return ds
     
     
     def compute_anomalies(self, anomaly_type: str) -> dict:
         '''Compute Free-air and/or Bouguer anomalies'''
         if self.lonlatheight is None:
             self._process_input()
+        
+        self._convert_tide_system()
         
         self.free_air, self.bouguer = gravity.gravity_anomalies(
             lat=self.lonlatheight['lat'],
@@ -276,21 +365,50 @@ class GravityReduction:
             atm=self.atm
         )
         
-        output_file = self.output_dir / f'{self.TASK_CONFIG[anomaly_type]["output"]["file"]}.csv'
-        df = pd.DataFrame({
+        anomaly_values = self.free_air if anomaly_type == 'free_air' else self.bouguer
+        
+        output_file_csv = self.output_dir / f'{anomaly_type}.csv'
+        df_csv = pd.DataFrame({
             'lon': self.lonlatheight['lon'],
             'lat': self.lonlatheight['lat'],
-            anomaly_type: self.free_air if anomaly_type == 'free_air' else self.bouguer
+            anomaly_type: anomaly_values
         })
-        df.to_csv(output_file, index=False)
-        print(f'{anomaly_type.capitalize()} anomalies written to {output_file}')
+        df_csv.to_csv(output_file_csv, index=False)
+        print(f'{anomaly_type.capitalize()} anomalies written to {output_file_csv}')
+        
+        output_files = [str(output_file_csv)]
+        if self.grid:
+            df_grid = pd.DataFrame({
+                'lon': self.lonlatheight['lon'],
+                'lat': self.lonlatheight['lat'],
+                'Dg': anomaly_values
+            })
+            anomalies_dataframes = {anomaly_type: df_grid}
+            gridded_ds = self._grid_anomalies(anomalies_dataframes)
+            output_file_nc = self.output_dir / f'{anomaly_type}_gridded.nc'
+            gridded_ds.to_netcdf(output_file_nc)
+            print(f'Gridded {anomaly_type} anomalies written to {output_file_nc}')
+            output_files.append(str(output_file_nc))
+        
         return {
             'status': 'success',
-            'output_file': str(output_file)
+            'output_file': output_files
         }
         
     def compute_faye(self) -> dict:
         '''Compute Faye/Helmert anomalies using Free-air and terrain corrections.'''
+        if not (self.topo or self.tc_file):
+            raise ValueError('Either --topo or --tc-file must be provided for Faye anomalies')
+        
+        output_file_csv = self.output_dir / 'faye.csv'
+        output_file_nc = self.output_dir / 'faye.nc'
+        if output_file_csv.exists() and output_file_nc.exists():
+            print(f'Faye anomalies already computed at {output_file_csv} and {output_file_nc}. Skipping computation.')
+            return {
+                'status': 'success',
+                'output_file': [str(output_file_csv), str(output_file_nc)]
+            }
+        
         if self.lonlatheight is None:
             self._process_input()
         
@@ -299,16 +417,14 @@ class GravityReduction:
         
         tc_grid = self._compute_terrain_correction()
         self.tc = self._interpolate_tc(tc_grid)
+        # dump tc_grid to free up memory
+        del tc_grid
         
         faye = self.free_air + self.tc
         
-        # Concatenate faye and marine data
-        if self.marine_data:
-            pass
-        
-        # Save point-wise anomalies
+        # Save point-wise land anomalies
         output_file_csv = self.output_dir / 'faye.csv'
-        df = pd.DataFrame({
+        df_land = pd.DataFrame({
             'lon': self.lonlatheight['lon'],
             'lat': self.lonlatheight['lat'],
             'faye': faye,
@@ -316,24 +432,54 @@ class GravityReduction:
             'terrain_correction': self.tc
         })
         if self.bouguer is not None:
-            df['bouguer'] = self.bouguer
-        df.to_csv(output_file_csv, index=False)
-        print(f'Faye anomalies written to {output_file_csv}')
+            df_land['bouguer'] = self.bouguer
+        df_land.to_csv(output_file_csv, index=False)
+        print(f'Faye anomalies (land) written to {output_file_csv}')
         
-        # Grid anomalies if requested
-        output_files = [str(output_file_csv)]
-        if self.grid:
-            anomalies = {'faye': faye}
-            if self.free_air is not None:
-                anomalies['free_air'] = self.free_air
-            if self.bouguer is not None:
-                anomalies['bouguer'] = self.bouguer
-            gridded_ds = self._grid_anomalies(anomalies)
-            output_file_nc = self.output_dir / 'faye_gridded.nc'
-            gridded_ds.to_netcdf(output_file_nc)
-            print(f'Gridded anomalies written to {output_file_nc}')
-            output_files.append(str(output_file_nc))
+        del df_land
         
+        # Prepare data for gridding with marine data merge
+        land_df = pd.DataFrame({
+            'lon': self.lonlatheight['lon'],
+            'lat': self.lonlatheight['lat'],
+            'Dg': faye
+        })
+        if self.marine_data is not None:  # Ensure marine_data is loaded in _process_input
+            print('Marine gravity anomalies provided. Combining with Helmert anomalies...')
+            marine_df = self.marine_data[['lon', 'lat', 'Dg']]
+            
+            # Apply decimation if marine data exceeds threshold or --decimate is specified
+            if self.decimate:
+                if len(marine_df) > self.decimate_threshold:
+                    n_points = self.decimate_threshold
+                    try:
+                        marine_df = decimate_data(marine_df, n_points=n_points, verbose=True)
+                    except MemoryError:
+                        print(f'Warning: Processing failed due to memory constraints. Try using --decimate and specify number of points to retain using --decimate_threshold.')
+                        raise
+                    combined_df = pd.concat([land_df, marine_df], ignore_index=True)
+            else:
+                combined_df = pd.concat([land_df, marine_df], ignore_index=True)
+        else:
+            combined_df = land_df
+
+        # Handle duplicates
+        combined_df = combined_df.drop_duplicates(subset=['lon', 'lat'])
+        # Always grid Faye anomalies under 'Dg'
+        anomalies_dataframes = {'Dg': combined_df}
+        print(f'Shape of anomalies dataframes: {anomalies_dataframes["Dg"].shape}')
+        
+        import time
+        start_time = time.time()
+        # print('Gridding anomalies...')
+        gridded_ds = self._grid_anomalies(anomalies_dataframes)
+        end_time = time.time()
+        print(f'Gridding completed in {end_time - start_time} seconds.')
+        output_file_nc = self.output_dir / 'gridded_anomalies.nc'
+        gridded_ds.to_netcdf(output_file_nc)
+        print(f'Gridded anomalies written to {output_file_nc}')
+        
+        output_files = [str(output_file_csv), str(output_file_nc)]
         return {
             'status': 'success',
             'output_file': output_files
@@ -364,7 +510,11 @@ class GravityReduction:
 def add_faye_arguments(parser) -> None:
     parser.add_argument('-i', '--input-file', type=str, required=True,
                         help='Input file with lon, lat, gravity, and height data (required)')
-    parser.add_argument('-m', '--marine-data', type=str,
+    parser.add_argument('-m', '--model', type=str,
+                        help='GGM name (e.g., EGM2008) for tide system alignment')
+    parser.add_argument('-md', '--model-dir', type=str, default=None,
+                        help='Directory for GGM files')
+    parser.add_argument('--marine-data', type=str,
                         help='Input file with lon, lat, height, and Dg.')
     parser.add_argument('--do', type=str, default='faye', choices=['free-air', 'bouguer', 'faye', 'all'],
                         help='Computation steps to perform: [free-air, bouguer, faye, or all (default: faye)]')
@@ -408,7 +558,15 @@ def add_faye_arguments(parser) -> None:
     parser.add_argument('--chunk-size', type=int, default=500,
                         help='Chunk size for parallel processing')
     parser.add_argument('--atm', action='store_true',
-                        help='Indicate that the input data is atmospheric gravity anomalies (default: False)')
+                        help='Request atmospheric correction. Default: False')
+    parser.add_argument('--window-mode', type=str, default='radius', choices=['radius', 'small'],
+                        help='Method for selecting sub-grid for computation.')
+    parser.add_argument('--tc-grid-size', type=float, default=30,
+                        help='Grid resolution for computing terrain correction. Keep this in seconds. Default: 30 seconds')
+    parser.add_argument('--decimate', action='store_true',
+                        help='Decimate marine data. Default observations to retain is 600. Use --decimate-threshold to change this.')
+    parser.add_argument('--decimate-threshold', type=int, default=600,
+                        help='Threshold for automatic decimation of marine data (default: 600 points).')
 
 def main(args=None) -> None:
     '''
@@ -439,6 +597,8 @@ def main(args=None) -> None:
 
     reduction = GravityReduction(
         input_file=args.input_file,
+        model=args.model,
+        model_dir=args.model_dir,
         marine_data=args.marine_data,
         gravity_tide=args.gravity_tide,
         ellipsoid=args.ellipsoid,
@@ -456,7 +616,10 @@ def main(args=None) -> None:
         interp_method=args.interp_method,
         parallel=args.parallel,
         chunk_size=args.chunk_size,
-        atm=args.atm
+        atm=args.atm,
+        window_mode=args.window_mode,
+        decimate=args.decimate,
+        decimate_threshold=args.decimate_threshold
     )
     result = reduction.run(tasks)
     print(f'Completed tasks: {", ".join(tasks)}')

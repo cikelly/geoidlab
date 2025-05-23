@@ -207,7 +207,7 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             'No DEM files were downloaded. '
             'Check your internet connection or the availability of the remote server.'
         )
-    
+
     # If multiple files were downloaded, merge them
     if len(filepaths) > 1:
         print('Merging downloaded tiles...')
@@ -246,10 +246,12 @@ def fetch_url(bbox) -> list[str]:
     
     # Read the README file
     global _tiles_cache
+
     if _tiles_cache is None:
         readme_path: Path = get_readme_path() 
         _tiles_cache = parse_readme(readme_path)
-    tiles: list = parse_readme(readme_path)
+    # tiles: list = parse_readme(readme_path)
+    tiles: list = _tiles_cache  # Use cached tiles
 
     # Identify relevant tiles for the given bbox
     relevant_tiles: list = identify_relevant_tiles(bbox, tiles) 

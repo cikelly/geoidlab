@@ -17,11 +17,11 @@ DATASET_CONFIG = {
         'fname'      : 'TC',
         'long_name'  : 'Terrain Correction',
     },
-    'IND': {
-        'var_name'   : 'ind',
+    'N_ind': {
+        'var_name'   : 'N_ind',
         'units'      : 'meters',
-        'description': 'Indirect Effect',
-        'fname'      : 'IND',
+        'description': 'Indirect Effect of Helmert\'s condensation on the geoid',
+        'fname'      : 'N_ind',
         'long_name'  : 'Indirect Effect',
     },
     'rtm': {
@@ -65,6 +65,20 @@ DATASET_CONFIG = {
         'description': 'RTM height anomaly',
         'fname'      : 'zeta_rtm',
         'long_name'  : 'RTM Height Anomaly'
+    },
+    'N_res': {
+        'var_name'   : 'N_res',
+        'units'      : 'm',
+        'description': 'Residual geoid height',
+        'fname'      : 'N_res',
+        'long_name'  : 'Residual geoid height'
+    },
+    'N': {
+        'var_name'   : 'N',
+        'units'      : 'm',
+        'description': 'Geoid height computed as the sum of the residual geoid, the reference geoid, and the indirect effect',
+        'fname'      : 'N',
+        'long_name'  : 'Geoid Height'
     }
     # Add more datasets as needed
 }

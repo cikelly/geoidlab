@@ -126,11 +126,11 @@ class GravityTideSystemConverter:
             'gravity': ['gravity', 'g', 'acceleration', 'grav']
         }
         
-        if self.file_path is None:
+        if self.path_to_data is None:
             raise ValueError('File path not specified')
         
         # Validate file extension (type)
-        file_type = self.file_path.suffix[1:].lower()
+        file_type = self.path_to_data.suffix[1:].lower()
         if file_type not in self.VALID_FILE_TYPES:
             raise ValueError(f'Unsupported file format: {file_type}. Supported types: {self.VALID_FILE_TYPES}')
         
@@ -141,7 +141,7 @@ class GravityTideSystemConverter:
             'txt' : lambda filepath: pd.read_csv(filepath, delimiter='\t')
         }
         # Read data
-        df = file_reader[file_type](self.file_path)
+        df = file_reader[file_type](self.path_to_data)
         # Rename columns to standardized names
         df = df.rename(columns=lambda col: next((key for key, values in column_mapping.items() if col.lower() in values), col))
         

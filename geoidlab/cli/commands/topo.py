@@ -36,7 +36,7 @@ class TopographicQuantities:
         'indirect-effect': {
             'method': 'compute_ind',
             'terrain_method': 'indirect_effect',
-            'output': {'key': 'ind', 'file': 'IND'}
+            'output': {'key': 'ind', 'file': 'N_ind'}
         },
         'height-anomaly': {
             'method': 'compute_rtm_height',
@@ -83,7 +83,7 @@ class TopographicQuantities:
         bbox_offset    : Offset around bounding box
         grid_size      : Grid size in degrees, minutes, or seconds
         grid_unit      : Unit of grid size
-        window_mode    : Method for selecting sub-grid for computation. Options: 'radius', 'bbox'
+        window_mode    : Method for selecting sub-grid for computation. Options: 'radius', 'fixed'
         parallel       : Use parallel processing
         resolution     : Target resolution of the DEM in arc seconds
         resolution_unit: Unit of target resolution
@@ -124,8 +124,6 @@ class TopographicQuantities:
         
         self._validate_params()
         
-        # if not isinstance(self.ori_topo, xr.Dataset):
-        #     self.ori_topo = self.download()
         
     def _validate_params(self) -> None:
         '''Validate parameters'''
@@ -140,19 +138,16 @@ class TopographicQuantities:
             raise ValueError('bbox values must be numbers')
         if not (min_lon <= max_lon and min_lat <= max_lat):
             raise ValueError('Invalid bbox: west must be <= east, south <= north')
-        if self.window_mode not in ['radius', 'bbox']:
-            raise ValueError('window_mode must be \'radius\' or \'small\'')
+        if self.window_mode not in ['radius', 'fixed']:
+            print('Warning: Unidentified window_mode specified. Defaulting to "radius"')
+            self.window_mode = 'radius'
         if self.topo not in ['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco']:
             raise ValueError('topo must be one of: srtm30plus, srtm, cop, nasadem, gebco')
         if self.interp_method not in ['linear', 'slinear', 'cubic', 'quintic']:
             raise ValueError('--interpolation-method must be one of: linear, slinear, cubic, quintic')
         if self.grid_unit not in ['degrees', 'minutes', 'seconds']:
             raise ValueError('--grid-unit must be one of: degrees, minutes, seconds')
-    
-    # def _check_dem_exists(self) -> bool:
-    #     '''Check if DEM file exists'''
-    #     dem_file = self.model_dir / f'{self.topo}'
-    #     return Path(self.topo).is_file()
+
 
     def download(self) -> xr.Dataset:
         '''Download DEM'''
@@ -169,7 +164,7 @@ class TopographicQuantities:
     def _initialize_terrain(self) -> None:
         '''Intialize the TerrainQuantities object with the DEM'''
         self.ori_topo = self.download()
-        ref_topo = xr.open_dataset(self.ref_topo) if self.ref_topo else None
+        self.ref_topo = xr.open_dataset(self.ref_topo) if self.ref_topo else None
         self.tq = terrain.TerrainQuantities(
             ori_topo=self.ori_topo,
             ref_topo=self.ref_topo,
@@ -180,7 +175,7 @@ class TopographicQuantities:
             proj_dir=self.proj_name,
             window_mode=self.window_mode
         )
-    
+
     def compute_tc(self) -> dict:
         '''Compute terrain correction'''
         print(f'Computing terrain correction with radius={self.radius} km and ellipsoid={self.ellipsoid}')
@@ -216,17 +211,25 @@ class TopographicQuantities:
     
     def compute_ind(self) -> dict:
         '''Compute indirect effect'''
-        print(f'Computing indirect effect with radius={self.radius} km and ellipsoid={self.ellipsoid}')
-        result = self.tq.indirect_effect(
-            parallel=self.parallel,
-            chunk_size=self.chunk_size,
-            progress=True
-        )
         output_file = self.output_dir / f'{self.TASK_CONFIG["indirect-effect"]["output"]["file"]}.nc'
-        return {
-            'status': 'success',
-            'output_file': str(output_file)
-        }
+        if output_file.exists():
+            print(f'Indirect effect exists. To recompute, please delete existing NetCDF file and rerun. Skipping computation...')
+            return {
+                'status': 'skipped',
+                'output_file': str(output_file)
+            }
+        else:
+            print(f'Computing indirect effect with radius={self.radius} km and ellipsoid={self.ellipsoid}')
+            result = self.tq.indirect_effect(
+                parallel=self.parallel,
+                chunk_size=self.chunk_size,
+                progress=True
+            )
+            
+            return {
+                'status': 'success',
+                'output_file': str(output_file)
+            }
     
     def compute_rtm_height(self) -> dict:
         '''Compute RTM height anomaly'''
@@ -246,6 +249,9 @@ class TopographicQuantities:
     
     def run(self, tasks: list) -> dict:
         '''Execute the specified tasks.'''
+        if not hasattr(self, 'tq'):
+            self._initialize_terrain()
+
         results = {}
         for task in tasks:
             if task not in self.TASK_CONFIG:
@@ -258,38 +264,38 @@ class TopographicQuantities:
 def add_topo_arguments(parser) -> None:
     parser.add_argument('--topo', type=str, required=True, choices=['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'], 
                         help='DEM model (e.g., srtm, srtm30plus, cop, nasadem, gebco)')
-    parser.add_argument('--bbox', type=float, nargs=4, required=True, 
+    parser.add_argument('-b', '--bbox', type=float, nargs=4, required=True, 
                         help='Bounding box [W, E, S, N] in degrees')
     parser.add_argument('--ref-topo', type=str, 
                         help='Path to reference elevation file (required for residual terrain quantities)')
-    parser.add_argument('--model-dir', type=str, default=None, 
+    parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for DEM files')
-    # parser.add_argument('--output-dir', type=str, default=None, 
-    #                     help='Directory for output files')
     parser.add_argument('--radius', type=float, default=110.0, 
-                        help='Search radius in kilometers')
-    parser.add_argument('--ellipsoid', type=str, default='wgs84', choices=['wgs84', 'grs80'], 
-                        help='Reference ellipsoid')
+                        help='Search radius in kilometers. Default: 110 km')
+    parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', choices=['wgs84', 'grs80'], 
+                        help='Reference ellipsoid. Default: wgs84')
     parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'all'], 
                         help='Computation steps to perform')
-    parser.add_argument('--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
+    parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
                         help='Start processing from this step')
-    parser.add_argument('--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
+    parser.add_argument('-e', '--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
                         help='End processing at this step')
-    parser.add_argument('--proj-name', type=str, default='GeoidProject', 
+    parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Name of the project directory')
-    parser.add_argument('--bbox-offset', type=float, default=1.0, 
+    parser.add_argument('-bo', '--bbox-offset', type=float, default=1.0, 
                         help='Offset around bounding box in degrees')
-    parser.add_argument('--grid-size', type=float, default=30, help='Grid size (resolution) in degrees, minutes, or seconds. (Default: 30 seconds)')
-    parser.add_argument('--grid-unit', type=str, default='seconds', choices=['degrees', 'minutes', 'seconds'], 
-                        help='Unit of grid size')
-    parser.add_argument('--window-mode', type=str, default='radius', choices=['radius', 'small'], help='Method for selecting sub-grid for computation.')
-    parser.add_argument('--parallel', action='store_true', default=False, 
+    parser.add_argument('-gs', '--grid-size', type=float, default=30, 
+                        help='Grid size (resolution) in degrees, minutes, or seconds. (Default: 30 seconds)')
+    parser.add_argument('-gu', '--grid-unit', type=str, default='seconds', choices=['degrees', 'minutes', 'seconds'], 
+                        help='Unit of grid size. Dafault: seconds')
+    parser.add_argument('--window-mode', type=str, default='radius', choices=['radius', 'fixed'], 
+                        help='Method for selecting sub-grid for computation. Default: radius')
+    parser.add_argument('-p', '--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
     parser.add_argument('--chunk-size', type=int, default=500, 
                         help='Chunk size for parallel processing')
     parser.add_argument('--interpolation-method', type=str, default='slinear', choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
-                        help='Interpolation method to resample the DEM to --resolution')
+                        help='Interpolation method to resample the DEM to --resolution. Default: slinear')
 
 def main(args=None) -> int:
     '''
@@ -322,7 +328,7 @@ def main(args=None) -> int:
         tasks = [args.do]
         if args.do == 'download':
             tasks = [] # Download is handled implicitly
-    
+
     # Initialize and run workflow
     topo_workflow = TopographicQuantities(
         topo=args.topo,
@@ -341,6 +347,7 @@ def main(args=None) -> int:
         parallel=args.parallel,
         interp_method=args.interpolation_method
     )
+    
     # Ensure DEM is available before running tasks
     topo_workflow._initialize_terrain()
     

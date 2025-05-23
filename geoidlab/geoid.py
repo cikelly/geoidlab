@@ -18,9 +18,15 @@ class ResidualGeoid:
     Initialize the ResidualGeoid class.
     '''
     VALID_METHODS = {'hg', 'wg', 'og', 'ml'}  # Valid integration methods
-    VALID_WINDOW_MODES = {'fixed', 'cap'}
+    VALID_WINDOW_MODES = {'fixed', 'cap', 'radius'}
     VALID_ELLIPSOIDS = {'wgs84', 'grs80'}
     DEFAULT_WINDOW_MODE = 'cap'
+    METHODS_DICT = {
+        'hg': 'Heck & Gruninger',
+        'wg': 'Wong & Gore',
+        'og': 'Original Stokes\'',
+        'ml': 'Meissl'
+    }
     
     def __init__(
         self,
@@ -56,6 +62,10 @@ class ResidualGeoid:
         Reference
         ---------
         1. Hofmann-Wellenhof & Moritz (2005): Physical Geodesy (Section 2.21)
+        
+        Notes
+        -----
+        window_mode='cap' is the same as window_mode='radius'
         '''
         # Validate sub-grid
         if sub_grid is None:
@@ -171,13 +181,16 @@ class ResidualGeoid:
         N_res  : Residual geoid height in meters
         '''
         cosphip = np.cos(self.phip)
-        
+
         # Near zone computation
+        print('Computing inner zone...')
         self.N_inner = self.R / self.gamma_0 * np.sqrt(
             cosphip * np.radians(self.dphi) * np.radians(self.dlam) / np.pi
         ) * self.res_anomaly_P['Dg'].values
+        print('Inner zone computation completed.')
         
         # Far zone computation
+        print(f'Computing far zone using: {self.METHODS_DICT[self.method]} method...')
         self.N_far = np.zeros_like(self.N_inner)
         psi0 = np.radians(self.sph_cap)
         
@@ -300,6 +313,7 @@ class ResidualGeoid:
                     c_k = A_k * S_k
                     self.N_far[i, j] = np.nansum(c_k * win_Dg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
 
+        print('Far zone computation completed.')
         N_res = self.N_inner + self.N_far
         self.N_res = N_res
 

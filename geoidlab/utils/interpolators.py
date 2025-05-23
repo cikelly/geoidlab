@@ -95,7 +95,7 @@ class Interpolators:
         self.verbose = verbose
 
         if self.method is None:
-            print('No interpolation method specified. Defaulting to kriging.') if verbose else None
+            print('No interpolation method specified. Defaulting to kriging unless later specified in `run` method.') if verbose else None
             self.method = 'kriging'
         
         # Clean data
@@ -478,6 +478,7 @@ class Interpolators:
             'linear'    : self.scatteredInterpolant,
             'spline'    : self.splineInterpolant,
             'kriging'   : self.krigingInterpolant,
+            'kriging_chunked': self.krigingInterpolant_chunked,
             'rbf'       : self.rbfInterpolant,
             'idw'       : self.idwInterpolant,
             'biharmonic': self.biharmonicSplineInterpolant,
@@ -609,3 +610,209 @@ class Interpolators:
         data_interp = np.where(np.isnan(zz), z_nearest, zz)
         
         return self.Lon, self.Lat, data_interp, zz, C0, D
+    
+    
+    # def krigingInterpolant_chunked(
+    #     self, 
+    #     chunk_size: int = 100, 
+    #     fall_back_on_error: bool = False, 
+    #     merge: bool = True,
+    #     coordinates_type: str = 'euclidean',
+    #     **kwargs
+    # ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    #     '''
+    #     Interpolate scattered data using Ordinary Kriging in a chunked fashion to optimize memory.
+        
+    #     Parameters
+    #     ----------
+    #     chunk_size : int
+    #                  Number of grid rows per chunk.
+    #     fall_back_on_error : bool
+    #                  If True, falls back to default kriging parameters on error.
+    #     merge      : bool
+    #                  Whether to merge with nearest neighbor extrapolation for NaNs.
+    #     kwargs     : additional parameters for OrdinaryKriging
+        
+    #     Returns
+    #     -------
+    #     Lon         : 2D array of longitude coordinates
+    #     Lat         : 2D array of latitude coordinates
+    #     data_interp : 2D array of interpolated values (after merging)
+    #     zz          : 2D array of raw kriging values (possibly containing NaNs)
+    #     ss          : 2D array of kriging variance
+    #     '''
+    #     from pykrige.ok import OrdinaryKriging
+    #     # Default kriging parameters
+    #     default_params = {
+    #         'variogram_model': 'spherical',
+    #         'nlags': 6,
+    #         'verbose': False,
+    #         'enable_plotting': False
+    #     }
+    #     kriging_params = default_params.copy()
+    #     kriging_params.update(kwargs)
+        
+    #     lon = self.df_clean['lon'].values
+    #     lat = self.df_clean['lat'].values
+    #     # Convert lon to range [0, 360)
+    #     lon = np.where(lon < 0, lon + 360, lon)
+    #     # Print information to indicate creation of the kriging model
+    #     if self.verbose:
+    #         print('Creating Ordinary Kriging model...')
+    #     try:
+    #         ok = OrdinaryKriging(
+    #             x=lon,
+    #             y=lat,
+    #             z=self.values,
+    #             coordinates_type=coordinates_type,
+    #             **kriging_params
+    #         )
+    #     except ValueError as e:
+    #         if fall_back_on_error:
+    #             if self.verbose:
+    #                 print(f"Warning: {str(e)}. Falling back to default kriging parameters.")
+    #             kriging_params = default_params.copy()
+    #             ok = OrdinaryKriging(
+    #                 x=lon,
+    #                 y=lat,
+    #                 z=self.values,
+    #                 coordinates_type='geographic',
+    #                 **kriging_params
+    #             )
+    #         else:
+    #             raise ValueError(str(e))
+        
+    #     ny, nx = self.Lon.shape
+    #     zz_full = np.full((ny, nx), np.nan)
+    #     ss_full = np.full((ny, nx), np.nan)
+        
+    #     # Process grid rows in chunks for memory efficiency
+    #     for i in range(0, ny, chunk_size):
+    #         i_end = min(ny, i + chunk_size)
+    #         lat_chunk = self.lat_grid[i:i_end]
+    #         # Execute kriging on chunk; note: pykrige expects grid in order (x, y)
+    #         zz_chunk, ss_chunk = ok.execute('grid', self.lon_grid, lat_chunk)
+    #         zz_full[i:i_end, :] = zz_chunk
+    #         ss_full[i:i_end, :] = ss_chunk
+        
+    #     if merge:
+    #         z_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel())))
+    #         z_nearest = z_nearest.reshape(self.Lon.shape)
+    #         data_interp = np.where(np.isnan(zz_full), z_nearest, zz_full)
+    #     else:
+    #         data_interp = zz_full
+        
+    #     return self.Lon, self.Lat, data_interp, zz_full, ss_full
+    
+    def krigingInterpolant_chunked(
+        self, 
+        chunk_size: int = 100, 
+        fall_back_on_error: bool = False, 
+        merge: bool = True,
+        coordinates_type: str = 'euclidean',
+        **kwargs
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        '''
+        Interpolate scattered data using Ordinary Kriging in a chunked fashion to optimize memory.
+        
+        Parameters
+        ----------
+        chunk_size : int
+                    Number of grid rows per chunk.
+        fall_back_on_error : bool
+                    If True, falls back to default kriging parameters on error.
+        merge      : bool
+                    Whether to merge with nearest neighbor extrapolation for NaNs.
+        kwargs     : additional parameters for OrdinaryKriging
+        
+        Returns
+        -------
+        Lon         : 2D array of longitude coordinates
+        Lat         : 2D array of latitude coordinates
+        data_interp : 2D array of interpolated values (after merging)
+        zz          : 2D array of raw kriging values (possibly containing NaNs)
+        ss          : 2D array of kriging variance
+        '''
+        from pykrige.ok import OrdinaryKriging
+        # Default kriging parameters
+        default_params = {
+            'variogram_model': 'linear',
+            'nlags': 6,
+            'verbose': False,
+            'enable_plotting': False
+        }
+        kriging_params = default_params.copy()
+        kriging_params.update(kwargs)
+        
+        lon = self.df_clean['lon'].values
+        lat = self.df_clean['lat'].values
+        
+        # Get variogram model from kwargs
+        variogram_model = kwargs.get('variogram_model', 'linear')
+        
+        print(f'Fitting the {variogram_model} variogram model to the data...') if self.verbose else None
+        
+        if coordinates_type == 'geographic':
+            print('Converting longitude to range [0, 360)')
+            lon = np.where(lon < 0, lon + 360, lon)
+        try:
+            ok = OrdinaryKriging(
+                x=lon,
+                y=lat,
+                z=self.values,
+                coordinates_type=coordinates_type,
+                **kriging_params
+            )
+        except ValueError as e:
+            if fall_back_on_error:
+                if self.verbose:
+                    print(f"Warning: {str(e)}. Falling back to default kriging parameters.")
+                kriging_params = default_params.copy()
+                ok = OrdinaryKriging(
+                    x=lon,
+                    y=lat,
+                    z=self.values,
+                    coordinates_type=coordinates_type,
+                    **kriging_params
+                )
+            else:
+                raise ValueError(str(e))
+        
+        ny, nx = self.Lon.shape
+        if self.verbose:
+            print("Starting chunked kriging interpolation...")
+            print(f"Grid size: {ny} rows x {nx} columns.")
+            print(f"Processing {ny} rows in chunks of {chunk_size} rows each.")
+        
+        zz_full = np.full((ny, nx), np.nan)
+        ss_full = np.full((ny, nx), np.nan)
+        
+        import time
+        start_time = time.time()
+        # Process grid rows in chunks for memory efficiency
+        for i in range(0, ny, chunk_size):
+            i_end = min(ny, i + chunk_size)
+            lat_chunk = self.lat_grid[i:i_end]
+            if self.verbose:
+                print(f"Processing rows {i} to {i_end-1}...")
+            # Execute kriging on chunk; note: pykrige expects grid in order (x, y)
+            zz_chunk, ss_chunk = ok.execute('grid', self.lon_grid, lat_chunk)
+            zz_full[i:i_end, :] = zz_chunk
+            ss_full[i:i_end, :] = ss_chunk
+        total_time = time.time() - start_time
+        if self.verbose:
+            print(f"Chunked kriging interpolation completed in {total_time:.2f} seconds.")
+        
+        if merge:
+            if self.verbose:
+                print("Merging kriging results with nearest neighbor extrapolation for NaNs...")
+            z_nearest = self.neighbor_interp(np.column_stack((self.Lon.ravel(), self.Lat.ravel())))
+            z_nearest = z_nearest.reshape(self.Lon.shape)
+            data_interp = np.where(np.isnan(zz_full), z_nearest, zz_full)
+        else:
+            data_interp = zz_full
+        
+        if self.verbose:
+            print("Kriging chunked interpolation finished successfully.")
+        
+        return self.Lon, self.Lat, data_interp, zz_full, ss_full

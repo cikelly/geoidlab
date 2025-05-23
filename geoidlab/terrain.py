@@ -33,7 +33,7 @@ class TerrainQuantities:
         - residual terrain modeling (RTM)
         - indirect effect
     '''
-    VALID_WINDOW_MODES = {'small', 'radius'}
+    VALID_WINDOW_MODES = {'fixed', 'radius'}
     
     def __init__(
         self, 
@@ -44,7 +44,7 @@ class TerrainQuantities:
         bbox_off: float = 1.,
         sub_grid: tuple[float, float, float, float] = None,
         proj_dir: str = None,
-        window_mode: str = 'small',
+        window_mode: str = 'radius',
         overwrite: bool = True,
     ) -> None:
         '''
@@ -59,8 +59,8 @@ class TerrainQuantities:
         bbox_off   : Offset in degrees for bounding box
         sub_grid   : Bounding coordinates of the area of interest
         proj_dir   : Directory to save the output
-        window_mode: 'small' or 'radius'
-                    - 'small' uses a small window of size
+        window_mode: 'fixed' or 'radius'
+                    - 'fixed' uses a fixed window based on `bbox_offset`
                     - 'radius' uses a radius-based window
         overwrite  : Overwrite existing files when saving
 
@@ -178,7 +178,7 @@ class TerrainQuantities:
         self.sinphip = np.sin(phip)
         
         # Precompute window sizes
-        if self.window_mode == 'small':
+        if self.window_mode == 'fixed':
             self.dn = int(np.round(self.ncols - self.ori_P['z'].shape[1])) + 1
             self.dm = int(np.round(self.nrows - self.ori_P['z'].shape[0])) + 1
         else:
@@ -200,8 +200,8 @@ class TerrainQuantities:
         ----------
         i           : Row index of the computation point
         j           : Column index of the computation point
-        window_mode : 'small' or 'radius'
-                        'small' uses a small window of size 
+        window_mode : 'fixed' or 'radius'
+                        'fixed' uses a fixed window based on `bbox_offset`
                         'radius' uses a radius-based window
         include_ref : Include reference topography for RTM
 
@@ -265,7 +265,7 @@ class TerrainQuantities:
         tc = np.zeros((nrows_P, ncols_P))
         Hp   = self.ori_P['z'].values 
         
-        if self.window_mode == 'small':
+        if self.window_mode == 'fixed':
             n1 = 0
             n2 = self.dm
             for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
@@ -476,7 +476,7 @@ class TerrainQuantities:
         Hp     = self.ori_P['z'].values
         Hp_ref = self.ref_P['z'].values
         
-        if self.window_mode == 'small':
+        if self.window_mode == 'fixed':
             n1 = 0
             n2 = self.dn
             for i in tqdm(range(nrows_P), desc='Computing RTM terrain correction'):
@@ -730,7 +730,7 @@ class TerrainQuantities:
         gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)    
         Hp   = self.ori_P['z'].values 
 
-        if self.window_mode == 'small':
+        if self.window_mode == 'fixed':
             n1 = 0
             n2 = self.dn
             for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
@@ -787,7 +787,7 @@ class TerrainQuantities:
                 n2 += 1
         else:
             # radius-based window
-            for i in tqdm(range(nrows_P), desc='Computing terrain correction'):
+            for i in tqdm(range(nrows_P), desc='Computing indirect effect'):
                 for j in range(ncols_P):
                     smallH, smallX, smallY, smallZ = self.get_window(i, j)
                     # Local coordinates (x, y)
@@ -937,7 +937,7 @@ class TerrainQuantities:
             data=ind,
             lon=self.ori_P['x'].values,
             lat=self.ori_P['y'].values,
-            dataset_key='IND',
+            dataset_key='N_ind',
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
@@ -958,14 +958,14 @@ class TerrainQuantities:
         1. Forsberg & Tscherning (1984): Topographic effects in gravity field modelling for BVP
         '''
         if self.ref_topo is None or self.ref_P is None:
-            raise ValueError("Reference topography (ref_topo) is required for RTM height anomaly computation")
+            raise ValueError('Reference topography (ref_topo) is required for RTM height anomaly computation')
 
         nrows_P, ncols_P = self.ori_P['z'].shape
         z_rtm = np.zeros((nrows_P, ncols_P))
         Hp = self.ori_P['z'].values
         HrefP = self.ref_P['z'].values
 
-        if self.window_mode == 'small':
+        if self.window_mode == 'fixed':
             n1 = 0
             n2 = self.dn
             for i in tqdm(range(nrows_P), desc='Computing RTM height anomaly'):

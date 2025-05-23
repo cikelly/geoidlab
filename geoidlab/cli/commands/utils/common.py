@@ -3,7 +3,6 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
-
 import numpy as np
 
 from pathlib import Path
@@ -111,3 +110,5 @@ def to_seconds(resolution, unit) -> float:
         resolution = resolution
         
     return resolution
+
+
