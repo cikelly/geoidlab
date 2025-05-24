@@ -427,6 +427,7 @@ class TerrainQuantities:
             tc = self.terrain_correction_sequential()
         
         # Save terrain correction
+        print(f'Saving terrain correction to {self.proj_dir}/TC.nc...')
         save_to_netcdf(
             data=tc,
             lon=self.ori_P['x'].values,
@@ -435,6 +436,7 @@ class TerrainQuantities:
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
+        print('Terrain correction computation completed.')
         
         return tc
 
@@ -699,6 +701,7 @@ class TerrainQuantities:
         else:
             dg_RTM = self.rtm_anomaly_sequential()
         
+        print(f'Saving RTM gravity anomalies to {self.proj_dir}/rtm.nc...')
         save_to_netcdf(
             data=dg_RTM,
             lon=self.ori_P['x'].values,
@@ -707,7 +710,8 @@ class TerrainQuantities:
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
-            
+        print('RTM gravity anomalies computation completed.')
+        
         return dg_RTM
 
 
@@ -933,6 +937,7 @@ class TerrainQuantities:
             ind = self.indirect_effect_sequential()
         
         # Save indirect effect
+        print(f'Saving the indirect effect to {self.proj_dir}/N_ind.nc...')
         save_to_netcdf(
             data=ind,
             lon=self.ori_P['x'].values,
@@ -941,6 +946,7 @@ class TerrainQuantities:
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
+        print('Indirect effect computation completed.')
 
         return ind
 
@@ -1112,6 +1118,7 @@ class TerrainQuantities:
         else:
             z_rtm = self.rtm_height_anomaly_sequential()
 
+        print(f'Saving RTM height anomaly to {self.proj_dir}/zeta_rtm.nc...')
         save_to_netcdf(
             data=z_rtm,
             lon=self.ori_P['x'].values,
@@ -1120,6 +1127,7 @@ class TerrainQuantities:
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
+        print('RTM height anomaly computation completed.')
 
         return z_rtm
     

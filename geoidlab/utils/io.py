@@ -79,6 +79,27 @@ DATASET_CONFIG = {
         'description': 'Geoid height computed as the sum of the residual geoid, the reference geoid, and the indirect effect',
         'fname'      : 'N',
         'long_name'  : 'Geoid Height'
+    },
+    'free_air': {
+        'var_name'   : 'free_air',
+        'units'      : 'mGal',
+        'description': 'Free-air gravity anomaly',
+        'fname'      : 'free_air_gridded',
+        'long_name'  : 'Free-air Gravity Anomaly',
+    },
+    'bouguer': {
+        'var_name'   : 'bouguer',
+        'units'      : 'mGal',
+        'description': 'Bouguer gravity anomaly',
+        'fname'      : 'bouguer_gridded',
+        'long_name'  : 'Bouguer Gravity Anomaly',
+    },
+    'Dg': {
+        'var_name'   : 'Dg',
+        'units'      : 'mGal',
+        'description': 'Faye/Helmert gravity anomaly',
+        'fname'      : 'gridded_anomalies',
+        'long_name'  : 'Faye Gravity Anomaly',
     }
     # Add more datasets as needed
 }
@@ -92,7 +113,7 @@ DEFAULT_CONFIG = {
     'long_name'      : 'Generic Dataset',
 }
 
-TIDE_SYSTEM_DATASETS = {'Dg_ggm', 'N_ref', 'dg', 'N_res', 'N', 'zeta'}
+TIDE_SYSTEM_DATASETS = {'Dg_ggm', 'N_ref', 'dg', 'N_res', 'N', 'zeta', 'free_air', 'bouguer', 'Dg'}
 
 METHOD_DATASETS = {'N', 'N_res', 'N_ref'}
 
