@@ -235,6 +235,7 @@ def get_ggm_tide_system(icgem_file: str, model_dir: str = 'downloads') -> str:
     icgem_file = Path(icgem_file).resolve()
     
     if not icgem_file.exists():
+        print(f'{icgem_file} cannot be found in {Path.cwd()}. Downloading to {model_dir} ...\n')
         model_name = icgem_file.stem
         download_ggm(model_name, model_dir)
 

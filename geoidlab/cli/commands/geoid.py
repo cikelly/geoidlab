@@ -128,7 +128,8 @@ def main(args=None) -> None:
     grid_unit = args.grid_unit
     
     model_path = (Path(model_dir) / Path(args.model)).with_suffix('.gfc')
-    ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=args.model_dir)
+    
+    ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=model_dir)
     
     # Step 1: Calculate Helmert/Faye anomalies (Dg)
     gravity_reduction = GravityReduction(

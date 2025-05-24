@@ -79,13 +79,28 @@ def main(args=None) -> None:
     if args.verbose:
         print('\nCoordinates:')
         print('------------')
-        for coord_name, coord in ds.coords.items():
-            print(f'\n{coord_name}:')
-            print(f'  Values: {coord.values[0]}...{coord.values[-1]}')
-            if coord.attrs:
-                print('  Attributes:')
-                for key, value in coord.attrs.items():
-                    print(f'    {key}: {value}')
+        if not ds.dims:
+            print('No dimensions found in dataset.')
+        else:
+            for coord_name, coord in ds.coords.items():
+                # Skip coordinates that are not dimensions
+                if coord_name not in ds.dims:
+                    continue
+                print(f'\n{coord_name}:')
+                try:
+                    flat_values = coord.values.flatten()
+                    if len(flat_values) > 1:
+                        print(f'  Values: {flat_values[0]}...{flat_values[-1]}')
+                    elif len(flat_values) == 1:
+                        print(f'  Values: {flat_values[0]}')
+                    else:
+                        print(f'  Values: Empty array')
+                except Exception as e:
+                    print(f'  Values: Unable to access values - {e}')
+                if coord.attrs:
+                    print('  Attributes:')
+                    for key, value in coord.attrs.items():
+                        print(f'    {key}: {value}')
 
     ds.close()
     return 0
