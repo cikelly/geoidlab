@@ -26,12 +26,6 @@ setup(
     entry_points={
         'console_scripts': [
             'geoidlab=geoidlab.cli.main:main',
-            # 'geoidApp=geoidlab.cli.geoidApp:app',
-            # 'ggmApp=geoidlab.cli.commands.reference:main',
-            # 'reductionApp=geoidlab.cli.commands.faye:main',
-            # 'terrainApp=geoidlab.cli.terrainApp:app',
-            # 'plotApp=geoidlab.cli.commands.plot:main',
-            # 'topoApp=geoidlab.cli.commands.topo:main',
         ],
     },
     python_requires='>=3.8',

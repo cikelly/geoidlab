@@ -1,3 +1,9 @@
+############################################################
+# Main geoidlab CLI interface                              #
+# Copyright (c) 2024, Caleb Kelly                          #
+# Author: Caleb Kelly  (2024)                              #
+############################################################
+
 import argparse
 import sys
 
@@ -6,6 +12,8 @@ from geoidlab.cli.commands.topo import add_topo_arguments, main as topo_main
 from geoidlab.cli.commands.faye import add_faye_arguments, main as faye_main
 from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
+from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -13,7 +21,7 @@ def main() -> None:
             'GeoidLab: A toolkit for geodetic computations including gravity reductions, '
             'terrain quantities, GGM synthesis, geoid computation, and visualization.'
         ),
-        epilog='Available commands: ggm, reduce, topo, viz, geoid'
+        epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo'
     )
     parser.add_argument('--version', action='version', version='geoidlab 1.0.0')
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)
@@ -42,6 +50,12 @@ def main() -> None:
     geoid_parser = subparsers.add_parser('geoid', help='Compute a geoid using the remove-compute-restore (RCR) method')
     add_geoid_arguments(geoid_parser)
     geoid_parser.set_defaults(func=geoid_main)
+    
+    # Info subcommand
+    info_parser = subparsers.add_parser('ncinfo', 
+                                        help='Print out information about a NetCDF file')
+    add_netcdf_info_arguments(info_parser)
+    info_parser.set_defaults(func=netcdf_info_main)
     
     args = parser.parse_args()
     
