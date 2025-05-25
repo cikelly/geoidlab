@@ -85,10 +85,13 @@ def main(args=None) -> None:
         add_plot_arguments(parser)
         args = parser.parse_args()
         
-    
-    if args.list_cmaps:
+    if getattr(args, 'list_cmaps', False):
         list_colormaps()
         return 0
+    
+    # if args.list_cmaps:
+    #     list_colormaps()
+    #     return 0
     
     # Ensure we have a filename
     if not args.filename:

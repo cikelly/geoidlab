@@ -6,6 +6,9 @@
 
 import argparse
 import sys
+import shutil
+
+from pathlib import Path
 
 from geoidlab.cli.commands.reference import add_reference_arguments, main as ggm_main
 from geoidlab.cli.commands.topo import add_topo_arguments, main as topo_main
@@ -13,7 +16,13 @@ from geoidlab.cli.commands.faye import add_faye_arguments, main as faye_main
 from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
+from geoidlab.cli.utils.config_parser import parse_config_file
 
+
+class ConfigAction(argparse.Action):
+    '''Custom action to handle --config/-c with or without a value.'''
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        setattr(namespace, self.dest, values if values is not None else '__COPY_TEMPLATE__')
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -23,7 +32,9 @@ def main() -> None:
         ),
         epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo'
     )
-    parser.add_argument('--version', action='version', version='geoidlab 1.0.0')
+    parser.add_argument('-v', '--version', action='version', version='geoidlab 1.0.0')
+    parser.add_argument('-c', '--config', nargs='?', default=None, action=ConfigAction, 
+                        help='Path to configuration file (e.g., geoidlab.cfg). If not provided, copies from geoidlab/docs/geoidlab.cfg to the current directory.')
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)
     
     # GGM subcommand
@@ -58,6 +69,39 @@ def main() -> None:
     info_parser.set_defaults(func=netcdf_info_main)
     
     args = parser.parse_args()
+    
+    # Handle config file
+    if args.config is not None:
+        if args.config == '__COPY_TEMPLATE__':
+            main_dir = Path(__file__).parent.parent.parent 
+
+            template_path = main_dir / 'docs' / 'geoidlab.cfg'
+            dest_path = Path.cwd() / 'geoidlab.cfg'
+            
+            if not template_path.exists():
+                print(
+                    f'Error: Template config file {template_path} not found in geoidlab/docs.'
+                    'Go to https://github.com/cikelly/geoidlab/tree/main/docs/ to download the template.'
+                )
+                sys.exit(1)
+                
+            if dest_path.exists():
+                print(f"Note: '{dest_path}' already exists. Not overwriting.")
+                print("To use the template, edit the existing geoidlab.cfg or specify a different config file with --config <path>.")
+                sys.exit(0)
+                
+            try:
+                shutil.copy(template_path, dest_path)
+                print(f"Template configuration file copied to '{dest_path}'.")
+                print("Please edit geoidlab.cfg and run `geoidlab --config geoidlab.cfg` to use it.")
+                sys.exit(0)
+            except (PermissionError, OSError) as e:
+                print(f"Error: Failed to copy template config to '{dest_path}': {str(e)}")
+                sys.exit(1)
+        else:
+            # Config file path provided, parse it
+            args = parse_config_file(args.config, args)
+            
     
     if not args.subcommand:
         parser.print_help()
