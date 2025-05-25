@@ -137,7 +137,9 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'scalebar_fancy'      : ('scalebar_fancy', False),
         'unit'                : ('unit', None),
         # ncinfo
-        'filename'            : ('filename', None)  # Reused for ncinfo
+        'filename'            : ('filename', None),  # Used for viz, ncinfo
+        'proj_name'           : ('proj_name', 'GeoidProject'),
+        'verbose'             : ('verbose', False),
     }
     
     # Type conversion rules

@@ -13,7 +13,7 @@ from pathlib import Path
 
 def add_netcdf_info_arguments(parser: argparse.ArgumentParser) -> None:
     '''Add arguments for printing information about a NetCDF file.'''
-    parser.add_argument('-f', '--file', type=str, required=True,
+    parser.add_argument('-f', '--filename', type=str, required=True,
                         help='Path to the NetCDF file to inspect.')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject',
                         help='Name of the project directory. Defaults to "GeoidProject.')
@@ -30,7 +30,9 @@ def main(args=None) -> None:
         args = parser.parse_args()
     
     # Handle both absolute and project-relative paths
-    filepath = Path(args.file)
+    filepath = Path(args.filename)
+    # filepath = Path(getattr(args, 'file', None))
+    print(filepath)
     # print(filepath)
     # if not filepath.is_absolute():
     #     filepath = Path(args.proj_name) / Path('results') / filepath
