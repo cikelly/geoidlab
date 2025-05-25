@@ -51,7 +51,7 @@ class GGMSynthesis():
         },
         # Add more tasks (e.g., disturbing_potential, second_radial_derivative)
     }
-
+    
     def __init__(
         self,
         model: str,
@@ -157,8 +157,18 @@ class GGMSynthesis():
         
     def _convert_tide_system(self, model_path: Path) -> Path | None:
         '''Convert input data to GGM tide system.'''
+        # Map tide systems to column prefixes
+        TIDE_COLUMN_MAP = {
+            'mean_tide': 'mean',
+            'zero_tide': 'zero',
+            'tide_free': 'free'
+        }
         ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
         self.ggm_tide = ggm_tide
+        if not self.input_file and self.bbox is not None:
+            print('Gridded data detected. Skipping tide system conversion as gravity data is not provided.')
+            return None
+        
         if not self.converted and self.tide_system:
             if ggm_tide != self.tide_system:
                 print(f'Converting input data from {self.tide_system} to {ggm_tide} system...')
@@ -181,8 +191,11 @@ class GGMSynthesis():
                 converted_data = conversion_method()
                 
                 # Update lonlatheight with converted gravity and height
-                self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
-                self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
+                # self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
+                # self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
+            
+                self.lonlatheight['gravity'] = converted_data[f'g_{TIDE_COLUMN_MAP[ggm_tide]}']
+                self.lonlatheight['height'] = converted_data[f'height_{TIDE_COLUMN_MAP[ggm_tide]}']
                 
                 input_filename = Path(self.input_file).stem if self.input_file else 'lonlatheight'
                 converted_data_path = self.output_dir / f'{input_filename}_{ggm_tide}.csv'
