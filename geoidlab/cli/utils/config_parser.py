@@ -110,6 +110,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'parallel'            : ('parallel', False),
         'chunk_size'          : ('chunk_size', None),
         'atm'                 : ('atm', False),
+        'atm_method'          : ('atm_method', 'noaa'),
         'decimate'            : ('decimate', False),
         'decimate_threshold'  : ('decimate_threshold', None),
         # geoid

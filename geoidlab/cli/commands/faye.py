@@ -106,6 +106,7 @@ class GravityReduction:
         parallel: bool = False,
         chunk_size: int = 500,
         atm: bool = False,
+        atm_method: str = 'noaa',
         window_mode: str = 'radius',
         tc_grid_size: float = 30.0,
         decimate: bool = False,
@@ -137,6 +138,7 @@ class GravityReduction:
         self.bouguer = None
         self.tc = None
         self.atm = atm
+        self.atm_method = atm_method
         self.window_mode = window_mode
         self.tc_grid_size = tc_grid_size
         self.decimate = decimate
@@ -356,7 +358,8 @@ class GravityReduction:
             gravity=self.lonlatheight['gravity'],
             elevation=self.lonlatheight['height'],
             ellipsoid=self.ellipsoid,
-            atm=self.atm
+            atm=self.atm,
+            atm_method=self.atm_method
         )
         
         anomaly_values = self.free_air if anomaly_type == 'free_air' else self.bouguer
@@ -565,6 +568,8 @@ def add_faye_arguments(parser) -> None:
                         help='Chunk size for parallel processing')
     parser.add_argument('--atm', action='store_true',
                         help='Request atmospheric correction. Default: False')
+    parser.add_argument('--atm-method', type=str, default='noaa', choices=['noaa', 'ngi', 'wenzel'],
+                        help='Atmospheric correction method. Default: noaa')
     parser.add_argument('--window-mode', type=str, default='radius', choices=['radius', 'fixed'],
                         help='Method for selecting sub-grid for computation.')
     parser.add_argument('--tc-grid-size', type=float, default=30,
@@ -623,6 +628,7 @@ def main(args=None) -> None:
         parallel=args.parallel,
         chunk_size=args.chunk_size,
         atm=args.atm,
+        atm_method=args.atm_method,
         window_mode=args.window_mode,
         decimate=args.decimate,
         decimate_threshold=args.decimate_threshold

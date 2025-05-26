@@ -10,6 +10,7 @@ from numpy import (
     radians, 
     sqrt
 )
+import numpy as np
 
 from geoidlab.coordinates import geodetic2geocentric
 
@@ -135,7 +136,14 @@ def ellipsoid_radius(phi, ellipsoid='wgs84') -> float:
     
     return r
 
-def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False) -> tuple:
+def gravity_anomalies(
+    lat, 
+    gravity, 
+    elevation, 
+    ellipsoid='wgs84', 
+    atm=False,
+    atm_method='noaa'
+) -> tuple[np.ndarray, np.ndarray]:
     '''
     Free-air and Bouguer gravity anomalies of a point on the Earth's 
     surface
@@ -147,6 +155,7 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False) -> 
     elevation        : height above the geoid   (m)
     ellipsoid        : Reference ellipsoid (wgs84 or grs80)
     atm              : apply atmospheric correction
+    atm_method       : Atmospheric correction method ('noaa', 'ngi', 'wenzel')
     
     Returns
     -------
@@ -171,14 +180,70 @@ def gravity_anomalies(lat, gravity, elevation, ellipsoid='wgs84', atm=False) -> 
     free_air_anomaly = free_air_gravity - gamma
     bouguer_anomaly  = bouguer_gravity - gamma
 
-    # Atmospheric correction
     if atm:
-        atm_corr = 0.874 - 9.9e-5 * elevation + 3.56e-9*elevation**2
+        print(f'Applying atmospheric correction. Atmospheric correction method: {atm_method}...')
+        atm_corr = atm_correction(elevation, method=atm_method)
         free_air_anomaly += atm_corr
         bouguer_anomaly  += atm_corr
     
-    
+    print(f'Gravity anomaly computation completed.')
     return free_air_anomaly, bouguer_anomaly
+
+def atm_correction(elevation, method='noaa') -> np.ndarray[float]:
+    '''
+    Atmospheric correction for gravity anomalies
+    
+    Parameters
+    ----------
+    elevation : height above the geoid (m)
+    method    : method for atmospheric correction ('noaa' or 'torge')
+    
+    Returns
+    -------
+    atm_corr  : atmospheric correction (mgal)
+    
+    Notes
+    -----
+    1. ngi method   : https://bgi.obs-mip.fr/wp-content-omp/uploads/sites/46/2017/10/computations.pdf
+    2. wenzel method: https://www.tandfonline.com/doi/full/10.1080/00288306.2010.510171#abstract
+    3. noaa method  : https://link.springer.com/article/10.1007/s12145-024-01328-0
+    '''
+    H = elevation
+    if method.lower() == 'noaa':
+        atm_corr = (
+            0.871 - 1.0298e-4 * H + 5.3105e-9 * H**2 - 2.1642e-13 * H**3 +
+            9.5246e-18 * H**4 - 2.2411e-22 * H**5
+        )
+    elif method.lower() == 'ngi':
+        atm_corr = np.where(
+            H < 0, 
+            0.87, 0.87 * np.exp(-0.116 * (H / 1000) ** 1.047)
+        )
+    elif method.lower() == 'wenzel':
+        atm_corr = 0.874 - 9.9e-5 * H + 3.5625e-9 * H**2
+    else:
+        raise ValueError(f'Unsupported atmospheric correction method: {method}')
+
+    return atm_corr
+
+
+def ellipsoidal_correction() -> np.ndarray[float]:
+    '''
+    Ellipsoidal correction for gravity anomalies
+    
+    Returns
+    -------
+    ellipsoidal_corr : ellipsoidal correction (mgal)
+    
+    Notes
+    -----
+    1. Torge, Muller and Pail (2023), Geodesy (5th Edition), Page 149
+    2. Equation 4.43
+    '''
+    # Implement later
+    pass 
+    
+
 
 def gravity_reduction(gravity, elevation) -> tuple:
     '''
