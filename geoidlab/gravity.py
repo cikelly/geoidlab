@@ -142,7 +142,8 @@ def gravity_anomalies(
     elevation, 
     ellipsoid='wgs84', 
     atm=False,
-    atm_method='noaa'
+    atm_method='noaa',
+    ellipsoidal_correction=False
 ) -> tuple[np.ndarray, np.ndarray]:
     '''
     Free-air and Bouguer gravity anomalies of a point on the Earth's 
@@ -150,12 +151,13 @@ def gravity_anomalies(
     
     Parameters
     ----------
-    lat              : latitude                 (degrees)
-    gravity          : gravity at the point     (m/s2)
-    elevation        : height above the geoid   (m)
-    ellipsoid        : Reference ellipsoid (wgs84 or grs80)
-    atm              : apply atmospheric correction
-    atm_method       : Atmospheric correction method ('noaa', 'ngi', 'wenzel')
+    lat                    : latitude                 (degrees)
+    gravity                : gravity at the point     (m/s2)
+    elevation              : height above the geoid   (m)
+    ellipsoid              : Reference ellipsoid (wgs84 or grs80)
+    atm                    : apply atmospheric correction
+    atm_method             : Atmospheric correction method ('noaa', 'ngi', 'wenzel')
+    ellipsoidal_correction : apply ellipsoidal correction
     
     Returns
     -------
@@ -185,6 +187,11 @@ def gravity_anomalies(
         atm_corr = atm_correction(elevation, method=atm_method)
         free_air_anomaly += atm_corr
         bouguer_anomaly  += atm_corr
+    
+    if ellipsoidal_correction:
+        print(f'Applying ellipsoidal correction...')
+        free_air_anomaly += ellipsoidal_correction()
+        bouguer_anomaly  += ellipsoidal_correction()
     
     print(f'Gravity anomaly computation completed.')
     return free_air_anomaly, bouguer_anomaly

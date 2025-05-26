@@ -155,6 +155,7 @@ def main(args=None) -> None:
         chunk_size=args.chunk_size,
         atm=args.atm,
         atm_method=args.atm_method,
+        ellipsoidal_correction=args.ellipsoidal_correction,
         window_mode=args.window_mode,
         decimate=args.decimate,
         decimate_threshold=args.decimate_threshold
