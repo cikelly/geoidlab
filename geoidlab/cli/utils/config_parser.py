@@ -111,6 +111,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'chunk_size'            : ('chunk_size', None),
         'atm'                   : ('atm', False),
         'atm_method'            : ('atm_method', 'noaa'),
+        'site'                  : ('site', False),
         'ellipsoidal_correction': ('ellipsoidal_correction', False),
         'decimate'              : ('decimate', False),
         'decimate_threshold'    : ('decimate_threshold', None),

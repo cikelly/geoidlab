@@ -19,7 +19,7 @@ from geoidlab.dem import dem4geoid
 class TopographicQuantities:
     '''
     CLI to compute topographic quantities from a Digital Elevation Model (DEM) and/or a reference DEM
-    Supported tasks: download, terrain-correction, rtm-anomaly, indirect-effect, height-anomaly
+    Supported tasks: download, terrain-correction, rtm-anomaly, indirect-effect, height-anomaly, site
     '''
     TASK_CONFIG = {
         'download': {'method': 'download', 'output': None},
@@ -42,6 +42,11 @@ class TopographicQuantities:
             'method': 'compute_rtm_height',
             'terrain_method': 'rtm_height_anomaly',
             'output': {'key': 'zeta_rtm', 'file': 'zeta_rtm'}
+        },
+        'site': {
+            'method': 'compute_site',
+            'terrain_method': 'site',
+            'output': {'key': 'Dg_site', 'file': 'Dg_SITE'}
         }
     }
     
@@ -246,7 +251,21 @@ class TopographicQuantities:
             'status': 'success',
             'output_file': str(output_file)
         }
-    
+        
+    def compute_site(self) -> dict:
+        '''Compute secondary indirect topographic effect on gravity'''
+        # Initialize tq if not hasattr(self, 'tq'):
+        if not hasattr(self, 'tq'):
+            self._initialize_terrain()
+            
+        result = self.tq.secondary_indirect_effect()
+        output_file = self.output_dir / f'{self.TASK_CONFIG["site"]["output"]["file"]}.nc'
+        return {
+            'status': 'success',
+            'output_file': str(output_file)
+        }
+
+
     def run(self, tasks: list) -> dict:
         '''Execute the specified tasks.'''
         if not hasattr(self, 'tq'):
@@ -274,11 +293,11 @@ def add_topo_arguments(parser) -> None:
                         help='Search radius in kilometers. Default: 110 km')
     parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', choices=['wgs84', 'grs80'], 
                         help='Reference ellipsoid. Default: wgs84')
-    parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'all'], 
+    parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'all'], 
                         help='Computation steps to perform')
-    parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
+    parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site'],
                         help='Start processing from this step')
-    parser.add_argument('-e', '--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly'],
+    parser.add_argument('-e', '--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site'],
                         help='End processing at this step')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Name of the project directory')
@@ -312,7 +331,7 @@ def main(args=None) -> int:
         args = parser.parse_args()
 
     # Define workflow
-    workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly']
+    workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly', 'site']
     # Determine tasks to execute
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start or --end.')

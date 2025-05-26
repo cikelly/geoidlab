@@ -100,6 +100,13 @@ DATASET_CONFIG = {
         'description': 'Faye/Helmert gravity anomaly',
         'fname'      : 'gridded_anomalies',
         'long_name'  : 'Faye Gravity Anomaly',
+    },
+    'Dg_SITE': {
+        'var_name'   : 'Dg_SITE',
+        'units'      : 'mGal',
+        'description': 'Secondary indirect effect of Helmert\'s condensation on gravity',
+        'fname'      : 'Dg_SITE',
+        'long_name'  : 'Secondary Indirect Effect on Gravity',
     }
     # Add more datasets as needed
 }

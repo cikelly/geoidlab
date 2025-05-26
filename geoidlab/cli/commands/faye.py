@@ -111,7 +111,8 @@ class GravityReduction:
         window_mode: str = 'radius',
         tc_grid_size: float = 30.0,
         decimate: bool = False,
-        decimate_threshold: int = 600
+        decimate_threshold: int = 600,
+        site: bool = False
     ) -> None:
         self.input_file = input_file
         self.model = model
@@ -146,6 +147,7 @@ class GravityReduction:
         self.decimate = decimate
         self.decimate_threshold = decimate_threshold
         self.ggm_tide = None
+        self.site = site
 
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -233,13 +235,7 @@ class GravityReduction:
                 # Perform conversion
                 conversion_method = getattr(converter, conversion_map[conversion_key])
                 converted_data = conversion_method()
-                
-                # Update lonlatheight with converted gravity and height
-                # print(converted_data.keys())
-                # self.lonlatheight['gravity'] = converted_data[f'g_{ggm_tide.replace("_tide", "")}']
-                # self.lonlatheight['height'] = converted_data[f'height_{ggm_tide.replace("_tide", "")}']
-                
-                # Determine target suffix (mean, free, or zero)
+
                 # Map GGM tide system to column suffix
                 tide_suffix_map = {
                     'tide_free': 'free',
@@ -293,6 +289,7 @@ class GravityReduction:
             result = topo_workflow.run(['terrain-correction'])
             tc_file = result['output_files'][0]
             tc_grid = xr.open_dataset(tc_file)
+            self.topo_workflow = topo_workflow
         return tc_grid
     
     def _interpolate_tc(self, tc_grid: xr.Dataset) -> np.ndarray:
@@ -308,6 +305,50 @@ class GravityReduction:
         points = np.vstack((self.lonlatheight['lat'], self.lonlatheight['lon'])).T
         tc_interpolated = interpolator(points)
         return tc_interpolated
+    
+    def _compute_secondary_indirect_effect(self) -> np.ndarray:
+        '''Compute Secondary Indirect Topographic Effect (SITE) on gravity.'''
+        site_file = self.output_dir / 'Dg_SITE.nc'
+        if site_file.exists():
+            print(f'Loading SITE from {site_file}')
+            site_grid = xr.open_dataset(site_file)
+            return site_grid
+        
+        if not hasattr(self, 'topo_workflow'):
+            topo_workflow = TopographicQuantities(
+            topo=self.topo,
+            model_dir=self.model_dir,
+            output_dir=self.output_dir,
+            ellipsoid=self.ellipsoid,
+            chunk_size=self.chunk_size,
+            radius=self.radius,
+            proj_name=self.proj_name,
+            bbox=self.bbox,
+            bbox_offset=self.bbox_offset,
+            grid_size=self.tc_grid_size,
+            window_mode=self.window_mode,
+            parallel=self.parallel,
+            interp_method=self.interp_method
+        )
+        topo_workflow._initialize_terrain()
+        site = topo_workflow.run(['site'])
+        site_file = site['output_files'][0]
+        site_grid = xr.open_dataset(site_file)
+        return site_grid
+        
+    def _interpolate_site(self, site_grid: xr.Dataset) -> np.ndarray:
+        '''Interpolate SITE at lonlatheight locations'''
+        site_values = site_grid['Dg_SITE'].values
+        interpolator = RegularGridInterpolator(
+            (site_grid['lat'].values, site_grid['lon'].values), 
+            site_values, 
+            method=self.interp_method, 
+            bounds_error=False, 
+            fill_value=0
+        )
+        points = np.vstack((self.lonlatheight['lat'], self.lonlatheight['lon'])).T
+        site_interpolated = interpolator(points)
+        return site_interpolated
     
     def _grid_anomalies(self, anomalies_dataframes: dict) -> xr.Dataset:
         '''Grid anomalies over bbox with bbox_offset using Interpolators.'''
@@ -427,6 +468,17 @@ class GravityReduction:
         del tc_grid
         
         faye = self.free_air + self.tc
+        
+        # Initialize SITE values
+        self.site_values = np.zeros_like(self.free_air)
+        
+        if self.site:
+            print('Secondary Indirect Topographic Effect (SITE) requested and will be computed')
+            site_grid = self._compute_secondary_indirect_effect()
+            self.site_values = self._interpolate_site(site_grid)
+            print('Applying secondary indirect effect to Helmert anomalies...')
+        
+        faye += self.site_values
         
         # Save point-wise land anomalies
         output_file_csv = self.output_dir / 'faye.csv'
@@ -583,6 +635,8 @@ def add_faye_arguments(parser) -> None:
                         help='Decimate marine data. Default observations to retain is 600. Use --decimate-threshold to change this.')
     parser.add_argument('--decimate-threshold', type=int, default=600,
                         help='Threshold for automatic decimation of marine data (default: 600 points).')
+    parser.add_argument('--site', action='store_true',
+                        help='Apply secondary indirect topographic effect (SITE) on gravity')
 
 def main(args=None) -> None:
     '''
@@ -637,7 +691,8 @@ def main(args=None) -> None:
         ellpsoidal_correction=args.ellipsoidal_correction,
         window_mode=args.window_mode,
         decimate=args.decimate,
-        decimate_threshold=args.decimate_threshold
+        decimate_threshold=args.decimate_threshold,
+        site=args.site
     )
     result = reduction.run(tasks)
     print(f'Completed tasks: {", ".join(tasks)}')

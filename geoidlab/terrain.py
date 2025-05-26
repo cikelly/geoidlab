@@ -950,6 +950,32 @@ class TerrainQuantities:
 
         return ind
 
+    def secondary_indirect_effect(self) -> np.ndarray:
+        '''
+        Compute the secondary indirect effect on gravity
+        
+        Returns
+        -------
+        Dg_SITE : Secondary indirect effect on gravity [mGal]
+        
+        Notes
+        -----
+        
+        '''
+        print('Computing the secondary indirect effect on gravity...')
+        Dg_SITE = - (2 * np.pi * self.G * self.rho * self.ori_P['z'].values ** 2) / self.R
+        Dg_SITE *= 1e5  # Convert to mGal
+        save_to_netcdf(
+            data=Dg_SITE,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='Dg_SITE',
+            proj_dir=self.proj_dir,
+            overwrite=self.overwrite
+        )
+        print('Secondary indirect effect on gravity computation completed.')
+        return Dg_SITE
+
 
     def rtm_height_anomaly_sequential(self) -> np.ndarray:
         '''

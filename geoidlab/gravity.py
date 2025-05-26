@@ -11,6 +11,7 @@ from numpy import (
     sqrt
 )
 import numpy as np
+import xarray as xr
 
 from geoidlab.coordinates import geodetic2geocentric
 
@@ -143,7 +144,8 @@ def gravity_anomalies(
     ellipsoid='wgs84', 
     atm=False,
     atm_method='noaa',
-    ellipsoidal_correction=False
+    ellipsoidal_correction=False,
+    # secondary_indirect_effect=False
 ) -> tuple[np.ndarray, np.ndarray]:
     '''
     Free-air and Bouguer gravity anomalies of a point on the Earth's 
@@ -151,13 +153,14 @@ def gravity_anomalies(
     
     Parameters
     ----------
-    lat                    : latitude                 (degrees)
-    gravity                : gravity at the point     (m/s2)
-    elevation              : height above the geoid   (m)
-    ellipsoid              : Reference ellipsoid (wgs84 or grs80)
-    atm                    : apply atmospheric correction
-    atm_method             : Atmospheric correction method ('noaa', 'ngi', 'wenzel')
-    ellipsoidal_correction : apply ellipsoidal correction
+    lat                       : latitude                 (degrees)
+    gravity                   : gravity at the point     (m/s2)
+    elevation                 : height above the geoid   (m)
+    ellipsoid                 : Reference ellipsoid (wgs84 or grs80)
+    atm                       : apply atmospheric correction
+    atm_method                : Atmospheric correction method ('noaa', 'ngi', 'wenzel')
+    ellipsoidal_correction    : apply ellipsoidal correction
+    secondary_indirect_effect : apply secondary indirect topographic effect
     
     Returns
     -------
@@ -192,6 +195,11 @@ def gravity_anomalies(
         print(f'Applying ellipsoidal correction...')
         free_air_anomaly += ellipsoidal_correction()
         bouguer_anomaly  += ellipsoidal_correction()
+    
+    # if secondary_indirect_effect:
+    #     print(f'Applying secondary indirect topographic effect...')
+    #     free_air_anomaly += secondary_indirect_effect(elevation)
+    #     bouguer_anomaly  += secondary_indirect_effect(elevation)
     
     print(f'Gravity anomaly computation completed.')
     return free_air_anomaly, bouguer_anomaly
@@ -232,6 +240,49 @@ def atm_correction(elevation, method='noaa') -> np.ndarray[float]:
         raise ValueError(f'Unsupported atmospheric correction method: {method}')
 
     return atm_corr
+
+# def secondary_indirect_effect(
+#     lonlat, 
+#     dem: xr.Dataset = None, 
+#     ellipsoid: str ='wgs84',
+#     bbox: tuple[float, float, float, float] = None,
+#     resolution: float = 30.0
+# ) -> np.ndarray[float]:
+#     '''
+#     Apply the secondary indirect topographic effect due to Helmert's condensation
+    
+#     Parameters
+#     ----------
+#     lonlat    : tuple of (longitude, latitude) in degrees
+#     dem       : Digital Elevation Model (xarray Dataset)
+#     ellipsoid : Reference ellipsoid (wgs84 or grs80)
+#     bbox      : bounding box for the DEM (min_lon, max_lon, min_lat, max_lat)
+#     resolution: resolution of the DEM in seconds (default is 30.0 arc seconds)
+    
+#     Returns
+#     -------
+#     Dg_SITE   : secondary indirect topographic effect (mgal)
+#     '''
+#     from geoidlab.terrain import TerrainQuantities
+    
+#     if bbox is None and dem is None:
+#         raise ValueError('Either dem or bbox must be provided.')
+    
+#     if dem is None and bbox is not None:
+#         print('No DEM provided. Downloading DEM over provided bbox...')
+#         from geoidlab.dem import dem4geoid
+#         dem = dem4geoid(bbox=bbox, bbox_off=0)
+#         print('Interpolating heights from DEM at lonlat...')
+#         from scipy.interpolate import RegularGridInterpolator
+        
+        
+    
+#     tq = TerrainQuantities(ori_topo=dem, ellipsoid=ellipsoid)
+    
+    # Dg_
+    
+    # return Dg_SITE
+    
 
 
 def ellipsoidal_correction() -> np.ndarray[float]:

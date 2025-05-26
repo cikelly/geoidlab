@@ -158,7 +158,8 @@ def main(args=None) -> None:
         ellipsoidal_correction=args.ellipsoidal_correction,
         window_mode=args.window_mode,
         decimate=args.decimate,
-        decimate_threshold=args.decimate_threshold
+        decimate_threshold=args.decimate_threshold,
+        site=args.site
     )
     gravity_result = gravity_reduction.run(['faye'])
     Dg_file = gravity_result['output_files'][1]  # Gridded Faye anomalies

@@ -585,11 +585,13 @@ class GlobalGeopotentialModel:
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
             H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False) #, n_workers=n_workers)
             N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
+            print('Subtracting topographic effect from geoid height...')
         
         N -= N_topo
         
         # Zero-degree term
         N = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
+        print('Reference geoid computed successfully!')
         
         return N
 
