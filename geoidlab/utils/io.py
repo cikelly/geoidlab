@@ -97,9 +97,9 @@ DATASET_CONFIG = {
     'Dg': {
         'var_name'   : 'Dg',
         'units'      : 'mGal',
-        'description': 'Faye/Helmert gravity anomaly',
+        'description': 'Helmert gravity anomaly',
         'fname'      : 'gridded_anomalies',
-        'long_name'  : 'Faye Gravity Anomaly',
+        'long_name'  : 'Helmert Gravity Anomaly',
     },
     'Dg_SITE': {
         'var_name'   : 'Dg_SITE',

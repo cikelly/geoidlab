@@ -65,7 +65,7 @@ def decimate_data(df: pd.DataFrame, n_points: int, verbose: bool = False) -> pd.
     return decimated_df
 
 class GravityReduction:
-    '''Class to perform gravity reductions (Free-air, Bouguer, Faye/Helmert anomalies)'''
+    '''Class to perform gravity reductions (Free-air, Bouguer, helmert/Helmert anomalies)'''
     TASK_CONFIG = {
         'free-air': {
             'method': 'compute_anomalies',
@@ -77,9 +77,9 @@ class GravityReduction:
             'output': {'key': 'bouguer', 'file': 'bouguer'},
             'anomaly_type': 'bouguer'
         },
-        'faye': {
-            'method': 'compute_faye',
-            'output': {'key': 'faye', 'file': 'faye'}
+        'helmert': {
+            'method': 'compute_helmert',
+            'output': {'key': 'helmert', 'file': 'helmert'}
         }
     }
     
@@ -443,15 +443,15 @@ class GravityReduction:
             'output_file': output_files
         }
         
-    def compute_faye(self) -> dict:
-        '''Compute Faye/Helmert anomalies using Free-air and terrain corrections.'''
+    def compute_helmert(self) -> dict:
+        '''Compute helmert/Helmert anomalies using Free-air and terrain corrections.'''
         if not (self.topo or self.tc_file):
-            raise ValueError('Either --topo or --tc-file must be provided for Faye anomalies')
+            raise ValueError('Either --topo or --tc-file must be provided for helmert anomalies')
         
-        output_file_csv = self.output_dir / 'faye.csv'
-        output_file_nc = self.output_dir / 'faye.nc'
+        output_file_csv = self.output_dir / 'helmert.csv'
+        output_file_nc = self.output_dir / 'helmert.nc'
         if output_file_csv.exists() and output_file_nc.exists():
-            print(f'Faye anomalies already computed at {output_file_csv} and {output_file_nc}. Skipping computation.')
+            print(f'helmert anomalies already computed at {output_file_csv} and {output_file_nc}. Skipping computation.')
             return {
                 'status': 'success',
                 'output_file': [str(output_file_csv), str(output_file_nc)]
@@ -467,7 +467,7 @@ class GravityReduction:
         self.tc = self._interpolate_tc(tc_grid)
         del tc_grid
         
-        faye = self.free_air + self.tc
+        helmert = self.free_air + self.tc
         
         # Initialize SITE values
         self.site_values = np.zeros_like(self.free_air)
@@ -478,21 +478,21 @@ class GravityReduction:
             self.site_values = self._interpolate_site(site_grid)
             print('Applying secondary indirect effect to Helmert anomalies...')
         
-        faye += self.site_values
+        helmert += self.site_values
         
         # Save point-wise land anomalies
-        output_file_csv = self.output_dir / 'faye.csv'
+        output_file_csv = self.output_dir / 'helmert.csv'
         df_land = pd.DataFrame({
             'lon': self.lonlatheight['lon'],
             'lat': self.lonlatheight['lat'],
-            'faye': faye,
+            'helmert': helmert,
             'free_air': self.free_air,
             'terrain_correction': self.tc
         })
         if self.bouguer is not None:
             df_land['bouguer'] = self.bouguer
         df_land.to_csv(output_file_csv, index=False)
-        print(f'Faye anomalies (land) written to {output_file_csv}')
+        print(f'Helmert anomalies (land) written to {output_file_csv}')
         
         del df_land
         
@@ -500,7 +500,7 @@ class GravityReduction:
         land_df = pd.DataFrame({
             'lon': self.lonlatheight['lon'],
             'lat': self.lonlatheight['lat'],
-            'Dg': faye
+            'Dg': helmert
         })
         if self.marine_data is not None:  # Ensure marine_data is loaded in _process_input
             print('Marine gravity anomalies provided. Combining with Helmert anomalies...')
@@ -523,7 +523,7 @@ class GravityReduction:
 
         # Handle duplicates
         combined_df = combined_df.drop_duplicates(subset=['lon', 'lat'])
-        # Always grid Faye anomalies under 'Dg'
+        # Always grid helmert anomalies under 'Dg'
         anomalies_dataframes = {'Dg': combined_df}
         print(f'Shape of anomalies dataframes: {anomalies_dataframes["Dg"].shape}')
         
@@ -571,7 +571,7 @@ class GravityReduction:
         return {'status': 'success', 'output_files': output_files}
 
 
-def add_faye_arguments(parser) -> None:
+def add_helmert_arguments(parser) -> None:
     parser.add_argument('-i', '--input-file', type=str, required=True,
                         help='Input file with lon, lat, gravity, and height data (required)')
     parser.add_argument('-m', '--model', type=str,
@@ -580,11 +580,11 @@ def add_faye_arguments(parser) -> None:
                         help='Directory for GGM files')
     parser.add_argument('--marine-data', type=str,
                         help='Input file with lon, lat, height, and Dg.')
-    parser.add_argument('--do', type=str, default='faye', choices=['free-air', 'bouguer', 'faye', 'all'],
-                        help='Computation steps to perform: [free-air, bouguer, faye, or all (default: faye)]')
-    parser.add_argument('-s', '--start', type=str, choices=['free-air', 'bouguer', 'faye'],
+    parser.add_argument('--do', type=str, default='helmert', choices=['free-air', 'bouguer', 'helmert', 'all'],
+                        help='Computation steps to perform: [free-air, bouguer, helmert, or all (default: helmert)]')
+    parser.add_argument('-s', '--start', type=str, choices=['free-air', 'bouguer', 'helmert'],
                         help='Start processing from this step')
-    parser.add_argument('-e', '--end', type=str, choices=['free-air', 'bouguer', 'faye'],
+    parser.add_argument('-e', '--end', type=str, choices=['free-air', 'bouguer', 'helmert'],
                         help='End processing at this step')
     parser.add_argument('-gt', '--gravity-tide', type=str,
                         help='Tide system of the surface gravity data: [mean_tide, zero_tide, tide_free]')
@@ -609,7 +609,7 @@ def add_faye_arguments(parser) -> None:
     parser.add_argument('-c', '--converted', action='store_true',
                         help='Indicate that input data is already in the target tide system')
     parser.add_argument('--topo', type=str, choices=['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'],
-                        help='DEM model for terrain correction (required for Faye unless --tc-file is provided)')
+                        help='DEM model for terrain correction (required for helmert unless --tc-file is provided)')
     parser.add_argument('--tc-file', type=str,
                         help='Path to precomputed terrain correction NetCDF file')
     parser.add_argument('--radius', type=float, default=110.0,
@@ -641,19 +641,19 @@ def add_faye_arguments(parser) -> None:
 def main(args=None) -> None:
     '''
     Main function for gravity reductions. The supported methods are Free-air and Bouguer reductions,
-    with outputs including Free-air and Bouguer anomalies, and Helmert/Faye anomalies
+    with outputs including Free-air and Bouguer anomalies, and Helmert/helmert anomalies
     '''
     if args is None:
         parser = argparse.ArgumentParser(
             description=(
-                'Perform gravity reduction to compute Free-air, Bouguer, and Faye/Helmert anomalies.'
-                'Faye anomalies are the sum of Free-air anomalies and terrain corrections.'
+                'Perform gravity reduction to compute Free-air, Bouguer, and helmert/Helmert anomalies.'
+                'helmert anomalies are the sum of Free-air anomalies and terrain corrections.'
             )
         )
-        add_faye_arguments(parser)
+        add_helmert_arguments(parser)
         args = parser.parse_args()
     
-    workflow = ['free-air', 'bouguer', 'faye']
+    workflow = ['free-air', 'bouguer', 'helmert']
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
     if args.do == 'all':

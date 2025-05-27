@@ -11,7 +11,7 @@ import xarray as xr
 from pathlib import Path
 
 from geoidlab.cli.commands.reference import add_reference_arguments, GGMSynthesis
-from geoidlab.cli.commands.faye import add_faye_arguments, GravityReduction
+from geoidlab.cli.commands.helmert import add_helmert_arguments, GravityReduction
 from geoidlab.cli.commands.topo import add_topo_arguments, TopographicQuantities
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab.geoid import ResidualGeoid
@@ -72,8 +72,8 @@ def add_geoid_arguments(parser) -> None:
     tem_parser_topo = argparse.ArgumentParser(add_help=False)
     add_topo_arguments(tem_parser_topo)
     
-    tem_parser_faye = argparse.ArgumentParser(add_help=False)
-    add_faye_arguments(tem_parser_faye)
+    tem_parser_helmert = argparse.ArgumentParser(add_help=False)
+    add_helmert_arguments(tem_parser_helmert)
     
     # Arguments to exclude
     exclude_list = ['grid', 'do', 'start', 'end']
@@ -81,7 +81,7 @@ def add_geoid_arguments(parser) -> None:
     # Merge arguments into the main parser
     copy_arguments(tem_parser_ref, parser, exclude=exclude_list)
     copy_arguments(tem_parser_topo, parser, exclude=exclude_list)
-    copy_arguments(tem_parser_faye, parser, exclude=exclude_list)
+    copy_arguments(tem_parser_helmert, parser, exclude=exclude_list)
     
     parser.add_argument('--sph-cap', type=float, default=1.0,
                         help='Spherical cap for integration in degrees (default: 1.0)')
@@ -131,7 +131,7 @@ def main(args=None) -> None:
     
     ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=model_dir)
     
-    # Step 1: Calculate Helmert/Faye anomalies (Dg)
+    # Step 1: Calculate Helmert/helmert anomalies (Dg)
     gravity_reduction = GravityReduction(
         input_file=args.input_file,
         model=args.model,
@@ -161,11 +161,11 @@ def main(args=None) -> None:
         decimate_threshold=args.decimate_threshold,
         site=args.site
     )
-    gravity_result = gravity_reduction.run(['faye'])
-    Dg_file = gravity_result['output_files'][1]  # Gridded Faye anomalies
+    gravity_result = gravity_reduction.run(['helmert'])
+    Dg_file = gravity_result['output_files'][1]  # Gridded helmert anomalies
     Dg_ds = xr.open_dataset(Dg_file)
     Dg = Dg_ds['Dg']
-    print(f'Computed Faye anomalies (Dg) saved to {Dg_file}')
+    print(f'Computed helmert anomalies (Dg) saved to {Dg_file}')
     
     
     # Step 2: Calculate reference gravity anomalies from GGM (Dg_ggm)
