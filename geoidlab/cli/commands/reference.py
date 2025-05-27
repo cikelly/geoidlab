@@ -69,14 +69,32 @@ class GGMSynthesis():
         grid_size: float = None,
         grid_unit: str = 'minutes',
         proj_name: str = 'GeoidProject',
-        icgem: bool = False
+        icgem: bool = False,
+        dtm_model: str | Path = None
     ) -> None:
         '''
         Initialize GGMSynthesis class
         
         Parameters
         ----------
-        icgem     : Whether to use ICGEM's version of N_ggm
+        model      : Name of GGM from ICGEM with or without .gfc
+        max_deg    : Maximum degree of truncation for synthesizing gravity functionals from GGM
+        model_dir  : Directory to store GGM or retrieve existing GGM files
+        output_dir : Directory to save output files
+        ellipsoid  : Reference ellipsoid ('wgs84' or 'grs80')
+        chunk_size : Chunk size for parallel processing
+        parallel   : Enable parallel processing
+        tide_system: Tide system of the input gravity data (mean_tide, zero_tide, tide_free)
+        converted  : If True, input data is already in the target tide system
+        input_file : Path to input file with lon, lat, height (CSV, Excel, TXT, NPY, NPZ)
+        bbox       : Bounding box [W,E,S,N] in degrees
+        bbox_offset: Offset around bounding box in degrees
+        grid_size  : Grid size in degrees, minutes, or seconds
+        grid_unit  : Unit of grid size ('degrees', 'minutes', 'seconds')
+        proj_name  : Name of project directory
+        icgem      : Use ICGEM formula for reference geoid computation (only for reference-geoid task)
+        dtm_model  : Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)
+        
         '''
         self.model = model
         self.max_deg = max_deg
@@ -97,6 +115,7 @@ class GGMSynthesis():
         self.lon_grid = None
         self.lat_grid = None
         self.icgem = icgem
+        self.dtm_model = dtm_model
         
         # Directory setup
         directory_setup(proj_name)
@@ -235,7 +254,8 @@ class GGMSynthesis():
             zonal_harmonics=True,
             ellipsoid=self.ellipsoid,
             model_dir=self.model_dir,
-            chunk_size=self.chunk_size
+            chunk_size=self.chunk_size,
+            dtm_model=self.dtm_model,
         )
 
         # Compute functional, use if to pass method specific parameters
@@ -358,6 +378,8 @@ def add_reference_arguments(parser) -> None:
                         help='Input data is in target tide system')
     parser.add_argument('--icgem', action='store_true', default=False,
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
+    parser.add_argument('--dtm-model', type=str, default=None,
+                        help='Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)')
 
 def main(args=None) -> int:
     if args is None:
@@ -397,7 +419,8 @@ def main(args=None) -> int:
         grid_size=args.grid_size,
         grid_unit=args.grid_unit,
         proj_name=args.proj_name,
-        icgem=args.icgem
+        icgem=args.icgem,
+        dtm_model=args.dtm_model
     )
 
     result = workflow.run(tasks)

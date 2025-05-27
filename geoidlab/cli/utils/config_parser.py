@@ -85,6 +85,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'model_dir'             : ('model_dir', None),
         'max_deg'               : ('max_deg', None),
         'icgem'                 : ('icgem', False),
+        'dtm_model'             : ('dtm_model', None),
         'gravity_tide'          : ('gravity_tide', 'mean_tide'),
         'converted'             : ('converted', False),
         # grid
@@ -149,7 +150,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy'}:
+        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction'}:
             return value.lower() in {'true', 'yes', '1'}
         if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi'}:
             return int(value)

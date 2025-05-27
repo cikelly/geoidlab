@@ -41,7 +41,8 @@ class GlobalGeopotentialModel:
         grav_data=None, 
         zonal_harmonics=True,
         model_dir='downloads',
-        chunk_size=None
+        chunk_size=None,
+        dtm_model=None
     ) -> None:
         '''
         Initialize the GlobalGeopotentialModel class for potential modeling
@@ -55,6 +56,8 @@ class GlobalGeopotentialModel:
         grav_data       : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
         zonal_harmonics : Whether to subtract even zonal harmonics or not
         model_dir       : Directory where model file is stored
+        chunk_size      : Size of chunks for parallel processing (default: 100)
+        dtm_model       : Digital Terrain Model (DTM) to use for topographic effects (optional)
         '''
         self.shc       = shc
         self.model     = model_name
@@ -63,6 +66,7 @@ class GlobalGeopotentialModel:
         self.grav_data = grav_data
         self.model_dir = model_dir
         self.chunk     = chunk_size
+        self.dtm_model = dtm_model
         
         # Input validation
         if self.model_dir is None:
@@ -77,6 +81,14 @@ class GlobalGeopotentialModel:
         if self.chunk is None:
             print('Chunk size not specified. Setting chunk size to 100...')
             self.chunk = 100
+            
+        if self.dtm_model is not None:
+            self.dtm_model = Path(self.dtm_model)
+            if not self.dtm_model.exists():
+                print(f'Warning: DTM model {self.dtm_model} does not exist. Using default DTM2006.')
+                self.dtm_model = None
+            else:
+                print(f'User-specified DTM model exists and will be used: {self.dtm_model}')
             
         try:
             if self.shc is None:
@@ -580,9 +592,12 @@ class GlobalGeopotentialModel:
         # Remove topographic effect if requested
         N_topo = np.zeros_like(N)
         if icgem:
-            print('ICGEM version requested. Computing N_topo')
+            if self.dtm_model is None:
+                print('ICGEM version requested. Computing topographic contribution to geoid height (N_topo) using DTM2006')
+            else:
+                print(f'ICGEM version requested. Computing topographic contribution to geoid height (N_topo) using {self.dtm_model.stem}')
             from geoidlab.dtm import DigitalTerrainModel
-            dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid)
+            dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid, model_name=self.dtm_model)
             H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False) #, n_workers=n_workers)
             N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
             print('Subtracting topographic effect from geoid height...')

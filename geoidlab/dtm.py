@@ -5,6 +5,8 @@
 ############################################################
 import lzma
 
+import numpy as np
+
 from pathlib import Path
 from geoidlab import coordinates as co
 from geoidlab.legendre import ALF, ALFsGravityAnomaly
@@ -12,7 +14,9 @@ from geoidlab.numba.dtm import compute_harmonic_sum
 from tqdm import tqdm
 
 from multiprocessing import Pool, cpu_count
-import numpy as np
+from pathlib import Path
+
+
 
 
 class DigitalTerrainModel:
@@ -22,7 +26,7 @@ class DigitalTerrainModel:
         
         Parameters
         ----------
-        model_name : Name of the DTM model file
+        model_name : Name of the DTM model file (full path)
         nmax       : Maximum degree of spherical harmonics
         ellipsoid  : Reference ellipsoid
 
@@ -38,12 +42,21 @@ class DigitalTerrainModel:
         if self.name is None:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
-            print(f'Using compressed file in geoidlab/data directory ...')
+            print(f'Using compressed DTM2006.0 file in {script_dir}/data ...')
             with lzma.open(self.name, 'rt') as f:
                 self.dtm = f.readlines()
         else:
-            with open(self.name, 'r') as f:
-                self.dtm = f.readlines() # self.dtm is the DTM2006 text file
+            self.name = Path(self.name)
+            try:
+                print(f'Reading DTM file {self.name} ...')
+                if self.name.suffix == '.xz':
+                    with lzma.open(self.name, 'rt') as f:
+                        self.dtm = f.readlines()
+                else:
+                    with open(self.name, 'r') as f:
+                        self.dtm = f.readlines() # self.dtm is the DTM2006 text file
+            except Exception as e:
+                raise Exception(f'Error reading DTM file {self.name}: {str(e)}')
                 
 
     @staticmethod

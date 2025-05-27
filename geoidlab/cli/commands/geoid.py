@@ -184,7 +184,7 @@ def main(args=None) -> None:
         grid_size=grid_size,
         grid_unit=grid_unit,
         proj_name=args.proj_name,
-        icgem=args.icgem
+        icgem=args.icgem,
     )
     ggm_result = ggm_synthesis.run(['gravity-anomaly'])
     Dg_ggm_file = ggm_result['output_files'][0]
@@ -242,7 +242,8 @@ def main(args=None) -> None:
         grid_size=grid_size,
         grid_unit=grid_unit,
         proj_name=args.proj_name,
-        icgem=args.icgem
+        icgem=args.icgem,
+        dtm_model= args.dtm_model
     )
 
     ggm_result = ggm_synthesis.run(['reference-geoid'])
