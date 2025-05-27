@@ -21,7 +21,8 @@ from geoidlab.numba.ggm import (
     compute_disturbance_chunk,
     compute_disturbing_potential_chunk,
     compute_second_radial_chunk,
-    compute_separation_chunk
+    compute_separation_chunk,
+    compute_disturbing_potential_derivative_chunk
 )
 
 from tqdm import tqdm
@@ -146,7 +147,7 @@ class GlobalGeopotentialModel:
         ---------
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         '''
-        Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         Dg  = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
@@ -200,7 +201,7 @@ class GlobalGeopotentialModel:
             clear_output(wait=True)  # Clear the output in Jupyter Notebook
             # print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r') # for notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...')
-            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -238,7 +239,7 @@ class GlobalGeopotentialModel:
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         '''
         
-        Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         dg  = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
@@ -283,7 +284,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -327,7 +328,7 @@ class GlobalGeopotentialModel:
         '''
         r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
         
-        Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         T   = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing disturbing potential'):
@@ -379,7 +380,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -421,7 +422,7 @@ class GlobalGeopotentialModel:
         ---------
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.39, p.298
         '''
-        Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         Tzz = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
@@ -467,7 +468,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -664,7 +665,7 @@ class GlobalGeopotentialModel:
         H      : Geoid-quasi geoid separation values.
         '''
 
-        Pnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         H = np.zeros(len(self.lon))
 
         for n in tqdm(range(0, self.nmax + 1), desc='Computing separation'):
@@ -707,7 +708,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)
             print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
-            Pnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(0, self.nmax + 1):
@@ -772,6 +773,106 @@ class GlobalGeopotentialModel:
 
         return df
     
+    def disturbing_potential_derivative_sequential(self, r_or_R='r') -> np.ndarray:
+        '''
+        Compute the derivative of the disturbing potential with respect to theta (colatitude).
+        
+        Parameters
+        ----------
+        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        Returns
+        -------
+        dTdtheta  : Derivative of disturbing potential [m2/s2/rad]
+        
+        Notes
+        -----
+        1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
+        2. Please ensure that you have called shtools.subtract_zonal_harmonics() on shc before passing it to disturbing_potential()
+        3. `r_or_R` parameter is used to calculate T for geoid heights (R) or height anomalies (r). See last paragraph on Page 296
+        '''
+        r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
+        
+        _, dPnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        dTdtheta   = np.zeros(len(self.lon))
+        
+        for n in tqdm(range(2, self.nmax + 1), desc='Computing disturbing potential'):
+            sum = np.zeros(len(self.lon))
+            for m in range(n + 1):
+                mlambda = m * self.lambda_
+                sum += (
+                    self.shc['Cnm'][n, m] * np.cos(mlambda) + 
+                    self.shc['Snm'][n, m] * np.sin(mlambda)
+                ) * dPnm[:, n, m]
+            dTdtheta += (self.shc['a'] / r)**n * sum
+        
+        dTdtheta = self.shc['GM'] / r * dTdtheta # [m2/s2/rad]
+        
+        return dTdtheta
+    
+    def disturbing_potential_derivative_parallel(self, r_or_R='r') -> np.ndarray:
+        '''
+        Compute disturbing potential using chunking and Numba optimization.
+        
+        Parameters
+        ----------
+        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        Returns
+        -------
+        dTdtheta  : Disturbing potential array (m2/s2)
+        '''
+    
+        r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
+
+        Cnm = np.array(self.shc['Cnm'])
+        Snm = np.array(self.shc['Snm'])
+        a = np.array(self.shc['a'])
+        GM = np.array(self.shc['GM'])
+        
+        dTdtheta = np.zeros(len(self.lon))
+                
+        n_points = len(self.lon)
+        n_chunks = (n_points // self.chunk) + 1
+        
+        for i in range(n_chunks):
+            start_idx = i * self.chunk
+            end_idx = min((i + 1) * self.chunk, n_points)
+            
+            lon_chunk = self.lon[start_idx:end_idx]
+            r_chunk = r[start_idx:end_idx]
+            vartheta_chunk = self.vartheta[start_idx:end_idx]
+            T_chunk = np.zeros(len(lon_chunk))
+            
+            clear_output(wait=True)  # Clear the output in Jupyter notebook
+            print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
+            _, dPnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            lon_rad_chunk = np.radians(lon_chunk)
+            
+            for n in range(2, self.nmax + 1):
+                T_chunk += compute_disturbing_potential_derivative_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, dPnm_chunk, n)
+
+            dTdtheta[start_idx:end_idx] = T_chunk
+            # print('\n')
+        
+        dTdtheta = GM / r * dTdtheta # [m2/s2/rad]
+        
+        return dTdtheta
+    
+    
+    def disturbing_potential_derivative(self, r_or_R='r', parallel: bool=True) -> np.ndarray:
+        '''
+        Method to call either disturbing_potential_parallel() or disturbing_potential_sequential()
+        
+        Parameters
+        ----------
+        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        Returns
+        -------
+        dTdtheta  : Derivative of disturbing potential [m2/s2/rad]
+        '''
+        if parallel:
+            return self.disturbing_potential_derivative_parallel(r_or_R=r_or_R)
+        else:
+            return self.disturbing_potential_derivative_sequential(r_or_R=r_or_R)
 
 class GlobalGeopotentialModel2D():
     def __init__(
@@ -864,7 +965,7 @@ class GlobalGeopotentialModel2D():
         Dg = np.zeros((len(self.theta), len(self.lambda_)))
         
         for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity anomalies'):
-            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Pnm, _ = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
             Dg[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, Dg
@@ -884,7 +985,7 @@ class GlobalGeopotentialModel2D():
         dg = np.zeros((len(self.theta), len(self.lambda_)))
         
         for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity disturbances'):
-            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Pnm, _ = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
             dg[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, dg
@@ -904,7 +1005,7 @@ class GlobalGeopotentialModel2D():
         Tzz = np.zeros((len(self.theta), len(self.lambda_)))
         
         for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing vertical gradient'):
-            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Pnm, _ = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
             Tzz[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, Tzz
@@ -924,7 +1025,7 @@ class GlobalGeopotentialModel2D():
         N = np.zeros((len(self.theta), len(self.lambda_)))
         
         for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing vertical gradient'):
-            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Pnm, _ = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
             N[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, N
@@ -944,7 +1045,7 @@ class GlobalGeopotentialModel2D():
         T = np.zeros((len(self.theta), len(self.lambda_)))
         
         for i, theta_ in tqdm(enumerate(self.theta), total=len(self.theta), desc='Computing gravity anomalies'):
-            Pnm = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
+            Pnm, _ = ALF(vartheta=theta_, nmax=self.shc['nmax'], ellipsoid=self.ellipsoid)
             T[i,:] = degree_term @ ((self.shc['Cnm'] * Pnm) @ self.cosm + (self.shc['Snm'] * Pnm) @ self.sinm)
             
         return self.Lon, self.Lat, T

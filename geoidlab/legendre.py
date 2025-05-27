@@ -8,6 +8,7 @@ from geoidlab.coordinates import geodetic2spherical
 from geoidlab.numba.legendre import compute_legendre_chunk
 from numba_progress import ProgressBar
 
+from typing import Tuple
 import numpy as np
  
 def ALF(
@@ -17,27 +18,32 @@ def ALF(
     height=None, 
     nmax=60, 
     ellipsoid='wgs84'
-) -> np.ndarray:
+) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
     '''
-    Compute associated Legendre functions
+    Compute fully normalized associated Legendre functions and their first derivatives
 
     Parameters
     ----------
-    phi       : geodetic latitude (degrees)
-    lambd     : geodetic longitude (degrees)
-    vartheta  : colatitude (radians)
-    nmax      : maximum degree of expansion
-    ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+    phi                : geodetic latitude (degrees)
+    lambd              : geodetic longitude (degrees)
+    vartheta           : colatitude (radians)
+    height             : height (m)
+    nmax               : maximum degree of expansion
+    ellipsoid          : reference ellipsoid ('wgs84' or 'grs80')
+    compute_derivative : if True, compute the derivative of the associated Legendre functions
+    
     
     Returns
     -------
-    Pnm       : Fully normalized Associated Legendre functions
+    Pnm                : Fully normalized Associated Legendre functions
+    dPnm               : First derivative of the ALFs with respect to colatitude
     
     References
     ----------
     (1) Holmes and Featherstone (2002): A unified approach to the Clenshaw 
     summation and the recursive computation of very high degree and order 
     normalised associated Legendre functions (Eqs. 11 and 12)
+    (2) Colombo (1981): Numerical Methods for Harmonic Analysis on the Sphere
     '''
     if phi is None and vartheta is None:
         raise ValueError('Either phi or vartheta must be provided')
@@ -56,15 +62,21 @@ def ALF(
     # sine (u) and cosine (t) terms
     t = np.cos(phi_bar)
     u = np.sin(phi_bar)
-
-    # Initialize the Pnm array
+    u = np.where(u == 0, np.finfo(float).eps, u) # avoid division by zero
+    
+    # Initialize the Pnm and dPnm arrays
     Pnm = np.zeros((nmax + 1, nmax + 1))
+    dPnm = np.zeros((nmax + 1, nmax + 1))
+    
     Pnm[0, 0] = 1.0
+    dPnm[0, 0] = 0.0
 
     # Initialize first few values
     if nmax >= 1:
         Pnm[1, 0] = np.sqrt(3.0) * t
         Pnm[1, 1] = np.sqrt(3.0) * u
+        dPnm[1, 0] = (1.0 / u) * (t * Pnm[1, 0] - np.sqrt(3.0) * Pnm[0, 0])
+        dPnm[1, 1] = (t / u) * Pnm[1, 1]
 
     # Recursive computation of Pnm
     for n in range(2, nmax + 1):
@@ -74,11 +86,14 @@ def ALF(
             if n - m - 1 >= 0:
                 b_nm = np.sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
             Pnm[n, m] = a_nm * t * Pnm[n - 1, m] - b_nm * Pnm[n - 2, m]
+            fnm = np.sqrt((n**2.0 - m**2.0) * (2.0 * n + 1.0) / (2.0 * n - 1.0))
+            dPnm[n, m] = (1.0 / u) * (n * t * Pnm[n, m] - fnm * Pnm[n - 1, m])
 
         # Sectoral harmonics (n = m)
         Pnm[n, n] = u * np.sqrt((2. * n + 1.) / (2. * n)) * Pnm[n - 1, n - 1]
+        dPnm[n, n] = n * (t / u) * Pnm[n, n]
 
-    return Pnm
+    return Pnm, dPnm
     
 def legendre_poly(theta=None, t=None, nmax=60) -> np.ndarray:
     '''
@@ -166,21 +181,23 @@ def ALFsGravityAnomaly(
     nmax=60, 
     ellipsoid='wgs84',
     show_progress=True
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     '''
     Wrapper function to handle data and call the Numba-optimized function
 
     Parameters
     ----------
-    phi       : geodetic latitude (degrees)
-    lambd     : geodetic longitude (degrees)
-    vartheta  : colatitude (radians)
-    nmax      : maximum degree of expansion
-    ellipsoid : reference ellipsoid ('wgs84' or 'grs80')
+    phi           : geodetic latitude (degrees)
+    lambd         : geodetic longitude (degrees)
+    vartheta      : colatitude (radians)
+    nmax          : maximum degree of expansion
+    ellipsoid     : reference ellipsoid ('wgs84' or 'grs80')
+    show_progress : show progress bar
     
     Returns
     -------
-    Pnm       : Fully normalized Associated Legendre functions
+    Pnm           : Fully normalized Associated Legendre functions
+    dPnm          : First derivative of Associated Legendre functions
     '''
     if phi is None and vartheta is None:
         raise ValueError('Either phi or vartheta must be provided')
@@ -197,26 +214,65 @@ def ALFsGravityAnomaly(
     
     # Initialize Pnm array
     Pnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
+    dPnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
     Pnm[:, 0, 0] = 1.0
 
     if nmax >= 1:
         t = np.cos(phi_bar)
         u = np.sin(phi_bar)
+        u = np.where(u == 0, np.finfo(float).eps, u) # avoid division by zero
         Pnm[:, 1, 0] = np.sqrt(3.0) * t
         Pnm[:, 1, 1] = np.sqrt(3.0) * u
+        dPnm[:, 1, 0] = (1.0 / u) * (t * Pnm[:, 1, 0] - np.sqrt(3.0) * Pnm[:, 0, 0])
+        dPnm[:, 1, 1] = (t / u) * Pnm[:, 1, 1]
 
     # Initialize progress bar
     if show_progress:
         with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
             for n in range(2, nmax + 1):
-                Pnm = compute_legendre_chunk(phi_bar, n, Pnm)
+                Pnm, dPnm = compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
                 pbar.update(1)
     else:
         # print('Computing Legendre Functions...')
         for n in range(2, nmax + 1):
-            Pnm = compute_legendre_chunk(phi_bar, n, Pnm)
+            Pnm, dPnm = compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
     
-    return Pnm
+    return Pnm, dPnm
+
+def compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm) -> Tuple[np.ndarray, np.ndarray]:
+    '''
+    Compute associated Legendre functions and derivatives for a specific degree n
+
+    Parameters
+    ----------
+    phi_bar   : colatitude (radians), array-like
+    n         : degree of expansion
+    Pnm       : Associated Legendre functions array, shape (len(phi_bar), nmax+1, nmax+1)
+    dPnm      : Derivatives array, shape (len(phi_bar), nmax+1, nmax+1)
+    
+    Returns
+    -------
+    Pnm       : Updated Associated Legendre functions
+    dPnm      : Updated derivatives
+    '''
+    t = np.cos(phi_bar)
+    u = np.sin(phi_bar)
+    u = np.where(u == 0, np.finfo(float).eps, u)
+
+    for m in range(0, n):
+        a_nm = np.sqrt((2. * n - 1.) * (2. * n + 1.0) / ((n - m) * (n + m)))
+        b_nm = 0.
+        if n - m - 1 >= 0:
+            b_nm = np.sqrt((2. * n + 1.) * (n + m - 1.) * (n - m - 1.) / ((n - m) * (n + m) * (2. * n - 3.)))
+        Pnm[:, n, m] = a_nm * t * Pnm[:, n - 1, m] - b_nm * Pnm[:, n - 2, m]
+        f_nm = np.sqrt((n**2.0 - m**2.0) * (2.0 * n + 1.0) / (2.0 * n - 1.0))
+        dPnm[:, n, m] = (1.0 / u) * (n * t * Pnm[:, n, m] - f_nm * Pnm[:, n - 1, m])
+
+    # Sectoral harmonics (n = m)
+    Pnm[:, n, n] = u * np.sqrt((2. * n + 1.) / (2. * n)) * Pnm[:, n - 1, n - 1]
+    dPnm[:, n, n] = n * (t / u) * Pnm[:, n, n]
+
+    return Pnm, dPnm
 
 # TO DO: Add derivative of Legendre polynomial
 
