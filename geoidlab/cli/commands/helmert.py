@@ -112,7 +112,8 @@ class GravityReduction:
         tc_grid_size: float = 30.0,
         decimate: bool = False,
         decimate_threshold: int = 600,
-        site: bool = False
+        site: bool = False,
+        max_deg: int = 90
     ) -> None:
         self.input_file = input_file
         self.model = model
@@ -148,9 +149,11 @@ class GravityReduction:
         self.decimate_threshold = decimate_threshold
         self.ggm_tide = None
         self.site = site
+        self.max_deg = max_deg
 
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+                
         self._validate_params()
 
     def _validate_params(self) -> None:
@@ -186,7 +189,7 @@ class GravityReduction:
             raise ValueError('A GGM model must be specified with --model when --gravity-tide is used')
         if self.decimate and self.decimate_threshold < 10:
             raise ValueError('decimate_threshold must be >= 10')
-
+        
     def _process_input(self) -> None:
         '''Load input file and marine data.'''
         input_path = Path(self.input_file)
@@ -208,7 +211,7 @@ class GravityReduction:
                 self.marine_data = pd.read_csv(marine_path, delimiter='\t')
             else:
                 raise ValueError(f'Unsupported file format: {marine_path.suffix}')
-        if not all(col in self.marine_data.columns for col in ['lon', 'lat', 'height', 'Dg']):
+        if self.marine_data is not None and not all(col in self.marine_data.columns for col in ['lon', 'lat', 'height', 'Dg']):
             raise ValueError('Marine data must contain columns: lon, lat, height, and Dg')
         
     def _convert_tide_system(self) -> Path | None:
@@ -350,6 +353,79 @@ class GravityReduction:
         site_interpolated = interpolator(points)
         return site_interpolated
     
+    def _compute_ellipsoidal_correction(self) -> xr.Dataset:
+        '''Compute or load ellipsoidal correction grid.'''
+        from geoidlab.ggm import GlobalGeopotentialModel
+        
+        if not self.ggm_tide:
+            model_path = (self.model_dir / self.model).with_suffix('.gfc')
+            ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
+        
+        if not self.model:
+            raise ValueError('Please specify a GGM model for ellipsoidal correction.')
+        
+        ec_file = self.output_dir / 'Dg_ELL.nc'
+        if ec_file.exists():
+            print(f'Loading ellipsoidal correction from {ec_file}')
+            return xr.open_dataset(ec_file)
+        
+        print(f'Computing ellipsoidal correction using {self.model} model and max-deg={self.max_deg}...')
+        # Create grid for computation
+        
+        grid_size_deg = to_seconds(resolution=self.grid_size, unit=self.grid_unit) / 3600.0
+        min_lon, max_lon, min_lat, max_lat = self.bbox
+        lon_grid = np.linspace(min_lon, max_lon, int((max_lon - min_lon) / grid_size_deg) + 1)
+        lat_grid = np.linspace(min_lat, max_lat, int((max_lat - min_lat) / grid_size_deg) + 1)
+        lon, lat = np.meshgrid(lon_grid, lat_grid)
+        
+        grav_data = pd.DataFrame({
+            'lon': lon.flatten(),
+            'lat': lat.flatten(),
+            'elevation': np.zeros_like(lon.flatten())
+        })
+        
+        ggm = GlobalGeopotentialModel(
+            model_name=self.model,
+            model_dir=self.model_dir,
+            ellipsoid=self.ellipsoid,
+            grav_data=grav_data,
+            nmax=self.max_deg,
+            chunk_size=self.chunk_size
+        )
+        
+        ec = ggm.ellipsoidal_correction(parallel=self.parallel)
+        ec_grid = xr.Dataset(
+            {'Dg_ELL': (['lat', 'lon'], ec.reshape(lat.shape))},
+            coords={'lon': lon_grid, 'lat': lat_grid}
+        )
+        
+        save_to_netcdf(
+            data=ec_grid['Dg_ELL'].values,
+            lon=lon_grid,
+            lat=lat_grid,
+            dataset_key='Dg_ELL',
+            filepath=ec_file,
+            tide_system=self.ggm_tide if self.ggm_tide is None else ggm_tide
+        )
+        
+        print(f'Ellipsoidal correction saved to {ec_file}')
+        return ec_grid
+    
+    def _interpolate_ellipsoidal_correction(self, ec_grid: xr.Dataset) -> np.ndarray:
+        '''Interpolate ellipsoidal correction at lonlatheight locations.'''
+        from scipy.interpolate import RegularGridInterpolator
+        ec_values = ec_grid['Dg_ELL'].values
+        interpolator = RegularGridInterpolator(
+            (ec_grid['lat'].values, ec_grid['lon'].values),
+            ec_values,
+            method=self.interp_method,
+            bounds_error=False,
+            fill_value=0
+        )
+        points = np.vstack((self.lonlatheight['lat'], self.lonlatheight['lon'])).T
+        ec_interpolated = interpolator(points)
+        return ec_interpolated
+    
     def _grid_anomalies(self, anomalies_dataframes: dict) -> xr.Dataset:
         '''Grid anomalies over bbox with bbox_offset using Interpolators.'''
         grid_size = to_seconds(self.grid_size, self.grid_unit) / 3600.0
@@ -403,7 +479,6 @@ class GravityReduction:
             ellipsoid=self.ellipsoid,
             atm=self.atm,
             atm_method=self.atm_method,
-            ellipsoidal_correction=self.ellipsoidal_correction
         )
         
         anomaly_values = self.free_air if anomaly_type == 'free_air' else self.bouguer
@@ -471,6 +546,7 @@ class GravityReduction:
         
         # Initialize SITE values
         self.site_values = np.zeros_like(self.free_air)
+        self.ec_values   = np.zeros_like(self.free_air)
         
         if self.site:
             print('Secondary Indirect Topographic Effect (SITE) requested and will be computed')
@@ -478,7 +554,15 @@ class GravityReduction:
             self.site_values = self._interpolate_site(site_grid)
             print('Applying secondary indirect effect to Helmert anomalies...')
         
-        helmert += self.site_values
+        if self.ellipsoidal_correction:
+            if not self.model:
+                raise ValueError('A GGM model must be specified with --model for ellipsoidal correction')
+            print('Ellipsoidal correction requested and will be computed')
+            ec_grid = self._compute_ellipsoidal_correction()
+            self.ec_values = self._interpolate_ellipsoidal_correction(ec_grid)
+            print('Applying ellipsoidal correction to Helmert anomalies...')
+        
+        helmert += self.site_values + self.ec_values
         
         # Save point-wise land anomalies
         output_file_csv = self.output_dir / 'helmert.csv'
@@ -487,7 +571,9 @@ class GravityReduction:
             'lat': self.lonlatheight['lat'],
             'helmert': helmert,
             'free_air': self.free_air,
-            'terrain_correction': self.tc
+            'terrain_correction': self.tc,
+            'site': self.site_values,
+            'ellipsoidal_correction': self.ec_values
         })
         if self.bouguer is not None:
             df_land['bouguer'] = self.bouguer
@@ -578,6 +664,8 @@ def add_helmert_arguments(parser) -> None:
                         help='GGM name (e.g., EGM2008) for tide system alignment')
     parser.add_argument('-md', '--model-dir', type=str, default=None,
                         help='Directory for GGM files')
+    parser.add_argument('-n', '--max-deg', type=int, default=90,
+                        help='Maximum degree of truncation for ellipsoidal correction')
     parser.add_argument('--marine-data', type=str,
                         help='Input file with lon, lat, height, and Dg.')
     parser.add_argument('--do', type=str, default='helmert', choices=['free-air', 'bouguer', 'helmert', 'all'],
@@ -692,7 +780,8 @@ def main(args=None) -> None:
         window_mode=args.window_mode,
         decimate=args.decimate,
         decimate_threshold=args.decimate_threshold,
-        site=args.site
+        site=args.site,
+        max_deg=args.max_deg
     )
     result = reduction.run(tasks)
     print(f'Completed tasks: {", ".join(tasks)}')

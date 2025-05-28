@@ -107,6 +107,13 @@ DATASET_CONFIG = {
         'description': 'Secondary indirect effect of Helmert\'s condensation on gravity',
         'fname'      : 'Dg_SITE',
         'long_name'  : 'Secondary Indirect Effect on Gravity',
+    },
+    'Dg_ELL': {
+        'var_name'   : 'Dg_ELL',
+        'units'      : 'mGal',
+        'description': 'Ellipsoidal correction for gravity anomalies',
+        'fname'      : 'Dg_ELL',
+        'long_name'  : 'Ellipsoidal Correction on Gravity',
     }
     # Add more datasets as needed
 }

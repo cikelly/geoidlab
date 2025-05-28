@@ -69,7 +69,7 @@ class DigitalTerrainModel:
         cosm = np.cos(mlambda)
         sinm = np.sin(mlambda)
         
-        Pnm = ALFsGravityAnomaly(vartheta=theta, nmax=nmax, ellipsoid=ellipsoid, show_progress=leg_progress)
+        Pnm, _ = ALFsGravityAnomaly(vartheta=theta, nmax=nmax, ellipsoid=ellipsoid, show_progress=leg_progress)
         
         # H = 
 
@@ -136,7 +136,7 @@ class DigitalTerrainModel:
         cosm = np.cos(mlambda)
         sinm = np.sin(mlambda)
         
-        Pnm = ALF(vartheta=theta, nmax=self.nmax, ellipsoid=self.ellipsoid)
+        Pnm, _ = ALF(vartheta=theta, nmax=self.nmax, ellipsoid=self.ellipsoid)
         H = np.sum((self.HCnm * Pnm) @ cosm + (self.HSnm * Pnm) @ sinm)
         
         return float(H)
@@ -207,7 +207,7 @@ class DigitalTerrainModel:
             cosm = np.cos(mlambda)
             sinm = np.sin(mlambda)
             
-            Pnm = ALFsGravityAnomaly(
+            Pnm, _ = ALFsGravityAnomaly(
                 vartheta=theta,
                 nmax=self.nmax,
                 ellipsoid=self.ellipsoid,

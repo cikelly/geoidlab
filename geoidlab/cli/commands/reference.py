@@ -9,7 +9,7 @@ import sys
 
 import pandas as pd
 import numpy as np
-# import xarray as xr
+import xarray as xr
 
 from pathlib import Path
 
@@ -49,6 +49,11 @@ class GGMSynthesis():
             'ggm_method': 'gravity_disturbance',
             'output': {'key': 'dg', 'file': 'dg'}
         },
+        'ellipsoidal-correction': {
+            'method': 'compute_ellipsoidal_correction',
+            'ggm_method': 'ellipsoidal_correction',
+            'output': {'key': 'Dg_ELL', 'file': 'Dg_ELL'}
+        },
         # Add more tasks (e.g., disturbing_potential, second_radial_derivative)
     }
     
@@ -70,30 +75,32 @@ class GGMSynthesis():
         grid_unit: str = 'minutes',
         proj_name: str = 'GeoidProject',
         icgem: bool = False,
-        dtm_model: str | Path = None
+        dtm_model: str | Path = None,
+        ellipsoidal_correction: bool = False
     ) -> None:
         '''
         Initialize GGMSynthesis class
         
         Parameters
         ----------
-        model      : Name of GGM from ICGEM with or without .gfc
-        max_deg    : Maximum degree of truncation for synthesizing gravity functionals from GGM
-        model_dir  : Directory to store GGM or retrieve existing GGM files
-        output_dir : Directory to save output files
-        ellipsoid  : Reference ellipsoid ('wgs84' or 'grs80')
-        chunk_size : Chunk size for parallel processing
-        parallel   : Enable parallel processing
-        tide_system: Tide system of the input gravity data (mean_tide, zero_tide, tide_free)
-        converted  : If True, input data is already in the target tide system
-        input_file : Path to input file with lon, lat, height (CSV, Excel, TXT, NPY, NPZ)
-        bbox       : Bounding box [W,E,S,N] in degrees
-        bbox_offset: Offset around bounding box in degrees
-        grid_size  : Grid size in degrees, minutes, or seconds
-        grid_unit  : Unit of grid size ('degrees', 'minutes', 'seconds')
-        proj_name  : Name of project directory
-        icgem      : Use ICGEM formula for reference geoid computation (only for reference-geoid task)
-        dtm_model  : Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)
+        model                 : Name of GGM from ICGEM with or without .gfc
+        max_deg               : Maximum degree of truncation for synthesizing gravity functionals from GGM
+        model_dir             : Directory to store GGM or retrieve existing GGM files
+        output_dir            : Directory to save output files
+        ellipsoid             : Reference ellipsoid ('wgs84' or 'grs80')
+        chunk_size            : Chunk size for parallel processing
+        parallel              : Enable parallel processing
+        tide_system           : Tide system of the input gravity data (mean_tide, zero_tide, tide_free)
+        converted             : If True, input data is already in the target tide system
+        input_file            : Path to input file with lon, lat, height (CSV, Excel, TXT, NPY, NPZ)
+        bbox                  : Bounding box [W,E,S,N] in degrees
+        bbox_offset           : Offset around bounding box in degrees
+        grid_size             : Grid size in degrees, minutes, or seconds
+        grid_unit             : Unit of grid size ('degrees', 'minutes', 'seconds')
+        proj_name             : Name of project directory
+        icgem                 : Use ICGEM formula for reference geoid computation (only for reference-geoid task)
+        dtm_model             : Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)
+        ellipsoidal_correction: If True, compute ellipsoidal correction
         
         '''
         self.model = model
@@ -116,12 +123,13 @@ class GGMSynthesis():
         self.lat_grid = None
         self.icgem = icgem
         self.dtm_model = dtm_model
+        self.ellipsoidal_correction = ellipsoidal_correction
         
         # Directory setup
         directory_setup(proj_name)
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+            
         self._validate_params()
         
     def _validate_params(self) -> None:
@@ -243,9 +251,14 @@ class GGMSynthesis():
             self._process_input(task=task_name.lower())
 
         # Handle tide conversion
-        # if self.input_file:
-        converted_data_path = self._convert_tide_system(model_path)
+        converted_data_path = None
+        if ggm_method != 'ellipsoidal_correction':
+            converted_data_path = self._convert_tide_system(model_path)
 
+        # Warn if non-zero elevation for ellipsoidal correction
+        if ggm_method == 'ellipsoidal_correction' and self.lonlatheight['height'].abs().max() > 0:
+            print('Warning: Ellipsoidal correction is computed at zero elevation. Non-zero elevations provided will be ignored.')
+            
         # Initialize model
         model = GlobalGeopotentialModel(
             model_name=model_path.stem,
@@ -323,7 +336,17 @@ class GGMSynthesis():
             output_key='dg',
             output_file='dg'
         )
+    
+    def compute_ellipsoidal_correction(self) -> dict:
+        '''Compute ellipsoidal correction using GlobalGeopotentialModel.'''
+        return self._compute_functional(
+            ggm_method='ellipsoidal_correction',
+            task_name='Ellipsoidal correction',
+            output_key='Dg_ELL',
+            output_file='Dg_ELL'
+        )
 
+        
     def run(self, tasks: list) -> dict:
         results = {}
         for task in tasks:
@@ -380,13 +403,15 @@ def add_reference_arguments(parser) -> None:
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
     parser.add_argument('--dtm-model', type=str, default=None,
                         help='Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)')
+    parser.add_argument('--ell-cor', '--ellipsoidal-correction', action='store_true', default=False,
+                        help='Enable ellipsoidal correction')
 
 def main(args=None) -> int:
     if args is None:
         parser = argparse.ArgumentParser(
             description=(
                 'Calculate gravity functionals and geoid heights from a Global Geopotential Model (GGM). '
-                'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance.'
+                'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance, ellipsoidal-correction.'
             )
         )
         args = parser.parse_args()
@@ -420,7 +445,8 @@ def main(args=None) -> int:
         grid_unit=args.grid_unit,
         proj_name=args.proj_name,
         icgem=args.icgem,
-        dtm_model=args.dtm_model
+        dtm_model=args.dtm_model,
+        ellipsoidal_correction=args.ellipsoidal_correction
     )
 
     result = workflow.run(tasks)

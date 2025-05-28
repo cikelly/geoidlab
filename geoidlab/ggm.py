@@ -874,6 +874,57 @@ class GlobalGeopotentialModel:
         else:
             return self.disturbing_potential_derivative_sequential(r_or_R=r_or_R)
 
+    def ellipsoidal_correction(self, parallel: bool = True, r_or_R='r') -> np.ndarray:
+        '''
+        Compute the ellipsoidal correction for gravity anomalies
+        
+        Parameters
+        ----------
+        parallel  : whether to use parallel processing
+        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        
+        Returns
+        -------
+        Dg_ell    : Ellipsoidal correction [mGal], shaped as input coordinates or grid
+        
+        References
+        ----------
+        1. Jekeli (1981): The Downward Continuation to the Earth's Surface of Truncated Spherical and Ellipsoidal Harmonic Series of the Gravity and Height Anomalies
+        '''
+        if not all(col in self.grav_data.columns for col in ['lat', 'lon', 'elevation']):
+            raise ValueError('grav_data must contain columns: lat, lon, elevation')
+        
+        print('Ellipsoidal correction requires the disturbing potential and its derivative.\nComputing disturbing potential...')
+        T = self.disturbing_potential(r_or_R=r_or_R, parallel=parallel)
+        print('Computing the first derivative of disturbing potential with respect to colatitude...')
+        dT = self.disturbing_potential_derivative(parallel=parallel, r_or_R=r_or_R)
+        
+        print('Computing ellipsoidal correction...')
+        # Convert geodetic to spherical coordinates
+        _, vartheta, _ = co.geodetic2spherical(
+            phi=self.grav_data['lat'].values,
+            lambd=self.grav_data['lon'].values,
+            height=self.grav_data['elevation'].values,
+            ellipsoid=self.ellipsoid
+        )
+        # Get ellipsoid parameters
+        ellipsoid = constants.wgs84() if self.ellipsoid.lower() == 'wgs84' else constants.grs80()
+        e2 = ellipsoid['e2']
+        R = ellipsoid['semi_major']
+        
+        # Compute correction terms
+        sin_theta = np.sin(vartheta)
+        cos_theta = np.cos(vartheta)
+        term1 = -(e2 / R) * sin_theta * cos_theta * dT
+        term2 = (e2 / R) * (3 * cos_theta**2 - 2) * T
+        
+        # Total correction in mGal
+        Delta_g_ell = (term1 + term2) * 1e5
+        
+        print('Ellipsoidal correction computed successfully.')
+        return Delta_g_ell
+
+        
 class GlobalGeopotentialModel2D():
     def __init__(
         self, 
