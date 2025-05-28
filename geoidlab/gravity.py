@@ -236,27 +236,6 @@ def atm_correction(elevation, method='noaa') -> np.ndarray[float]:
     return atm_corr
 
 
-    
-
-
-# def ellipsoidal_correction() -> np.ndarray[float]:
-#     '''
-#     Ellipsoidal correction for gravity anomalies
-    
-#     Returns
-#     -------
-#     ellipsoidal_corr : ellipsoidal correction (mgal)
-    
-#     Notes
-#     -----
-#     1. Torge, Muller and Pail (2023), Geodesy (5th Edition), Page 149
-#     2. Equation 4.43
-#     '''
-#     # Implement later
-#     pass 
-    
-
-
 def gravity_reduction(gravity, elevation) -> tuple:
     '''
     Free-air and Bouguer gravity reductions
