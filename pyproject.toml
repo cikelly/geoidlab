@@ -47,8 +47,10 @@ classifiers = [
 dynamic = ["version"]
 
 [tool.setuptools_scm]
-write_to = "geoidlab/_version.py"
+version_scheme = "release-branch-semver"
 local_scheme = "no-local-version"
+write_to = "geoidlab/_version.py"
+write_to_template = '__version__ = "{version}"'
 description = 'GeoidLab: A Modular and Automated Python Package for Geoid Computation'
 authors = [
     { name='Caleb Kelly', email='geo.calebkelly@gmail.com' }

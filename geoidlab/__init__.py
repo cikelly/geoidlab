@@ -4,9 +4,12 @@ GeoidLab - A Python package for geoid modeling and terrain computations.
 from pathlib import Path
 
 try:
-    from ._version import version as __version__
-except ImportError:
-    # If the package is not installed in development mode or from source
+    try:
+        from ._version import __version__
+    except ImportError:
+        from setuptools_scm import get_version
+        __version__ = get_version(root='..', relative_to=__file__)
+except Exception:
     __version__ = "0.0.0"
 
 __author__ = 'Caleb Kelly'
