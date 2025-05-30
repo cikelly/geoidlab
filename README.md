@@ -36,8 +36,7 @@ mamba install -c conda-forge geoidlab -y
 Test installation
 
 ```
-compute_geoid.py -h
-compute_reference_geoid.py -h
+
 ```
 ## Examples
 - Prepare data: This includes all relevant data for your study area:
@@ -47,7 +46,7 @@ compute_reference_geoid.py -h
   - Digital Elevation Model (DEM). `GeoidLab` presently downloads SRTM30PLUS
 - Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
   ensure that they are free-air anomalies
-- Call `compute_geoid.py --start [step]`
+- Call ``
 
 See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for examples of using `GeoidLab`.
 
