@@ -49,8 +49,13 @@ dynamic = ["version"]
 [tool.setuptools_scm]
 version_scheme = "release-branch-semver"
 local_scheme = "no-local-version"
-write_to = "geoidlab/_version.py"
-write_to_template = '__version__ = "{version}"'
+write_to = "geoidlab/__version__.py"
+write_to_template = '''# filepath: geoidlab/__version__.py
+'''Version information.'''
+__version__ = "{version}"
+__author__ = 'Caleb Kelly'
+__email__ = 'geo.calebkelly@gmail.com'
+'''
 description = 'GeoidLab: A Modular and Automated Python Package for Geoid Computation'
 authors = [
     { name='Caleb Kelly', email='geo.calebkelly@gmail.com' }
