@@ -16,7 +16,18 @@ Functions
 Coefficients
 src_old
 MATLAB
-geoidlab.egg-info
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.egg
+*.pyc
+*.pyo
+*.pyd
+
+# Development files
 geoid1.py
 legendre1.py
 stokes_func1.py
