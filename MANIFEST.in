@@ -1,0 +1,22 @@
+include LICENSE
+include README.md
+include requirements.txt
+include pyproject.toml
+
+# Documentation files
+recursive-include docs *.cfg
+recursive-include docs *.png
+
+# Package data files
+recursive-include geoidlab *.cpt
+recursive-include geoidlab *.json
+recursive-include geoidlab *.txt
+recursive-include geoidlab *.xz
+recursive-include geoidlab *.yaml
+
+# Exclude development and test files
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .git*
+global-exclude .DS_Store
