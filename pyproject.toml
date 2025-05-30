@@ -48,7 +48,7 @@ dynamic = ["version"]
 
 [tool.setuptools_scm]
 write_to = "geoidlab/_version.py"
-version_scheme = "post-release"
+local_scheme = "no-local-version"
 description = 'GeoidLab: A Modular and Automated Python Package for Geoid Computation'
 authors = [
     { name='Caleb Kelly', email='geo.calebkelly@gmail.com' }
