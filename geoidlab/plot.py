@@ -10,7 +10,7 @@ import scipy.interpolate
 import xarray as xr
 
 from geoidlab.utils.interpolators import Interpolators
-from mpl_toolkits.basemap import Basemap
+# from mpl_toolkits.basemap import Basemap
 
 from geoidlab import gravity as pygrav
 from geoidlab.ggm import GlobalGeopotentialModel
@@ -362,85 +362,85 @@ def plot_degree_variances() -> None:
     pass
 
 
-def drape_over_topography(
-    lons, 
-    lats, 
-    values, 
-    topography, 
-    cmap='RdBu', 
-    vmin=None, 
-    vmax=None, 
-    figsize=(10,5)
-) -> None:
-    """
-    Plot variable values over a topography map.
+# def drape_over_topography(
+#     lons, 
+#     lats, 
+#     values, 
+#     topography, 
+#     cmap='RdBu', 
+#     vmin=None, 
+#     vmax=None, 
+#     figsize=(10,5)
+# ) -> None:
+#     """
+#     Plot variable values over a topography map.
 
-    Parameters:
-    -----------
-    lons : 1D array
-        Longitude coordinates of values.
-    lats : 1D array
-        Latitude coordinates of values.
-    values : 1D array
-        Values to be plotted.
-    topography : 2D array
-        Topography data.
-    cmap : str or colormap, optional, default: 'RdBu'
-        Colormap to use.
-    vmin : float, optional, default: None
-        Minimum value for colorbar.
-    vmax : float, optional, default: None
-        Maximum value for colorbar.
-    figsize : tuple, optional, default: (10,5)
-        Figure size.
+#     Parameters:
+#     -----------
+#     lons : 1D array
+#         Longitude coordinates of values.
+#     lats : 1D array
+#         Latitude coordinates of values.
+#     values : 1D array
+#         Values to be plotted.
+#     topography : 2D array
+#         Topography data.
+#     cmap : str or colormap, optional, default: 'RdBu'
+#         Colormap to use.
+#     vmin : float, optional, default: None
+#         Minimum value for colorbar.
+#     vmax : float, optional, default: None
+#         Maximum value for colorbar.
+#     figsize : tuple, optional, default: (10,5)
+#         Figure size.
 
-    Returns:
-    --------
-    None
-    """
-    # Make a Basemap object
-    m = Basemap(projection='cyl', llcrnrlat=lats.min(), urcrnrlat=lats.max(),
-                llcrnrlon=lons.min(), urcrnrlon=lons.max(), resolution='c')
+#     Returns:
+#     --------
+#     None
+#     """
+#     # Make a Basemap object
+#     m = Basemap(projection='cyl', llcrnrlat=lats.min(), urcrnrlat=lats.max(),
+#                 llcrnrlon=lons.min(), urcrnrlon=lons.max(), resolution='c')
 
-    # Calculate the grid coordinates
-    x, y = m(lons, lats)
+#     # Calculate the grid coordinates
+#     x, y = m(lons, lats)
 
-    # Create a mask for the topography
-    mask = np.isnan(topography)
+#     # Create a mask for the topography
+#     mask = np.isnan(topography)
 
-    # Create a figure and axes
-    fig, ax = plt.subplots(figsize=figsize)
+#     # Create a figure and axes
+#     fig, ax = plt.subplots(figsize=figsize)
 
-    # Plot the topography
-    m.imshow(topography, cmap='terrain', interpolation='nearest',
-             extent=(lons.min(), lons.max(), lats.min(), lats.max()))
+#     # Plot the topography
+#     m.imshow(topography, cmap='terrain', interpolation='nearest',
+#              extent=(lons.min(), lons.max(), lats.min(), lats.max()))
 
-    # Plot the values
-    im = m.pcolor(x, y, values, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
+#     # Plot the values
+#     im = m.pcolor(x, y, values, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
 
-    # Set the colorbar
-    cbar = m.colorbar(im, location='right', pad='10%')
+#     # Set the colorbar
+#     cbar = m.colorbar(im, location='right', pad='10%')
 
-    # Set the title
-    ax.set_title('Variable values over topography')
+#     # Set the title
+#     ax.set_title('Variable values over topography')
 
-    # Set the extent of the plot
-    m.set_extent([lons.min(), lons.max(), lats.min(), lats.max()])
+#     # Set the extent of the plot
+#     m.set_extent([lons.min(), lons.max(), lats.min(), lats.max()])
 
-    # Set the masked area to white
-    m.drawmapboundary(fill_color='white')
+#     # Set the masked area to white
+#     m.drawmapboundary(fill_color='white')
 
-    # Draw the coastlines
-    m.drawcoastlines()
+#     # Draw the coastlines
+#     m.drawcoastlines()
 
-    # Draw the parallels
-    m.drawparallels(np.arange(-90, 91, 30))
+#     # Draw the parallels
+#     m.drawparallels(np.arange(-90, 91, 30))
 
-    # Draw the meridians
-    m.drawmeridians(np.arange(-180, 181, 60))
+#     # Draw the meridians
+#     m.drawmeridians(np.arange(-180, 181, 60))
 
-    # Show the plot
-    plt.show()
+#     # Show the plot
+#     plt.show()
 
 # TODO: Add function to drape variable over topography
 

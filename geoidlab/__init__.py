@@ -8,7 +8,10 @@ from .__version__ import __version__
 __author__ = 'Caleb Kelly'
 __email__ = 'geo.calebkelly@gmail.com'
 
-# Read license
-with open(Path(__file__).parent.parent / 'LICENSE', 'r') as f:
-    __license__ = f.readlines()
+# Get license info
+try:
+    with open(Path(__file__).parent.parent / 'LICENSE', 'r') as f:
+        __license__ = f.readlines()
+except FileNotFoundError:
+    __license__ = "GPL-3.0-or-later"
     
