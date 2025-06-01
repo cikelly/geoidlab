@@ -244,7 +244,8 @@ class GGMSynthesis():
         '''Compute a gravity functional using GlobalGeopotentialModel.'''
         print(f'\nComputing {task_name.title()} with max_deg={self.max_deg}, ellipsoid={self.ellipsoid}')
         model_path = (self.model_dir / self.model).with_suffix('.gfc')
-        output_file = self.output_dir / f'{output_file}.{'csv' if self.input_file else 'nc'}'
+        extension = 'csv' if self.input_file else 'nc'
+        output_file = self.output_dir / f'{output_file}.{extension}'
 
         # Process input if not already done
         if self.lonlatheight is None:

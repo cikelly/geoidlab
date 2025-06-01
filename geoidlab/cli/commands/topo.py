@@ -190,7 +190,7 @@ class TopographicQuantities:
             progress=True
         )
         self.tc = result
-        output_file = self.output_dir / f'{self.TASK_CONFIG['terrain-correction']['output']['file']}.nc'
+        output_file = self.output_dir / f"{self.TASK_CONFIG['terrain-correction']['output']['file']}.nc"
         return {
             'status': 'success',
             'output_file': str(output_file)
@@ -208,7 +208,7 @@ class TopographicQuantities:
             progress=True,
             tc=self.tc
         )
-        output_file = self.output_dir / f'{self.TASK_CONFIG["rtm-anomaly"]["output"]["file"]}.nc'
+        output_file = self.output_dir / f"{self.TASK_CONFIG['rtm-anomaly']['output']['file']}.nc"
         return {
             'status': 'success',
             'output_file': str(output_file)
@@ -216,7 +216,7 @@ class TopographicQuantities:
     
     def compute_ind(self) -> dict:
         '''Compute indirect effect'''
-        output_file = self.output_dir / f'{self.TASK_CONFIG["indirect-effect"]["output"]["file"]}.nc'
+        output_file = self.output_dir / f"{self.TASK_CONFIG['indirect-effect']['output']['file']}.nc"
         if output_file.exists():
             print(f'Indirect effect exists. To recompute, please delete existing NetCDF file and rerun. Skipping computation...')
             return {
@@ -246,7 +246,7 @@ class TopographicQuantities:
             chunk_size=self.chunk_size,
             progress=True
         )
-        output_file = self.output_dir / f'{self.TASK_CONFIG["height-anomaly"]["output"]["file"]}.nc'
+        output_file = self.output_dir / f"{self.TASK_CONFIG['height-anomaly']['output']['file']}.nc"
         return {
             'status': 'success',
             'output_file': str(output_file)
@@ -259,7 +259,7 @@ class TopographicQuantities:
             self._initialize_terrain()
             
         result = self.tq.secondary_indirect_effect()
-        output_file = self.output_dir / f'{self.TASK_CONFIG["site"]["output"]["file"]}.nc'
+        output_file = self.output_dir / f"{self.TASK_CONFIG['site']['output']['file']}.nc"
         return {
             'status': 'success',
             'output_file': str(output_file)
