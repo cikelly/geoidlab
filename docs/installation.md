@@ -26,7 +26,7 @@ pip install -e .
 
 ## Dependencies
 
-GeoidLab requires Python 3.8 or later. The main dependencies are:
+GeoidLab requires Python 3.10 or later. The main dependencies are:
 
 - numpy
 - scipy
