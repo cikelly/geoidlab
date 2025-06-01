@@ -22,8 +22,8 @@ except ImportError:
 
 # -- General configuration ---------------------------------------------------
 # Explicitly set the master document and root doc
-master_doc = 'index'
-root_doc = 'index'
+master_doc = 'contents'
+root_doc = 'contents'
 
 # Basic project information
 project = 'GeoidLab'
