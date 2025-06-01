@@ -162,36 +162,6 @@ We welcome contributions! To contribute:
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
 
 
-The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
-
-- the original Stokes' kernel
-- Wong and Gore's modification of Stokes' kernel
-- Heck and Gruninger's modification of Stokes' kernel
-- Terrain correction
-- Residual Terrain Modeling (RTM)
-
-`GeoidLab` uses the remove-compute-restore (RCR) method for geoid calculation. It is designed to be almost entirely automated.
-
-- Automatically downloads [SRTM30PLUS](https://topex.ucsd.edu/pub/srtm30_plus/srtm30/grd/) over the bounding box of interest
-- Downloads multiple SRTM30PLUS tiles if bounding box extends over multiple tiles
-- Automatically downloads a GGM from [ICGEM](https://icgem.gfz-potsdam.de/tom_longtime)
-- Uses a template file so that users do not have to interact with the scripts
-- Can automatically download other DEMs (e.g., Copernicus DEM, NASADEM, and GEBCO). Default is SRTM30PLUS
-
-## Examples
-- Prepare data: This includes all relevant data for your study area:
-  - Terrestrial gravity data
-  - Marine gravity data (optional)
-  - Global Geopotential Model (GGM). `GeoidLab` can automatically download this. Just provide the name of the GGM in the template file
-  - Digital Elevation Model (DEM). `GeoidLab` downloads srtm30plus, srtm, cop, nasadem, and gebco
-- Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
-  ensure that they are free-air anomalies
-- Create configuration file
-  - In terminal, navigate to your work directory and run `geoidlab -c` to create the config file
-  - Edit configuration file 
-- Execute program
-  - `geoidlab -c geoidlab.cfg`
-
 See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for detailed examples of using `GeoidLab`.
 
 ## References
