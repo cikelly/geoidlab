@@ -12,18 +12,39 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
 
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgeos-dev proj-bin libproj-dev
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest
-    - name: Run tests
+        pip install pytest pytest-cov
+        pip install -e .
+    
+    - name: List installed packages
       run: |
-        pytest
+        pip list
+    
+    - name: Run tests with coverage
+      run: |
+        pytest --cov=geoidlab --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
