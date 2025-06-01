@@ -58,21 +58,6 @@ __author__ = 'Caleb Kelly'
 __email__ = 'geo.calebkelly@gmail.com'
 """
 
-[tool.setuptools]
-package-dir = {"" = "."}
-packages = ["geoidlab", "geoidlab.cli", "geoidlab.cli.commands", "geoidlab.cli.commands.utils", 
-           "geoidlab.cli.old", "geoidlab.cli.old.commands", "geoidlab.cli.old.templates", 
-           "geoidlab.cli.utils", "geoidlab.mapping", "geoidlab.numba", "geoidlab.utils", 
-           "geoidlab.data", "geoidlab.mapping.cpt"]
-include-package-data = true
-
-[tool.setuptools.package-data]
-"geoidlab.mapping.cpt" = ["*.cpt"]
-"geoidlab.data" = ["*.xz", "*.txt"]
-
-[tool.setuptools.exclude-package-data]
-"*" = ["*.DS_Store", ".DS_Store"]
-
 [project.urls]
 Homepage = 'https://github.com/cikelly/geoidlab'
 Documentation = 'https://geoidlab.readthedocs.io'
@@ -95,6 +80,15 @@ dev = [
 
 [project.scripts]
 geoidlab = 'geoidlab.cli.main:main'
+
+[tool.setuptools]
+package-dir = {"" = "."}
+package-data = { geoidlab = ["LICENSE"] }
+
+[tool.setuptools.packages.find]
+where = ['.']
+include = ['geoidlab*']
+exclude = ['tests*', 'docs*']
 
 [tool.black]
 line-length = 88
