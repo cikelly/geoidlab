@@ -1,6 +1,6 @@
 # GeoidLab
 
-[![Language](https://img.shields.io/badge/python-3.8%2B-blue.svg?style=flat-square)](https://www.python.org/)
+[![Language](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square)](https://www.python.org/)
 [![PyPI version](https://img.shields.io/pypi/v/geoidlab.svg?style=flat-square)](https://pypi.org/project/geoidlab/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/tests.yml?style=flat-square&label=tests)](https://github.com/cikelly/geoidlab/actions)
@@ -88,7 +88,7 @@ pip install geoidlab
 ```
 
 ### Troubleshooting
-- Ensure you have Python 3.8 or higher installed
+- Ensure you have Python 3.10 or higher installed
 - For `conda`/`mamba`, make sure the `conda-forge` channel is enabled
 - Install required dependencies listed in `requirements.txt`
 
