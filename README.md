@@ -1,5 +1,14 @@
 # GeoidLab
 
+[![Language](https://img.shields.io/badge/python-3.8%2B-blue.svg?style=flat-square)](https://www.python.org/)
+[![PyPI version](https://img.shields.io/pypi/v/geoidlab.svg?style=flat-square)](https://pypi.org/project/geoidlab/)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/tests.yml?style=flat-square&label=tests)](https://github.com/cikelly/geoidlab/actions)
+[![Documentation Status](https://readthedocs.org/projects/geoidlab/badge/?version=latest&style=flat-square)](https://geoidlab.readthedocs.io/en/latest/?badge=latest)
+[![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/geoidlab?color=green&style=flat-square&label=conda%20downloads)](https://anaconda.org/conda-forge/geoidlab)
+[![GitHub Release](https://img.shields.io/github/v/release/cikelly/geoidlab?color=yellow&label=version&style=flat-square)](https://github.com/cikelly/geoidlab/releases)
+
+---
 <div align="center">
   <img src="docs/logo/logo.png" alt="Logo" width="200"/>
 </div>
@@ -8,11 +17,7 @@
 
 **`GeoidLab`: A Modular and Automated Python Package for Geoid Computation.**
 
-[![PyPI version](https://badge.fury.io/py/geoidlab.svg)](https://badge.fury.io/py/geoidlab)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/build.yml)](https://github.com/cikelly/geoidlab/actions)
 
----
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -153,7 +158,7 @@ We welcome contributions! To contribute:
 4. Submit a pull request.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
 
 
 The package comes packed with utilities for estimating a geoid model using Stokes' method, with options for:
@@ -172,29 +177,21 @@ The package comes packed with utilities for estimating a geoid model using Stoke
 - Uses a template file so that users do not have to interact with the scripts
 - Can automatically download other DEMs (e.g., Copernicus DEM, NASADEM, and GEBCO). Default is SRTM30PLUS
 
-## Installation
-`GeoidLab` can be installed using conda/mamba or pip.
-  
-```
-conda create -n geoid_env -y
-mamba install -c conda-forge geoidlab -y
-```      
-Test installation
-
-```
-
-```
 ## Examples
 - Prepare data: This includes all relevant data for your study area:
   - Terrestrial gravity data
-  - Marine gravity data
+  - Marine gravity data (optional)
   - Global Geopotential Model (GGM). `GeoidLab` can automatically download this. Just provide the name of the GGM in the template file
-  - Digital Elevation Model (DEM). `GeoidLab` presently downloads SRTM30PLUS
+  - Digital Elevation Model (DEM). `GeoidLab` downloads srtm30plus, srtm, cop, nasadem, and gebco
 - Ensure that the terrestrial gravity data has columns `lon`, `lat`, `gravity`, and `height`. If you are providing gravity anomalies,
   ensure that they are free-air anomalies
-- Call ``
+- Create configuration file
+  - In terminal, navigate to your work directory and run `geoidlab -c` to create the config file
+  - Edit configuration file 
+- Execute program
+  - `geoidlab -c geoidlab.cfg`
 
-See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for examples of using `GeoidLab`.
+See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for detailed examples of using `GeoidLab`.
 
 ## References
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
