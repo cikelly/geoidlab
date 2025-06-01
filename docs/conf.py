@@ -7,14 +7,23 @@ author = 'Caleb Kelly'
 
 # The full version, including alpha/beta/rc tags
 try:
-    import geoidlab
-    version = geoidlab.__version__
+    from geoidlab import __version__ as version
     release = version
 except ImportError:
-    version = "0.1.0"
-    release = version
+    import os
+    import sys
+    sys.path.insert(0, os.path.abspath('..'))
+    try:
+        from geoidlab import __version__ as version
+        release = version
+    except ImportError:
+        version = "0.1.0"
+        release = version
 
 # -- General configuration ---------------------------------------------------
+# Explicitly set the master document
+master_doc = 'index'
+
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
@@ -22,7 +31,33 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.autosummary',
     'sphinx_rtd_theme',
+    'myst_parser',
+    'sphinx.ext.mathjax',
+    'nbsphinx',
+    'sphinx_copybutton',
 ]
+
+# Ensure all auto-generated API docs are created
+autosummary_generate = True
+autodoc_member_order = 'bysource'
+
+# Markdown configuration
+myst_enable_extensions = [
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "replacements",
+    "smartquotes",
+    "substitution",
+    "tasklist",
+]
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
