@@ -1,5 +1,11 @@
 [build-system]
-requires = ['setuptools>=42', 'wheel', 'setuptools_scm[toml]>=6.2']
+requires = [
+    'setuptools>=42',
+    'wheel',
+    'setuptools_scm[toml]>=6.2',
+    'pytest>=6.0',
+    'pytest-cov>=2.12'
+]
 build-backend = 'setuptools.build_meta'
 
 [project]
@@ -9,7 +15,7 @@ authors = [
     { name='Caleb Kelly', email='geo.calebkelly@gmail.com' }
 ]
 readme = 'README.md'
-license = "GPL-3.0-or-later"
+license = { file = "LICENSE" }
 requires-python = '>=3.8,<3.13'
 dependencies = [
     'numpy>=1.20.0,<2.0.0',
@@ -49,6 +55,14 @@ dynamic = ["version"]
 
 [tool.setuptools_scm]
 version_scheme = "release-branch-semver"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --cov=geoidlab --cov-report=xml --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 local_scheme = "no-local-version"
 write_to = "geoidlab/__version__.py"
 write_to_template = """
