@@ -318,23 +318,23 @@ class GravityReduction:
             return site_grid
         
         if not hasattr(self, 'topo_workflow'):
-            topo_workflow = TopographicQuantities(
-            topo=self.topo,
-            model_dir=self.model_dir,
-            output_dir=self.output_dir,
-            ellipsoid=self.ellipsoid,
-            chunk_size=self.chunk_size,
-            radius=self.radius,
-            proj_name=self.proj_name,
-            bbox=self.bbox,
-            bbox_offset=self.bbox_offset,
-            grid_size=self.tc_grid_size,
-            window_mode=self.window_mode,
-            parallel=self.parallel,
-            interp_method=self.interp_method
-        )
-        topo_workflow._initialize_terrain()
-        site = topo_workflow.run(['site'])
+            self.topo_workflow = TopographicQuantities(
+                topo=self.topo,
+                model_dir=self.model_dir,
+                output_dir=self.output_dir,
+                ellipsoid=self.ellipsoid,
+                chunk_size=self.chunk_size,
+                radius=self.radius,
+                proj_name=self.proj_name,
+                bbox=self.bbox,
+                bbox_offset=self.bbox_offset,
+                grid_size=self.tc_grid_size,
+                window_mode=self.window_mode,
+                parallel=self.parallel,
+                interp_method=self.interp_method
+            )
+        self.topo_workflow._initialize_terrain()
+        site = self.topo_workflow.run(['site'])
         site_file = site['output_files'][0]
         site_grid = xr.open_dataset(site_file)
         return site_grid
