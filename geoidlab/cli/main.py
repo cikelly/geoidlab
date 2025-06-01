@@ -32,7 +32,8 @@ def main() -> None:
         ),
         epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo'
     )
-    parser.add_argument('-v', '--version', action='version', version='geoidlab 1.0.0')
+    from geoidlab.__version__ import __version__
+    parser.add_argument('-v', '--version', action='version', version=f'geoidlab {__version__}')
     parser.add_argument('-c', '--config', nargs='?', default=None, action=ConfigAction, 
                         help='Path to configuration file (e.g., geoidlab.cfg). If not provided, copies from geoidlab/docs/geoidlab.cfg to the current directory.')
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)

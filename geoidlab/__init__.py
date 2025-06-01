@@ -1,17 +1,16 @@
 '''
 GeoidLab - A Python package for geoid modeling and terrain computations.
 '''
-from pathlib import Path
+from importlib.metadata import metadata
 
 from .__version__ import __version__
 
 __author__ = 'Caleb Kelly'
 __email__ = 'geo.calebkelly@gmail.com'
 
-# Get license info
+# Get license info from package metadata
 try:
-    with open(Path(__file__).parent.parent / 'LICENSE', 'r') as f:
-        __license__ = f.readlines()
-except FileNotFoundError:
+    __license__ = metadata('geoidlab')['License']
+except Exception:
     __license__ = "GPL-3.0-or-later"
     
