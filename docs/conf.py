@@ -21,9 +21,8 @@ except ImportError:
         release = version
 
 # -- General configuration ---------------------------------------------------
-# Explicitly set the master document and root doc
-master_doc = 'contents'
-root_doc = 'contents'
+# Explicitly set the master document
+master_doc = 'index'
 
 # Basic project information
 project = 'GeoidLab'
