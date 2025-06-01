@@ -7,8 +7,8 @@
 import argparse
 import sys
 import shutil
-
 from pathlib import Path
+import glob
 
 from geoidlab.cli.commands.reference import add_reference_arguments, main as ggm_main
 from geoidlab.cli.commands.topo import add_topo_arguments, main as topo_main
@@ -17,6 +17,36 @@ from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
 from geoidlab.cli.utils.config_parser import parse_config_file
+
+def auto_visualize(args) -> None:
+    """Run visualization on any NetCDF files in the results directory."""
+    # Skip auto-visualization if this was already a viz command
+    if getattr(args, 'subcommand', None) == 'viz':
+        return
+        
+    # Check if save=True is set in config 
+    if not getattr(args, 'save', True):  # Default to True if not set
+        return
+        
+    # Get all NetCDF files in results directory
+    results_dir = Path(getattr(args, 'proj_name', 'GeoidProject')) / 'results'
+    if not results_dir.exists():
+        return
+        
+    nc_files = list(results_dir.glob('*.nc'))
+    if not nc_files:
+        return
+        
+    # Clone the argparse namespace for viz command
+    import copy
+    viz_args = copy.deepcopy(args)
+    viz_args.subcommand = 'viz'
+    viz_args.save = True
+    
+    # Process each NetCDF file
+    for nc_file in nc_files:
+        viz_args.filename = str(nc_file)
+        plot_main(viz_args)
 
 
 class ConfigAction(argparse.Action):
@@ -107,8 +137,14 @@ def main() -> None:
     if not args.subcommand:
         parser.print_help()
         sys.exit(1)
+        
+    # Run the command
+    result = args.func(args)
     
-    return args.func(args)
+    # Auto-visualize any output files if save=True
+    auto_visualize(args)
+    
+    return result
     
     
 if __name__ == '__main__':
