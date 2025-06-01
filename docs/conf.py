@@ -1,11 +1,18 @@
-Project = 'GeoidLab'
+# Configuration file for the Sphinx documentation builder.
+
+# -- Project information -----------------------------------------------------
+project = 'GeoidLab'
 copyright = '2024-2025, Caleb Kelly'
 author = 'Caleb Kelly'
 
 # The full version, including alpha/beta/rc tags
-import geoidlab
-version = geoidlab.__version__
-release = version
+try:
+    import geoidlab
+    version = geoidlab.__version__
+    release = version
+except ImportError:
+    version = "0.1.0"
+    release = version
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -24,7 +31,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-html_logo = 'logo/logo.png'
+html_logo = None  # We'll add the logo back once we confirm basic build works
 html_theme_options = {
     'logo_only': False,
     'display_version': True,
