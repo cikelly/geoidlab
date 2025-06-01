@@ -21,8 +21,14 @@ except ImportError:
         release = version
 
 # -- General configuration ---------------------------------------------------
-# Explicitly set the master document
+# Explicitly set the master document and root doc
 master_doc = 'index'
+root_doc = 'index'
+
+# Basic project information
+project = 'GeoidLab'
+copyright = '2024-2025, Caleb Kelly'
+author = 'Caleb Kelly'
 
 extensions = [
     'sphinx.ext.autodoc',

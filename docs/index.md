@@ -1,8 +1,18 @@
-# GeoidLab Documentation
+# Welcome to GeoidLab
 
-```{include} ../README.md
-:start-after: # GeoidLab
-:end-before: ## Installation
+```{toctree}
+:caption: Documentation
+:hidden:
+
+self
+```
+
+GeoidLab is a Python package designed for geoid computation using the remove-compute-restore (RCR) method. It provides a comprehensive toolkit for automated geoid computation, handling everything from data preparation to final geoid model generation.
+
+```{admonition} Latest Release
+:class: note
+
+Version {sub-ref}`version` is now available! Check the {doc}`installation` guide to get started.
 ```
 
 ## Documentation Contents
