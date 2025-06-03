@@ -59,7 +59,7 @@ class ConfigAction(argparse.Action):
         setattr(namespace, self.dest, values if values is not None else '__COPY_TEMPLATE__')
 
 def main() -> None:
-    print('Running main function')
+    # sourcery skip: extract-duplicate-method, extract-method, remove-redundant-exception, simplify-single-exception-tuple
     parser = argparse.ArgumentParser(
         description=(
             'GeoidLab: A toolkit for geodetic computations including gravity reductions, '
@@ -143,11 +143,17 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
         
+    print('********************************************************************************************************************')
+    print('                                           Subcommand:', args.subcommand)
+    print('********************************************************************************************************************')
+    if args.subcommand == 'geoid':
+        print('User requested entire geoid computation workflow. NetCDF files will be saved by defualt.')
+        args.save = True  # Default to True for geoid command
+        
     # Run the command
     result = args.func(args)
     
     # Auto-visualize any output files if save=True
-    print('Auto-visualizing output files...')
     auto_visualize(args)
     
     return result
