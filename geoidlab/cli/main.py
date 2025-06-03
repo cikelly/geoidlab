@@ -19,22 +19,26 @@ from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf
 from geoidlab.cli.utils.config_parser import parse_config_file
 
 def auto_visualize(args) -> None:
-    """Run visualization on any NetCDF files in the results directory."""
+    '''Run visualization on any NetCDF files in the results directory.'''
     # Skip auto-visualization if this was already a viz command
     if getattr(args, 'subcommand', None) == 'viz':
+        print('Auto-visualization skipped since this was already a viz command.')
         return
         
     # Check if save=True is set in config 
     if not getattr(args, 'save', True):  # Default to True if not set
+        print('Auto-visualization skipped since save=True is not set in config.')
         return
         
     # Get all NetCDF files in results directory
     results_dir = Path(getattr(args, 'proj_name', 'GeoidProject')) / 'results'
     if not results_dir.exists():
+        print('Auto-visualization skipped since results directory does not exist.')
         return
         
     nc_files = list(results_dir.glob('*.nc'))
     if not nc_files:
+        print('Auto-visualization skipped since no NetCDF files found in results directory.')
         return
         
     # Clone the argparse namespace for viz command
@@ -55,6 +59,7 @@ class ConfigAction(argparse.Action):
         setattr(namespace, self.dest, values if values is not None else '__COPY_TEMPLATE__')
 
 def main() -> None:
+    print('Running main function')
     parser = argparse.ArgumentParser(
         description=(
             'GeoidLab: A toolkit for geodetic computations including gravity reductions, '
@@ -142,6 +147,7 @@ def main() -> None:
     result = args.func(args)
     
     # Auto-visualize any output files if save=True
+    print('Auto-visualizing output files...')
     auto_visualize(args)
     
     return result
