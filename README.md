@@ -6,7 +6,6 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/tests.yml?style=flat-square&label=tests)](https://github.com/cikelly/geoidlab/actions)
 [![Coverage](https://img.shields.io/codecov/c/github/cikelly/geoidlab?style=flat-square)](https://codecov.io/gh/cikelly/geoidlab)
 [![Documentation Status](https://readthedocs.org/projects/geoidlab/badge/?version=latest&style=flat-square)](https://geoidlab.readthedocs.io/en/latest/?badge=latest)
-#[![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/geoidlab?color=green&style=flat-square&label=conda%20downloads)](https://anaconda.org/conda-forge/geoidlab)
 [![GitHub Release](https://img.shields.io/github/v/release/cikelly/geoidlab?color=yellow&label=version&style=flat-square)](https://github.com/cikelly/geoidlab/releases)
 
 ---
