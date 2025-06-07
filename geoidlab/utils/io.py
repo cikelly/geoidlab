@@ -8,6 +8,7 @@ import xarray as xr
 import numpy as np
 from pathlib import Path
 from datetime import datetime
+from tzlocal import get_localzone
 
 DATASET_CONFIG = {
     'tc': {
@@ -165,6 +166,8 @@ def save_to_netcdf(
     config = DATASET_CONFIG.get(dataset_key, DEFAULT_CONFIG)
     
     try:
+        local_tz = get_localzone()
+        date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
         # Set up working directory (optional)
         if filepath is None:
             if proj_dir is None:
@@ -201,12 +204,13 @@ def save_to_netcdf(
                 'lon': (['lon'], lon, {'long_name': 'longitude'}),
             },
             attrs={
-                'units': config['units'],
-                'description': config['description'],
-                'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'created_by': 'geoidlab',
-                'website': 'https://github.com/cikelly/geoidlab',
-                'copyright': f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+                'units'       : config['units'],
+                'description' : config['description'],
+                # 'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'date_created': f'{date_created} {local_tz.tzname()}',
+                'created_by'  : 'geoidlab',
+                'website'     : 'https://github.com/cikelly/geoidlab',
+                'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             }
         )
         

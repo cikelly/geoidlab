@@ -19,6 +19,7 @@ matplotlib>=3.4.0,<4.0.0
 pyproj>=3.0.0,<4.0.0
 packaging>=21.0
 ipython>=8.0.0
+tzlocal>=4.0
 
 # Development dependencies (optional)
 # pytest>=6.0
