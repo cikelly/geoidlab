@@ -4,9 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/geoidlab.svg?style=flat-square)](https://pypi.org/project/geoidlab/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/tests.yml?style=flat-square&label=tests)](https://github.com/cikelly/geoidlab/actions)
-[![Coverage](https://img.shields.io/codecov/c/github/cikelly/geoidlab?style=flat-square)](https://codecov.io/gh/cikelly/geoidlab)
 [![Documentation Status](https://readthedocs.org/projects/geoidlab/badge/?version=latest&style=flat-square)](https://geoidlab.readthedocs.io/en/latest/?badge=latest)
-[![GitHub Release](https://img.shields.io/github/v/release/cikelly/geoidlab?color=yellow&label=version&style=flat-square)](https://github.com/cikelly/geoidlab/releases)
 
 ---
 <div align="center">
