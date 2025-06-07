@@ -50,7 +50,7 @@ def auto_visualize(args) -> None:
     # Process each NetCDF file
     print(f'Plotting and saving all NetCDF files in {results_dir}.')
     for nc_file in nc_files:
-        print(f'Plotting and saving {nc_file.name} {results_dir / 'figures'} ...')
+        print(f'Plotting and saving {nc_file.name} {results_dir}/figures ...')
         viz_args.filename = str(nc_file)
         plot_main(viz_args)
 
