@@ -39,7 +39,8 @@ dependencies = [
     'packaging>=21.0',
     'ipython>=8.0.0',
     'tzlocal>=4.0',
-    'pykrige>=1.7.0'
+    'pykrige>=1.7.0',
+    'ipykernel>=6.0.0'
 ]
 classifiers = [
     'Development Status :: 4 - Beta',
