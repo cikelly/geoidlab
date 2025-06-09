@@ -31,7 +31,8 @@ requirements = [
     'joblib>=1.3.0',
     'matplotlib>=3.4.0',
     'pyproj>=3.0.0',
-    'tzlocal>=4.0'
+    'tzlocal>=4.0',
+    'pykrige>=1.7.0'
 ]
 
 # Try to read requirements from requirements.txt if it exists

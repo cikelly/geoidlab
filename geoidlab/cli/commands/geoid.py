@@ -297,7 +297,7 @@ def main(args=None) -> None:
         from geoidlab.tide import GeoidTideSystemConverter
         import numpy as np
         print(f'Converting geoid from {ggm_tide} to {args.target_tide_system} tide system...')
-        phi, _ = np.meshgrid(N_ggm_ds['lat'], N_ggm_ds['lon'])
+        phi, _ = np.meshgrid(N_ggm_ds['lat'], N_ggm_ds['lon'], indexing='ij')
         # phi = phi.flatten()
         converter = GeoidTideSystemConverter(phi=phi, geoid=N)
         conversion_map = {
