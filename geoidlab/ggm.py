@@ -913,6 +913,7 @@ class GlobalGeopotentialModel:
             height=height,
             ellipsoid=self.ellipsoid
         )
+        vartheta = np.radians(90 - self.grav_data['lat'].values)
         # Get ellipsoid parameters
         ellipsoid = constants.wgs84() if self.ellipsoid.lower() == 'wgs84' else constants.grs80()
         e2 = ellipsoid['e2']
@@ -921,9 +922,9 @@ class GlobalGeopotentialModel:
         # Compute correction terms
         sin_theta = np.sin(vartheta)
         cos_theta = np.cos(vartheta)
+        
         term1 = -(e2 / R) * sin_theta * cos_theta * dT
         term2 = (e2 / R) * (3 * cos_theta**2 - 2) * T
-        
         # Total correction in mGal
         Delta_g_ell = (term1 + term2) * 1e5
         
