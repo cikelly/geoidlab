@@ -369,7 +369,7 @@ def add_reference_arguments(parser) -> None:
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for GGM files')
     parser.add_argument('--do', type=str, default='all', 
-                        choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'all'],
+                        choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction', 'all'],
                         help='Computation steps to perform')
     parser.add_argument('-s', '--start', type=str, default=None, 
                         help='Start task')
@@ -417,7 +417,7 @@ def main(args=None) -> int:
         )
         args = parser.parse_args()
         
-    workflow = ['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance']
+    workflow = ['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction']
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
     if args.do == 'all':
