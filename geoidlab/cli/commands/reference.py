@@ -428,6 +428,10 @@ def main(args=None) -> int:
         tasks = workflow[start_idx:end_idx + 1]
     else:
         tasks = [args.do]
+        
+    # Set args.ellipsoidal_correction to True if ellipsoidal-correction is in tasks
+    if 'ellipsoidal-correction' in tasks:
+        args.ellipsoidal_correction = True
 
     workflow = GGMSynthesis(
         model=args.model,
