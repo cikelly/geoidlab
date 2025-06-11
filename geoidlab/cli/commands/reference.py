@@ -49,11 +49,11 @@ class GGMSynthesis():
             'ggm_method': 'gravity_disturbance',
             'output': {'key': 'dg', 'file': 'dg'}
         },
-        # 'ellipsoidal-correction': {
-        #     'method': 'compute_ellipsoidal_correction',
-        #     'ggm_method': 'ellipsoidal_correction',
-        #     'output': {'key': 'Dg_ELL', 'file': 'Dg_ELL'}
-        # },
+        'ellipsoidal-correction': {
+            'method': 'compute_ellipsoidal_correction',
+            'ggm_method': 'ellipsoidal_correction',
+            'output': {'key': 'Dg_ELL', 'file': 'Dg_ELL'}
+        },
         # Add more tasks (e.g., disturbing_potential, second_radial_derivative)
     }
     
@@ -76,7 +76,7 @@ class GGMSynthesis():
         proj_name: str = 'GeoidProject',
         icgem: bool = False,
         dtm_model: str | Path = None,
-        # ellipsoidal_correction: bool = False
+        ellipsoidal_correction: bool = False
     ) -> None:
         '''
         Initialize GGMSynthesis class
@@ -123,7 +123,7 @@ class GGMSynthesis():
         self.lat_grid = None
         self.icgem = icgem
         self.dtm_model = dtm_model
-        # self.ellipsoidal_correction = ellipsoidal_correction
+        self.ellipsoidal_correction = ellipsoidal_correction
         
         # Directory setup
         directory_setup(proj_name)
@@ -258,13 +258,12 @@ class GGMSynthesis():
 
         # Handle tide conversion
         converted_data_path = None
-        # if ggm_method != 'ellipsoidal_correction':
-        #     converted_data_path = self._convert_tide_system(model_path)
-        converted_data_path = self._convert_tide_system(model_path)
+        if ggm_method != 'ellipsoidal_correction':
+            converted_data_path = self._convert_tide_system(model_path)
 
         # Warn if non-zero elevation for ellipsoidal correction
-        # if ggm_method == 'ellipsoidal_correction' and self.lonlatheight['height'].abs().max() > 0:
-        #     print('Warning: Ellipsoidal correction is computed at zero elevation. Non-zero elevations provided will be ignored.')
+        if ggm_method == 'ellipsoidal_correction' and self.lonlatheight['height'].abs().max() > 0:
+            print('Warning: Ellipsoidal correction is computed at zero elevation. Non-zero elevations provided will be ignored.')
         
         # Initialize model
         model = GlobalGeopotentialModel(
@@ -344,14 +343,14 @@ class GGMSynthesis():
             output_file='dg'
         )
     
-    # def compute_ellipsoidal_correction(self) -> dict:
-    #     '''Compute ellipsoidal correction using GlobalGeopotentialModel.'''
-    #     return self._compute_functional(
-    #         ggm_method='ellipsoidal_correction',
-    #         task_name='Ellipsoidal correction',
-    #         output_key='Dg_ELL',
-    #         output_file='Dg_ELL'
-    #     )
+    def compute_ellipsoidal_correction(self) -> dict:
+        '''Compute ellipsoidal correction using GlobalGeopotentialModel.'''
+        return self._compute_functional(
+            ggm_method='ellipsoidal_correction',
+            task_name='Ellipsoidal correction',
+            output_key='Dg_ELL',
+            output_file='Dg_ELL'
+        )
 
         
     def run(self, tasks: list) -> dict:
@@ -410,8 +409,8 @@ def add_reference_arguments(parser) -> None:
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
     parser.add_argument('--dtm-model', type=str, default=None,
                         help='Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)')
-    # parser.add_argument('--ell-cor', '--ellipsoidal-correction', action='store_true', default=False,
-    #                     help='Enable ellipsoidal correction')
+    parser.add_argument('--ell-cor', '--ellipsoidal-correction', action='store_true', default=False,
+                        help='Enable ellipsoidal correction')
 
 def main(args=None) -> int:
     if args is None:
@@ -436,8 +435,8 @@ def main(args=None) -> int:
         tasks = [args.do]
         
     # Set args.ellipsoidal_correction to True if ellipsoidal-correction is in tasks
-    # if 'ellipsoidal-correction' in tasks:
-    #     args.ellipsoidal_correction = True
+    if 'ellipsoidal-correction' in tasks:
+        args.ellipsoidal_correction = True
 
     workflow = GGMSynthesis(
         model=args.model,
@@ -457,7 +456,7 @@ def main(args=None) -> int:
         proj_name=args.proj_name,
         icgem=args.icgem,
         dtm_model=args.dtm_model,
-        # ellipsoidal_correction=args.ellipsoidal_correction
+        ellipsoidal_correction=args.ellipsoidal_correction
     )
 
     result = workflow.run(tasks)
