@@ -158,7 +158,8 @@ def main() -> None:
     result = args.func(args)
     
     # Auto-visualize any output files if save=True
-    auto_viz_commands = ['geoid', 'ggm', 'topography']
+    # auto_viz_commands = ['geoid', 'ggm', 'topography']
+    auto_viz_commands = ['geoid']
     if args.subcommand in auto_viz_commands:
         auto_visualize(args)
     

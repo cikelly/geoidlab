@@ -132,6 +132,11 @@ class GGMSynthesis():
             
         self._validate_params()
         
+        
+        model_path = (self.model_dir / self.model).with_suffix('.gfc')
+        ggm_tide = get_ggm_tide_system(icgem_file=model_path, model_dir=self.model_dir)
+        self.ggm_tide = ggm_tide
+        
     def _validate_params(self) -> None:
         '''Validate parameters'''
         if self.ellipsoid not in ['wgs84', 'grs80']:
@@ -259,7 +264,8 @@ class GGMSynthesis():
         # Warn if non-zero elevation for ellipsoidal correction
         if ggm_method == 'ellipsoidal_correction' and self.lonlatheight['height'].abs().max() > 0:
             print('Warning: Ellipsoidal correction is computed at zero elevation. Non-zero elevations provided will be ignored.')
-            
+        
+        print(self.lonlatheight.head())
         # Initialize model
         model = GlobalGeopotentialModel(
             model_name=model_path.stem,

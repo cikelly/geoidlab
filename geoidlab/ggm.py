@@ -891,8 +891,10 @@ class GlobalGeopotentialModel:
         ----------
         1. Jekeli (1981): The Downward Continuation to the Earth's Surface of Truncated Spherical and Ellipsoidal Harmonic Series of the Gravity and Height Anomalies
         '''
-        if not all(col in self.grav_data.columns for col in ['lat', 'lon', 'elevation']):
-            raise ValueError('grav_data must contain columns: lat, lon, elevation')
+        if not all(col in self.grav_data.columns for col in ['lon', 'lat']) or not ('elevation' in self.grav_data.columns or 'height' in self.grav_data.columns):
+    # Your code here
+        # if not all(col in self.grav_data.columns for col in ['lon', 'lat', 'elevation' | 'height']):
+            raise ValueError('grav_data must contain columns: lon, lat, elevation | height')
         
         print('Ellipsoidal correction requires the disturbing potential and its derivative.\nComputing disturbing potential...')
         T = self.disturbing_potential(r_or_R=r_or_R, parallel=parallel)
@@ -901,10 +903,14 @@ class GlobalGeopotentialModel:
         
         print('Computing ellipsoidal correction...')
         # Convert geodetic to spherical coordinates
+        try:
+            height = self.grav_data['elevation'].values
+        except KeyError:
+            height = self.grav_data['height'].values
         _, vartheta, _ = co.geodetic2spherical(
             phi=self.grav_data['lat'].values,
             lambd=self.grav_data['lon'].values,
-            height=self.grav_data['elevation'].values,
+            height=height,
             ellipsoid=self.ellipsoid
         )
         # Get ellipsoid parameters
