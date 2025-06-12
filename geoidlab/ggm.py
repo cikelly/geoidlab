@@ -892,41 +892,27 @@ class GlobalGeopotentialModel:
         1. Jekeli (1981): The Downward Continuation to the Earth's Surface of Truncated Spherical and Ellipsoidal Harmonic Series of the Gravity and Height Anomalies
         '''
         if not all(col in self.grav_data.columns for col in ['lon', 'lat']) or not ('elevation' in self.grav_data.columns or 'height' in self.grav_data.columns):
-    # Your code here
-        # if not all(col in self.grav_data.columns for col in ['lon', 'lat', 'elevation' | 'height']):
             raise ValueError('grav_data must contain columns: lon, lat, elevation | height')
+        
         
         print('Ellipsoidal correction requires the disturbing potential and its derivative.\nComputing disturbing potential...')
         T = self.disturbing_potential(r_or_R=r_or_R, parallel=parallel)
         print('Computing the first derivative of disturbing potential with respect to colatitude...')
         dT = self.disturbing_potential_derivative(parallel=parallel, r_or_R=r_or_R)
         
-        print('Computing ellipsoidal correction...')
-        # Convert geodetic to spherical coordinates
-        try:
-            height = self.grav_data['elevation'].values
-        except KeyError:
-            height = self.grav_data['height'].values
-        _, vartheta, _ = co.geodetic2spherical(
-            phi=self.grav_data['lat'].values,
-            lambd=self.grav_data['lon'].values,
-            height=height,
-            ellipsoid=self.ellipsoid
-        )
-        vartheta = np.radians(90 - self.grav_data['lat'].values)
-        # Get ellipsoid parameters
+        print('Computing ellipsoidal correction...')        
+        # Negate dT since it is the first derivative of the potential with respect to colatitude
+        dT_dphi = -dT
+
         ellipsoid = constants.wgs84() if self.ellipsoid.lower() == 'wgs84' else constants.grs80()
         e2 = ellipsoid['e2']
+        # GM = ellipsoid['GM']
         R = ellipsoid['semi_major']
-        
-        # Compute correction terms
-        sin_theta = np.sin(vartheta)
-        cos_theta = np.cos(vartheta)
-        
-        term1 = -(e2 / R) * sin_theta * cos_theta * dT
-        term2 = (e2 / R) * (3 * cos_theta**2 - 2) * T
-        # Total correction in mGal
-        Delta_g_ell = (term1 + term2) * 1e5
+
+        phi = np.radians(self.grav_data['lat'].values)
+        sin_phi = np.sin(phi)
+        cos_phi = np.cos(phi)
+        Delta_g_ell = -e2 / R * (sin_phi * cos_phi * dT_dphi - (3 * sin_phi**2 - 2) * T) * 1e5
         
         print('Ellipsoidal correction computed successfully.')
         return Delta_g_ell
