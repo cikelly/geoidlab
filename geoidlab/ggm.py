@@ -885,7 +885,7 @@ class GlobalGeopotentialModel:
         
         Returns
         -------
-        Dg_ell    : Ellipsoidal correction [mGal], shaped as input coordinates or grid
+        Dg_ell    : Ellipsoidal correction [mGal], shaped as input coordinates or grid [mGal]
         
         References
         ----------
