@@ -47,7 +47,12 @@ class TopographicQuantities:
             'method': 'compute_site',
             'terrain_method': 'site',
             'output': {'key': 'Dg_site', 'file': 'Dg_SITE'}
-        }
+        },
+        'atm-corr': {
+            'method': 'compute_atm_corr',
+            'terrain_method': 'atm_correction_grid',
+            'output': {'key': 'Dg_atm', 'file': 'Dg_atm'}
+        },
     }
     
     def __init__(
@@ -71,6 +76,7 @@ class TopographicQuantities:
         interp_method: str = 'slinear',
         approximation: bool = False,
         tc: xr.Dataset = None,
+        atm_method: str = 'noaa',
     ) -> None:
         '''
         
@@ -95,6 +101,7 @@ class TopographicQuantities:
         interp_method  : Interpolation method for resampling DEM ('linear', 'slinear', 'cubic', 'quintic')
         approximation  : Use the approximate formula for RTM gravity anomalies
         tc             : Terrain correction. Necessary to avoid recomputing TC for RTM anomalies
+        atm_method     : Atmospheric correction method. Options: 'noaa', 'ngi', 'wenzel'
         
         Returns
         -------
@@ -119,6 +126,7 @@ class TopographicQuantities:
         self.interp_method = interp_method
         self.approximation = approximation
         self.tc = tc
+        self.atm_method = atm_method
         
         self.grid_size = to_seconds(grid_size, grid_unit)
         
@@ -265,6 +273,32 @@ class TopographicQuantities:
             'output_file': str(output_file)
         }
 
+    def compute_atm_corr(self) -> dict:
+        '''Compute atmospheric correction over DEM grid'''
+        # Initialize tq if not hasattr(self, 'tq')
+        if not hasattr(self, 'tq'):
+            self._initialize_terrain()
+            
+        atm_corr = self.tq.atm_correction_grid(method=self.atm_method)
+        output_file = self.output_dir / f"{self.TASK_CONFIG['atm-corr']['output']['file']}.nc"
+        
+        return {'status': 'success', 'output_file': str(output_file)}
+
+    def compute_corrections(self) -> dict:
+        '''Compute both atmospheric and SITE corrections efficiently'''
+        atm_file = self.output_dir / 'Dg_atm.nc'
+        site_file = self.output_dir / 'Dg_SITE.nc'
+        # Only compute if not already present
+        if not atm_file.exists() or not site_file.exists():
+            if not hasattr(self, 'tq'):
+                self._initialize_terrain()
+            if not atm_file.exists():
+                atm_corr = self.tq.atm_correction_grid()
+                output_file = self.output_dir / f"{self.TASK_CONFIG['atm-corr']['output']['file']}.nc"
+            if not site_file.exists():    
+                site = self.tq.secondary_indirect_effect()
+                output_file = self.output_dir / f"{self.TASK_CONFIG['site']['output']['file']}.nc"
+        return {'status': 'success', 'output_files': [str(atm_file), str(site_file)]}
 
     def run(self, tasks: list) -> dict:
         '''Execute the specified tasks.'''
@@ -281,8 +315,8 @@ class TopographicQuantities:
         return {'status': 'success', 'output_files': output_files}
 
 def add_topo_arguments(parser) -> None:
-    parser.add_argument('--topo', type=str, required=True, choices=['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'], 
-                        help='DEM model (e.g., srtm, srtm30plus, cop, nasadem, gebco)')
+    parser.add_argument('--topo', type=str, required=True, 
+                        help='DEM model. Options: srtm30plus, srtm, cop, nasadem, gebco')
     parser.add_argument('-b', '--bbox', type=float, nargs=4, required=True, 
                         help='Bounding box [W, E, S, N] in degrees')
     parser.add_argument('--ref-topo', type=str, 
@@ -291,13 +325,13 @@ def add_topo_arguments(parser) -> None:
                         help='Directory for DEM files')
     parser.add_argument('--radius', type=float, default=110.0, 
                         help='Search radius in kilometers. Default: 110 km')
-    parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', choices=['wgs84', 'grs80'], 
-                        help='Reference ellipsoid. Default: wgs84')
-    parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'all'], 
-                        help='Computation steps to perform')
-    parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site'],
+    parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', 
+                        help='Reference ellipsoid. Default: wgs84. Options: wgs84, grs80')
+    parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr', 'all'], 
+                        help='Computation steps to perform.')
+    parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'],
                         help='Start processing from this step')
-    parser.add_argument('-e', '--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site'],
+    parser.add_argument('-e', '--end', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'],
                         help='End processing at this step')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Name of the project directory')
@@ -315,6 +349,8 @@ def add_topo_arguments(parser) -> None:
                         help='Chunk size for parallel processing')
     parser.add_argument('--interpolation-method', type=str, default='slinear', choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
                         help='Interpolation method to resample the DEM to --resolution. Default: slinear')
+    parser.add_argument('--atm-method', type=str, default='noaa', choices=['noaa', 'ngi', 'wenzel'],
+                        help='Atmospheric correction method. Default: noaa')
 
 def main(args=None) -> int:
     '''
@@ -331,7 +367,7 @@ def main(args=None) -> int:
         args = parser.parse_args()
 
     # Define workflow
-    workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly', 'site']
+    workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly', 'site', 'atm-corr']
     # Determine tasks to execute
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start or --end.')

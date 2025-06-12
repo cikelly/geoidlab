@@ -1226,3 +1226,49 @@ class TerrainQuantities:
         km = rad * radius
 
         return km
+
+    def atm_correction_grid(self, method: str = 'noaa') -> np.ndarray:
+        '''
+        Compute atmospheric correction over the original topography grid (DEM elevations).
+
+        Parameters
+        ----------
+        method      : Method for atmospheric correction ('noaa', 'ngi', 'wenzel'). Default is 'noaa'.
+
+        Returns
+        -------
+        atm_corr    : Atmospheric correction (mGal) for each grid cell in self.ori_topo['z'].
+
+        Notes
+        -----
+        1. Uses the same formulas as gravity.py:atm_correction.
+        '''
+        H = self.ori_P['z'].values  # Elevation grid (meters)
+        if method.lower() == 'noaa':
+            atm_corr = (
+                0.871 - 1.0298e-4 * H + 5.3105e-9 * H**2 - 2.1642e-13 * H**3 +
+                9.5246e-18 * H**4 - 2.2411e-22 * H**5
+            )
+        elif method.lower() == 'ngi':
+            atm_corr = np.where(
+                H < 0,
+                0.87,
+                0.87 * np.exp(-0.116 * (H / 1000) ** 1.047)
+            )
+        elif method.lower() == 'wenzel':
+            atm_corr = 0.874 - 9.9e-5 * H + 3.5625e-9 * H**2
+        else:
+            raise ValueError(f'Unsupported atmospheric correction method: {method}')
+        
+        
+        print(f'Saving atmospheric corrections to {self.proj_dir}/Dg_atm.nc...')
+        save_to_netcdf(
+            data=atm_corr,
+            lon=self.ori_P['x'].values,
+            lat=self.ori_P['y'].values,
+            dataset_key='Dg_atm',
+            proj_dir=self.proj_dir,
+            overwrite=self.overwrite
+        )
+        print('Atmospheric correction computation completed.')
+        return atm_corr

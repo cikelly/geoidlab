@@ -115,6 +115,13 @@ DATASET_CONFIG = {
         'description': 'Ellipsoidal correction for gravity anomalies',
         'fname'      : 'Dg_ELL',
         'long_name'  : 'Ellipsoidal Correction on Gravity',
+    },
+    'Dg_atm': {
+        'var_name'   : 'Dg_atm',
+        'units'      : 'mGal',
+        'description': 'Atmospheric correction for gravity anomalies',
+        'fname'      : 'Dg_atm',
+        'long_name'  : 'Atmospheric Correction on Gravity',
     }
     # Add more datasets as needed
 }
@@ -208,7 +215,7 @@ def save_to_netcdf(
                 'description' : config['description'],
                 # 'date_created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'date_created': f'{date_created} {local_tz}',
-                'created_by'  : 'geoidlab',
+                'created_by'  : 'GeoidLab',
                 'website'     : 'https://github.com/cikelly/geoidlab',
                 'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             }
