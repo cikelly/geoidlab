@@ -13,7 +13,7 @@ from pathlib import Path
 
 from geoidlab.cli.commands.reference import main as ggm_main
 from geoidlab.cli.commands.topo import main as topo_main
-from geoidlab.cli.commands.helmert import main as helmert_main
+from geoidlab.cli.commands.reduce import main as reduce_main
 from geoidlab.cli.commands.plot import main as plot_main
 from geoidlab.cli.commands.geoid import main as geoid_main
 from geoidlab.cli.commands.info import main as netcdf_info_main
@@ -56,7 +56,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     valid_subcommands = {
         'ggm': ggm_main,
         'topo': topo_main,
-        'reduce': helmert_main,
+        'reduce': reduce_main,
         'viz': plot_main,
         'geoid': geoid_main,
         'ncinfo': netcdf_info_main
@@ -80,6 +80,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         # input_data
         'input_file'            : ('input_file', None),
         'marine_data'           : ('marine_data', None),
+        'residual_method'       : ('residual_method', 'station'),
         # ggm
         'model'                 : ('model', None),
         'model_dir'             : ('model_dir', None),

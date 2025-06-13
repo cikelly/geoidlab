@@ -12,7 +12,7 @@ import glob
 
 from geoidlab.cli.commands.reference import add_reference_arguments, main as ggm_main
 from geoidlab.cli.commands.topo import add_topo_arguments, main as topo_main
-from geoidlab.cli.commands.helmert import add_helmert_arguments, main as helmert_main
+from geoidlab.cli.commands.reduce import add_reduce_arguments, main as reduce_main
 from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
@@ -89,8 +89,8 @@ def main() -> None:
     
     # Helmert
     reduce_parser = subparsers.add_parser('reduce', help='Perform gravity reduction (Free-air, Bouguer, Helmert)')
-    add_helmert_arguments(reduce_parser)
-    reduce_parser.set_defaults(func=helmert_main)
+    add_reduce_arguments(reduce_parser)
+    reduce_parser.set_defaults(func=reduce_main)
     
     # Plot
     plot_parser = subparsers.add_parser('viz', help='Visualize data')
