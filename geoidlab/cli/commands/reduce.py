@@ -22,47 +22,47 @@ from geoidlab.icgem import get_ggm_tide_system
 from geoidlab.utils.io import save_to_netcdf
 
 
-def decimate_data(df: pd.DataFrame, n_points: int, verbose: bool = False) -> pd.DataFrame:
-    '''
-    Decimate a DataFrame to a specified number of points using KMeans clustering.
+# def decimate_data(df: pd.DataFrame, n_points: int, verbose: bool = False) -> pd.DataFrame:
+#     '''
+#     Decimate a DataFrame to a specified number of points using KMeans clustering.
     
-    Parameters
-    ----------
-    df        : Marine data with 'lon', 'lat', and 'Dg'.
-    n_points  : Number of points to retain after decimation.
-    verbose   : If True, print information about the decimation process.
+#     Parameters
+#     ----------
+#     df        : Marine data with 'lon', 'lat', and 'Dg'.
+#     n_points  : Number of points to retain after decimation.
+#     verbose   : If True, print information about the decimation process.
     
-    Returns
-    -------
-    Decimated DataFrame with n_points rows.
-    '''
-    from sklearn.cluster import KMeans
-    from scipy.spatial.distance import cdist
-    import numpy as np
+#     Returns
+#     -------
+#     Decimated DataFrame with n_points rows.
+#     '''
+#     from sklearn.cluster import KMeans
+#     from scipy.spatial.distance import cdist
+#     import numpy as np
     
-    if n_points >= len(df):
-        if verbose:
-            print(f'Requested {n_points} points, but DataFrame has {len(df)} points. Skipping decimation...')
-        return df
+#     if n_points >= len(df):
+#         if verbose:
+#             print(f'Requested {n_points} points, but DataFrame has {len(df)} points. Skipping decimation...')
+#         return df
     
-    if n_points < 10:
-        raise ValueError(f'Requested number of points ({n_points}) is too low. Must be >= 10.')
+#     if n_points < 10:
+#         raise ValueError(f'Requested number of points ({n_points}) is too low. Must be >= 10.')
     
-    coords = np.column_stack((df['lon'], df['lat']))
-    if verbose:
-        print(f'Decimating marine gravity data from {len(df)} to {n_points} points using KMeans clustering...')
+#     coords = np.column_stack((df['lon'], df['lat']))
+#     if verbose:
+#         print(f'Decimating marine gravity data from {len(df)} to {n_points} points using KMeans clustering...')
     
-    kmeans = KMeans(n_clusters=n_points, random_state=42, n_init=10)
-    kmeans.fit(coords)
-    centers = kmeans.cluster_centers_
-    distances = cdist(coords, centers)
-    indices = np.argmin(distances, axis=0)
+#     kmeans = KMeans(n_clusters=n_points, random_state=42, n_init=10)
+#     kmeans.fit(coords)
+#     centers = kmeans.cluster_centers_
+#     distances = cdist(coords, centers)
+#     indices = np.argmin(distances, axis=0)
     
-    decimated_df = df.iloc[indices].copy()
-    if verbose:
-        print(f'Decimation complete. Retained {len(decimated_df)} points.')
+#     decimated_df = df.iloc[indices].copy()
+#     if verbose:
+#         print(f'Decimation complete. Retained {len(decimated_df)} points.')
     
-    return decimated_df
+#     return decimated_df
 
 class GravityReduction:
     '''Class to perform gravity reductions (Free-air, Bouguer, Helmert anomalies)'''
@@ -110,8 +110,8 @@ class GravityReduction:
         ellipsoidal_correction: bool = False,
         window_mode: str = 'radius',
         tc_grid_size: float = 30.0,
-        decimate: bool = False,
-        decimate_threshold: int = 600,
+        # decimate: bool = False,
+        # decimate_threshold: int = 600,
         site: bool = False,
         max_deg: int = 90
     ) -> None:
@@ -145,8 +145,8 @@ class GravityReduction:
         self.ellipsoidal_correction = ellipsoidal_correction
         self.window_mode = window_mode
         self.tc_grid_size = tc_grid_size
-        self.decimate = decimate
-        self.decimate_threshold = decimate_threshold
+        # self.decimate = decimate
+        # self.decimate_threshold = decimate_threshold
         self.ggm_tide = None
         self.site = site
         self.max_deg = max_deg
@@ -187,8 +187,8 @@ class GravityReduction:
             raise ValueError("--grid-method must be one of: ['linear', 'spline', 'kriging', 'rbf', 'idw', 'biharmonic', 'gpr', 'lsc']")
         if self.gravity_tide and not self.model:
             raise ValueError('A GGM model must be specified with --model when --gravity-tide is used')
-        if self.decimate and self.decimate_threshold < 10:
-            raise ValueError('decimate_threshold must be >= 10')
+        # if self.decimate and self.decimate_threshold < 10:
+        #     raise ValueError('decimate_threshold must be >= 10')
         
     def _process_input(self) -> None:
         '''Load input file.'''
