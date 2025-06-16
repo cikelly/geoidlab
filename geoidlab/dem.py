@@ -463,9 +463,17 @@ def download_dem_cog(
         - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
     4. Unless you have a strong internet connection, I strongly recommend to use the default SRTM30PLUS
     '''
+    # Define base URLs for each model and resolution
+    if model.lower() == 'srtm':
+        res = 1 if resolution < 3 else 3
+        srtm_url = f'https://opentopography.s3.sdsc.edu/raster/SRTM_GL{res}/SRTM_GL{res}_srtm.vrt'
+    elif model.lower() == 'cop':
+        res = 30 if resolution < 3 else 90
+        cop_url = f'https://opentopography.s3.sdsc.edu/raster/COP{res}/COP{res}_hh.vrt'
+    
     model_urls = {
-        'srtm'   : 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt',
-        'cop'    : 'https://opentopography.s3.sdsc.edu/raster/COP90/COP90_hh.vrt',
+        'srtm'   : srtm_url if model.lower() == 'srtm' else 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt',
+        'cop'    : cop_url if model.lower() == 'cop' else 'https://opentopography.s3.sdsc.edu/raster/COP90/COP90_hh.vrt',
         'nasadem': 'https://opentopography.s3.sdsc.edu/raster/NASADEM/NASADEM_be.vrt',
         'gebco'  : 'https://opentopography.s3.sdsc.edu/raster/GEBCOIceTopo/GEBCOIceTopo.vrt'
     }
