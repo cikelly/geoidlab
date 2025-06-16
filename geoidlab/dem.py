@@ -10,6 +10,7 @@ import warnings
 import netCDF4
 import re
 import certifi
+import time
 
 import xarray as xr
 import rioxarray as rxr
@@ -88,9 +89,9 @@ def identify_relevant_tiles(bbox, tiles) -> list:
         raise ValueError('bbox must be a list or tuple of 4 values: [min_lon, max_lon, min_lat, max_lat]')
     min_lon, max_lon, min_lat, max_lat = bbox
     
-    # Ensure bbox is valid: W, S, E, N
+    # Ensure bbox is valid: W, E, S, N
     if min_lon > max_lon or min_lat > max_lat:
-        raise ValueError('Invalid bbox. Must be [min_lon, min_lat, max_lon, max_lat]')
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
     
     if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180 and -90 <= min_lat <= 90 and -90 <= max_lat <= 90):
         raise ValueError('bbox coordinates must be within valid geographic ranges: [-180, 180] for lon, [-90, 90] for lat')
@@ -121,6 +122,10 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     '''
     if bbox is None and url is None:
         raise ValueError('Either bbox or url must be provided.')
+    
+    min_lon, max_lon, min_lat, max_lat = bbox
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
     
     if not url:
         urls: list[str] = fetch_url(bbox=bbox)
@@ -242,7 +247,7 @@ def fetch_url(bbox) -> list[str]:
 
     # Ensure bbox is valid: W, N, E, S
     if min_lon > max_lon or min_lat > max_lat:
-        raise ValueError('Invalid bbox. Must be [min_lon, min_lat, max_lon, max_lat]')
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
     
     # Read the README file
     global _tiles_cache
@@ -280,8 +285,9 @@ def dem4geoid(
     Parameters
     ----------
     bbox          : bounding box of area of interest 
-                    [xmin, ymin, xmax, ymax]
+                    [xmin, xmax, ymin, ymax]
                     [left, bottom, right, top]
+                    [W, E, S, N]
     ncfile        : path to DEM netCDF file
     bbox_off      : offset for bounding box (in degrees)
     downloads_dir : directory to download the file to
@@ -311,6 +317,11 @@ def dem4geoid(
     VALID_MODELS = {'srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'}
     if not bbox:
         raise ValueError('Bounding box must be provided')
+    
+    # Ensure bbox is valid: W, N, E, S
+    min_lon, max_lon, min_lat, max_lat = bbox
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
     
     if model not in VALID_MODELS:
         raise ValueError(f'Invalid DEM model: {model}. Must be one of:\n{VALID_MODELS}.')
@@ -437,7 +448,7 @@ def download_dem_cog(
     
     Parameters
     ----------
-    bbox          : bbox of the area of interest (W, S, E, N)
+    bbox          : bbox of the area of interest (W, E, S, N)
     model         : name of the DEM model
                      - srtm
                      - cop
@@ -463,6 +474,10 @@ def download_dem_cog(
         - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
     4. Unless you have a strong internet connection, I strongly recommend to use the default SRTM30PLUS
     '''
+    min_lon, max_lon, min_lat, max_lat = bbox
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
+    
     # Define base URLs for each model and resolution
     if model.lower() == 'srtm':
         res = 1 if resolution < 3 else 3
@@ -509,6 +524,8 @@ def download_dem_cog(
     # Read the COG
     print(f'Accessing {model.upper()} COG at {model_urls[model.lower()]}\n')
     
+    # print('We are now accessing the COG. This may take a few seconds...')
+    start_time = time.time()
     for attempt in range(3):
         try:
             ds = rxr.open_rasterio(f'/vsicurl/{cog_url}')
@@ -516,19 +533,28 @@ def download_dem_cog(
         except RasterioIOError as e:
             print(f'Attempt {attempt+1} failed. Error: {e}.')
             if attempt < 2:
-                import time
+                # import time
                 print(f'Retrying in 5 seconds...')
                 time.sleep(5)
             else:
                 raise RuntimeError(f'Failed to access COG for {model}: {e}.')
-
+    print(f'COG access completed in {time.time() - start_time:.2f} seconds.')
+    
     bbox_subset = [
         bbox[0] - bbox_off,
         bbox[1] + bbox_off,
         bbox[2] - bbox_off,
         bbox[3] + bbox_off
     ]
-    dem = ds.rio.clip_box(minx=bbox_subset[0], maxx=bbox_subset[2], miny=bbox_subset[1], maxy=bbox_subset[3])
+    
+    print(f'Creating DEM from {model} COG...')
+    start_time = time.time()
+    dem = ds.rio.clip_box(
+        minx=bbox_subset[0],
+        maxx=bbox_subset[1],
+        miny=bbox_subset[2],
+        maxy=bbox_subset[3]
+    )
     
     if not isinstance(dem, xr.Dataset):
         dem = dem.to_dataset(name='z')
@@ -548,12 +574,13 @@ def download_dem_cog(
     dem['z'] = dem['z'].where(dem['z'] != nodata_value, np.nan)
     dem = dem.squeeze(dim='band')
     # dem = dem.drop_vars('band')
-    print('DEM created successfully!\n')
+    print(f'DEM created successfully in {time.time() - start_time:.2f} seconds!\n')
+    
     
     print(f'Interpolating DEM ...')
-    
-    minx, maxx = bbox_subset[0], bbox_subset[2]
-    miny, maxy = bbox_subset[1], bbox_subset[3]
+    start_time = time.time()
+    minx, maxx = bbox_subset[0], bbox_subset[1]
+    miny, maxy = bbox_subset[2], bbox_subset[3]
     
     num_x_points = int((maxx - minx) / (resolution)) + 1
     num_y_points = int((maxy - miny) / (resolution)) + 1
@@ -563,7 +590,9 @@ def download_dem_cog(
         y=np.linspace(miny, maxy, num_y_points),
         method=interp_method
     )
+    print(f'DEM interpolation completed in {time.time() - start_time:.2f} seconds.\n')
     
+    print(f'Saving DEM to {ncfile}...')
     dem.to_netcdf(ncfile)
 
     return dem
@@ -577,12 +606,16 @@ def check_bbox_contains(netcdf_file, bbox) -> bool:
     Parameters
     ----------
     netcdf_file : path to the NetCDF file
-    bbox        : bounding box of the area of interest (W, S, E, N)
+    bbox        : bounding box of the area of interest (W, E, S, N)
     
     Returns
     -------
     contains    : bool
     '''
+    min_lon, max_lon, min_lat, max_lat = bbox
+    if min_lon > max_lon or min_lat > max_lat:
+        raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
+    
     # Load the NetCDF file
     try:
         ds = xr.open_dataset(netcdf_file)
