@@ -60,7 +60,7 @@ def add_plot_arguments(parser) -> None:
     '''Add plotting arguments to an ArgumentParser instance'''
     parser.add_argument('-f', '--filename', type=str, help='NetCDF file to plot')
     parser.add_argument('-v', '--variable', action='append', type=str, help='Variable name(s) to plot')
-    parser.add_argument('-c', '--cmap', type=str, help='Colormap to use. For GMT .cpt files, use the file name with extension.', default='viridis')
+    parser.add_argument('-c', '--cmap', type=str, help='Colormap to use. For GMT .cpt files, use the file name with extension.', default='GMT_rainbow.cpt')
     parser.add_argument('--fig-size', type=int, nargs=2, default=[5, 5], help='Figure size in inches')
     parser.add_argument('--vmin', type=float, help='Minimum value for colorbar')
     parser.add_argument('--vmax', type=float, help='Maximum value for colorbar')
@@ -70,7 +70,7 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--list-cmaps', action='store_true', help='List available colormaps and exit')
     parser.add_argument('--save', action='store_true', help='Save figure')
     parser.add_argument('--dpi', type=int, default=300, help='DPI for saving figure')
-    parser.add_argument('--proj-name', type=str, default='GeoidProject', help='Name of the project')
+    parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', help='Name of the project')
     parser.add_argument('--xlim', type=float, nargs=2, default=None, help='X-axis limits')
     parser.add_argument('--ylim', type=float, nargs=2, default=None, help='Y-axis limits')
     parser.add_argument('--scalebar', action='store_true', help='Show scalebar')
