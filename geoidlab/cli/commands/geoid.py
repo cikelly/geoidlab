@@ -458,6 +458,59 @@ class ResidualAnomalyComputation:
         
         return residual_ds, str(output_file)
     
+    def _get_grid_size_in_degrees(self, grid_size: float, grid_unit: str) -> float:
+        """Convert grid size to degrees for comparison"""
+        from geoidlab.cli.commands.utils.common import to_seconds
+        return to_seconds(grid_size, grid_unit) / 3600.0
+
+    def _should_recompute_grid(self, existing_file: Path, target_grid_size_deg: float) -> bool:
+        """Check if we need to recompute a grid based on resolution"""
+        try:
+            ds = xr.open_dataset(existing_file)
+            # Get grid size from existing file
+            lat_diff = np.abs(np.diff(ds.lat.values)[0])
+            lon_diff = np.abs(np.diff(ds.lon.values)[0])
+            existing_grid_size = min(lat_diff, lon_diff)
+            # Only recompute if existing grid is coarser
+            return existing_grid_size > target_grid_size_deg
+        except Exception:
+            return True  # If we can't read the file or get grid size, recompute
+
+    # Add this at the class level, after the class definition
+    CORRECTION_VAR_MAP = {
+        'terrain-correction': 'tc',
+        'site': 'Dg_SITE',
+        'atm-corr': 'Dg_atm',
+        'ellipsoidal_correction': 'Dg_ELL',
+        'ellipsoidal-correction': 'Dg_ELL'  # Add this for consistency with GGMSynthesis task name
+    }
+
+    def _load_or_compute_correction(self, correction_type: str, topo_workflow: TopographicQuantities, 
+                                  target_grid_size_deg: float) -> xr.DataArray:
+        """Load existing correction or compute new one if needed"""
+        correction_file = self.output_dir / f'{correction_type}.nc'
+        var_name = self.CORRECTION_VAR_MAP.get(correction_type, correction_type)
+        
+        if correction_file.exists():
+            if not self._should_recompute_grid(correction_file, target_grid_size_deg):
+                print(f'Loading existing {correction_type} grid...')
+                ds = xr.open_dataset(correction_file)
+                # Resample to target grid if needed
+                if np.abs(np.diff(ds.lat.values)[0]) != target_grid_size_deg:
+                    print(f'Resampling {correction_type} to target grid...')
+                    ds = ds.interp(
+                        lat=np.arange(self.bbox[2], self.bbox[3] + target_grid_size_deg, target_grid_size_deg),
+                        lon=np.arange(self.bbox[0], self.bbox[1] + target_grid_size_deg, target_grid_size_deg),
+                        method='linear'
+                    )
+                return ds[var_name]
+        
+        # Compute new correction
+        print(f'Computing new {correction_type} grid...')
+        result = topo_workflow.run([correction_type])
+        ds = xr.open_dataset(result['output_files'][0])
+        return ds[var_name]
+
     def compute_residual_anomalies_gridded(self) -> tuple[xr.Dataset, str]:
         '''Compute residual anomalies using gridded approach (Approach 2)
         
@@ -467,6 +520,18 @@ class ResidualAnomalyComputation:
             (Dg_res, output_file) where Dg_res is an xarray Dataset
             containing the gridded residual anomalies and output_file is the path to the saved file
         '''
+        # For gridded approach, we need to compute on bbox + bbox_offset
+        # The DEM should be extracted for bbox + bbox_offset + 1
+        grid_extent = (
+            self.bbox[0] - self.bbox_offset,  # West
+            self.bbox[1] + self.bbox_offset,  # East
+            self.bbox[2] - self.bbox_offset,  # South
+            self.bbox[3] + self.bbox_offset   # North
+        )
+        
+        # Convert grid size to degrees for comparison
+        target_grid_size_deg = self._get_grid_size_in_degrees(self.grid_size, self.grid_unit)
+        
         # 1. Compute Bouguer anomalies
         print('Computing Bouguer anomalies...')
         bouguer_df = self._compute_gravity_anomalies('bouguer')
@@ -476,9 +541,7 @@ class ResidualAnomalyComputation:
         
         # 3. Merge surface and marine Bouguer anomalies
         if marine_df is not None:
-            # Convert marine free-air anomalies to Bouguer anomalies
             marine_df['bouguer'] = marine_df['Dg'] - 0.1119 * marine_df['height']
-            # marine_df['bouguer'] = marine_df['Dg']
             combined_df = pd.concat([
                 bouguer_df[['lon', 'lat', 'bouguer']],
                 marine_df[['lon', 'lat', 'bouguer']]
@@ -492,18 +555,10 @@ class ResidualAnomalyComputation:
         # 4. Grid the combined Bouguer anomalies
         from geoidlab.utils.interpolators import Interpolators
         
-        grid_size = to_seconds(self.grid_size, self.grid_unit) / 3600.0
-        grid_extent = (
-            self.bbox[0] - self.bbox_offset,
-            self.bbox[1] + self.bbox_offset,
-            self.bbox[2] - self.bbox_offset,
-            self.bbox[3] + self.bbox_offset
-        )
-        
         interpolator = Interpolators(
             dataframe=combined_df,
-            grid_extent=grid_extent,
-            resolution=grid_size,
+            grid_extent=grid_extent,  # Use extended grid extent
+            resolution=target_grid_size_deg,
             resolution_unit='degrees',
             data_key='bouguer',
             verbose=False
@@ -537,61 +592,77 @@ class ResidualAnomalyComputation:
             }
         )
         
-        # 5. Compute terrain correction and other corrections on the same grid
+        # Initialize topographic workflow for corrections
+        # For gridded approach, we need DEM for bbox + bbox_offset + 1
+        dem_extent = (
+            grid_extent[0] - 1,  # West
+            grid_extent[1] + 1,  # East
+            grid_extent[2] - 1,  # South
+            grid_extent[3] + 1   # North
+        )
+        
+        topo_workflow = TopographicQuantities(
+            topo=self.topo,
+            model_dir=self.model_dir,
+            output_dir=self.output_dir,
+            ellipsoid=self.ellipsoid,
+            chunk_size=self.chunk_size,
+            radius=self.radius,
+            proj_name=self.proj_name,
+            bbox=dem_extent,  # Use extended DEM extent
+            bbox_offset=0,    # No additional offset needed
+            grid_size=self.grid_size,  # Use target resolution directly
+            grid_unit=self.grid_unit,
+            window_mode=self.window_mode,
+            parallel=self.parallel,
+            interp_method=self.interp_method
+        )
+        
+        # 5. Handle terrain correction and other corrections
         if self.topo or self.tc_file:
-            print('Computing terrain correction on the same grid...')
-            topo_workflow = TopographicQuantities(
-                topo=self.topo,
+            gridded_ds['tc'] = self._load_or_compute_correction('terrain-correction', topo_workflow, target_grid_size_deg)
+        
+        # Handle other corrections if requested
+        if self.site:
+            gridded_ds['site'] = self._load_or_compute_correction('site', topo_workflow, target_grid_size_deg)
+        
+        if self.ellipsoidal_correction:
+            ggm = GGMSynthesis(
+                model=self.model,
+                max_deg=self.max_deg,
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
                 chunk_size=self.chunk_size,
-                radius=self.radius,
-                proj_name=self.proj_name,
-                bbox=self.bbox,
-                bbox_offset=self.bbox_offset,
-                grid_size=self.grid_size,
-                window_mode=self.window_mode,
                 parallel=self.parallel,
-                interp_method=self.interp_method
+                tide_system=self.gravity_tide,
+                converted=True,
+                bbox=grid_extent,  # Use extended grid extent
+                bbox_offset=0,     # No additional offset needed
+                grid_size=self.grid_size,
+                grid_unit=self.grid_unit,
+                proj_name=self.proj_name
             )
-            topo_workflow._initialize_terrain()
-            tc_result = topo_workflow.run(['terrain-correction'])
-            tc_grid = xr.open_dataset(tc_result['output_files'][0])
-            gridded_ds['tc'] = tc_grid['tc']
-        
-        # Compute other corrections if requested
-        if any([self.site, self.ellipsoidal_correction, self.atm]):
-            print('Computing additional corrections on the same grid...')
-            if self.site:
-                site_result = topo_workflow.run(['site'])
-                site_grid = xr.open_dataset(site_result['output_files'][0])
-                gridded_ds['site'] = site_grid['Dg_SITE']
-            
-            if self.ellipsoidal_correction:
-                ggm = GGMSynthesis(
-                    model=self.model,
-                    max_deg=self.max_deg,
-                    model_dir=self.model_dir,
-                    output_dir=self.output_dir,
-                    ellipsoid=self.ellipsoid,
-                    chunk_size=self.chunk_size,
-                    parallel=self.parallel,
-                    tide_system=self.gravity_tide,
-                    converted=True,
-                    bbox=self.bbox,
-                    bbox_offset=self.bbox_offset,
-                    grid_size=self.grid_size,
-                    grid_unit=self.grid_unit,
-                    proj_name=self.proj_name
-                )
-                ec_grid = ggm.compute_ellipsoidal_correction()
+            ec_file = self.output_dir / 'ellipsoidal_correction.nc'
+            if ec_file.exists() and not self._should_recompute_grid(ec_file, target_grid_size_deg):
+                print('Loading existing ellipsoidal correction grid...')
+                ec_grid = xr.open_dataset(ec_file)
+                if np.abs(np.diff(ec_grid.lat.values)[0]) != target_grid_size_deg:
+                    print('Resampling ellipsoidal correction to target grid...')
+                    ec_grid = ec_grid.interp(
+                        lat=np.arange(grid_extent[2], grid_extent[3] + target_grid_size_deg, target_grid_size_deg),
+                        lon=np.arange(grid_extent[0], grid_extent[1] + target_grid_size_deg, target_grid_size_deg),
+                        method='linear'
+                    )
                 gridded_ds['ellipsoidal_correction'] = ec_grid['Dg_ELL']
-            
-            if self.atm:
-                atm_result = topo_workflow.run(['atm-corr'])
-                atm_grid = xr.open_dataset(atm_result['output_files'][0])
-                gridded_ds['atm_correction'] = atm_grid['Dg_atm']
+            else:
+                print('Computing new ellipsoidal correction grid...')
+                result = ggm.compute_ellipsoidal_correction()
+                ec_grid = xr.open_dataset(result['output_file'])
+                gridded_ds['ellipsoidal_correction'] = ec_grid['Dg_ELL']
+        
+        if self.atm:
+            gridded_ds['atm_correction'] = self._load_or_compute_correction('atm-corr', topo_workflow, target_grid_size_deg)
         
         # 6. Compute GGM anomalies on the same grid
         print('Computing GGM anomalies on the same grid...')
@@ -605,8 +676,8 @@ class ResidualAnomalyComputation:
             parallel=self.parallel,
             tide_system=self.gravity_tide,
             converted=True,
-            bbox=self.bbox,
-            bbox_offset=self.bbox_offset,
+            bbox=grid_extent,  # Use extended grid extent
+            bbox_offset=0,     # No additional offset needed
             grid_size=self.grid_size,
             grid_unit=self.grid_unit,
             proj_name=self.proj_name
