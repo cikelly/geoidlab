@@ -31,15 +31,6 @@ def main(args=None) -> None:
     
     # Handle both absolute and project-relative paths
     filepath = Path(args.filename)
-    # filepath = Path(getattr(args, 'file', None))
-    print(filepath)
-    # print(filepath)
-    # if not filepath.is_absolute():
-    #     filepath = Path(args.proj_name) / Path('results') / filepath
-    # if not filepath.is_absolute():
-    #     filepath = Path(args.proj_name) / filepath
-    
-    # print(filepath)
     
     if not filepath.exists():
         print(f'Error: The file {filepath} does not exist.')
