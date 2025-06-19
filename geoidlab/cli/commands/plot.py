@@ -121,7 +121,10 @@ def main(args=None) -> None:
     for i, var in enumerate(variables):
         row, col = divmod(i, ncols)
         ax = axes[row, col]
-        lon, lat = var.coords['lon'].values, var.coords['lat'].values
+        try:
+            lon, lat = var.coords['lon'].values, var.coords['lat'].values
+        except KeyError:
+            lon, lat = var.coords['x'].values, var.coords['y'].values
         data = var.values
         
         units = var.attrs.get('units', '')
