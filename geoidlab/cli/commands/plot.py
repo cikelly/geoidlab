@@ -61,12 +61,14 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('-f', '--filename', type=str, help='NetCDF file to plot')
     parser.add_argument('-v', '--variable', action='append', type=str, help='Variable name(s) to plot')
     parser.add_argument('-c', '--cmap', type=str, help='Colormap to use. For GMT .cpt files, use the file name with extension.', default='GMT_rainbow.cpt')
-    parser.add_argument('--fig-size', type=int, nargs=2, default=[5, 5], help='Figure size in inches')
+    parser.add_argument('--fig-size', type=float, nargs=2, default=[5, 5], help='Figure size in inches')
     parser.add_argument('--vmin', type=float, help='Minimum value for colorbar')
     parser.add_argument('--vmax', type=float, help='Maximum value for colorbar')
     parser.add_argument('--font-size', type=int, default=10, help='Font size for labels')
+    parser.add_argument('--title', type=str, default=None, help='Title for the figure')
     parser.add_argument('--title-font-size', type=int, default=12, help='Font size for title')
     parser.add_argument('--font-family', type=str, default='Arial', help='Font family for labels')
+    parser.add_argument('--cbar-title', type=str, default=None, help='Title for colorbar')
     parser.add_argument('--list-cmaps', action='store_true', help='List available colormaps and exit')
     parser.add_argument('--save', action='store_true', help='Save figure')
     parser.add_argument('--dpi', type=int, default=300, help='DPI for saving figure')
@@ -134,16 +136,18 @@ def main(args=None) -> None:
             if units == 'meters' or units == 'm':
                 data = data * UNIT_CONVERSIONS[args.unit]
                 units = f'{args.unit}'
-            
         pcm = ax.pcolormesh(lon, lat, data, cmap=get_colormap(args.cmap), shading='auto', vmin=args.vmin, vmax=args.vmax)
         long_name = var.attrs.get('long_name', var.name)
-        ax.set_title(f'{long_name}', fontweight='bold', fontsize=args.title_font_size)
+        ax.set_title(f'{long_name if args.title is None else args.title}', fontweight='bold', fontsize=args.title_font_size)
         ax.grid(which='both', linewidth=0.01)
         ax.minorticks_on()
         ax.grid(which='minor', linewidth=0.01)
         ax.set_xlim(args.xlim)
         ax.set_ylim(args.ylim)
-        cbar = fig.colorbar(pcm, ax=ax, label=f'{long_name} [{units}]' if units else long_name)
+        if args.cbar_title is not None:
+            cbar = fig.colorbar(pcm, ax=ax, label=f'{args.cbar_title} [{units}]' if units else args.cbar_title)
+        else:
+            cbar = fig.colorbar(pcm, ax=ax, label=f'{long_name} [{units}]' if units else long_name)
         
         # Add scalebar
         if args.scalebar:
@@ -158,7 +162,7 @@ def main(args=None) -> None:
                 
             if args.scalebar_fancy:
                 # Create a segmented scalebar with alternating colors
-                
+
                 n_segments = 4  # e.g., black, white, black
                 segment_length = scale_length / n_segments
                 colors = ['black', 'white'] * n_segments
