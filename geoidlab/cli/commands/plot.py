@@ -79,7 +79,6 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
-    
 
 def main(args=None) -> None:
     if args is None:
@@ -90,10 +89,6 @@ def main(args=None) -> None:
     if getattr(args, 'list_cmaps', False):
         list_colormaps()
         return 0
-    
-    # if args.list_cmaps:
-    #     list_colormaps()
-    #     return 0
     
     # Ensure we have a filename
     if not args.filename:
