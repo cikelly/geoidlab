@@ -212,14 +212,25 @@ class GlobalGeopotentialModel:
         
         return GM / self.r ** 2 * Dg * 10**5  # Convert to mGal
     
-    def gravity_anomaly(self, parallel: bool=True) -> np.ndarray:
+    def gravity_anomaly(self, parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
         Method to call either gravity_anomaly_parallel() or gravity_anomaly_sequential()
+        with automatic batching for large arrays
+        
+        Parameters
+        ----------
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        Dg : Gravity anomaly array (mGal)
+        Dg        : Gravity anomaly array (mGal)
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('gravity_anomaly', batch_size=batch_size, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.gravity_anomaly_parallel()
         else:
@@ -295,14 +306,25 @@ class GlobalGeopotentialModel:
         
         return GM / self.r ** 2 * dg * 10**5  # [mGal]
     
-    def gravity_disturbance(self, parallel: bool=True) -> np.ndarray:
+    def gravity_disturbance(self, parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
         Method to call either gravity_disturbance_parallel() or gravity_disturbance_sequential()
+        with automatic batching for large arrays
+        
+        Parameters
+        ----------
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        dg : Gravity disturbance array (mGal)
+        dg         : Gravity disturbance array (mGal)
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('gravity_disturbance', batch_size=batch_size, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.gravity_disturbance_parallel()
         else:
@@ -394,17 +416,27 @@ class GlobalGeopotentialModel:
         return T
     
     
-    def disturbing_potential(self, r_or_R='r', parallel: bool=True) -> np.ndarray:
+    def disturbing_potential(self, r_or_R='r', parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
         Method to call either disturbing_potential_parallel() or disturbing_potential_sequential()
+        with automatic batching for large arrays
         
         Parameters
         ----------
         r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        parallel  : Whether to use parallel processing (forced to False for large arrays)
+        batch_size: Maximum batch size for large arrays (default: 1000)
+        
         Returns
         -------
         T         : Disturbing potential array (m2/s2)
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('disturbing_potential', batch_size=batch_size, 
+                                     r_or_R=r_or_R, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.disturbing_potential_parallel(r_or_R=r_or_R)
         else:
@@ -480,14 +512,25 @@ class GlobalGeopotentialModel:
         
         return GM / self.r ** 3 * Tzz * 10**9 # [E = Eötvös]
     
-    def second_radial_derivative(self, parallel: bool=True) -> np.ndarray:
+    def second_radial_derivative(self, parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
         Method to call either second_radial_derivative_parallel() or second_radial_derivative_sequential()
+        with automatic batching for large arrays
+        
+        Parameters
+        ----------
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        Tzz    : Second radial derivative (Eötvös (E): 10^{−9}s^{−2})
+        Tzz        : Second radial derivative (Eötvös (E): 10^{−9}s^{−2})
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('second_radial_derivative', batch_size=batch_size, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.second_radial_derivative_parallel()
         else:
@@ -498,32 +541,41 @@ class GlobalGeopotentialModel:
         T=None, 
         tolerance=5e-3, 
         max_iter=5,
-        parallel: bool=True
+        parallel: bool=True,
+        batch_size: int = 1000
     ) -> np.ndarray:
         '''
-        Height anomaly based on Bruns' method
+        Height anomaly based on Bruns' method with automatic batching for large arrays
         
         Parameters
         ----------
-        T         : Disturbing potential array (m2/s2)
-        tolerance : Tolerance for refining height anomaly
-        max_iter  : Maximum number of iterations
-        parallel  : True or False for parallel processing
+        T          : Disturbing potential array (m2/s2)
+        tolerance  : Tolerance for refining height anomaly
+        max_iter   : Maximum number of iterations
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        zeta      : Height anomaly (m)
+        zeta       : Height anomaly (m)
         
         Notes
         -----
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.9, p.288
-        2. We need to iterate to refine zeta because we start estimating zeta using `H` not `hn`
+        2. For arrays larger than batch_size, automatic batching is used to prevent memory issues
+        3. We need to iterate to refine zeta because we start estimating zeta using `H` not `hn`
             Steps:
                 1. Estimate hn (normal height): hn = self.h - zeta
                 2. Use hn to calculate gammaQ
                 3. Use gammaQ to calculate updated zeta (zeta1)
                 4. Repeat until convergence.
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('height_anomaly', batch_size=batch_size, 
+                                     T=T, tolerance=tolerance, max_iter=max_iter, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         print('Using Bruns\' method with zero-degree correction to calculate height anomaly...\n')
         
         T = self.disturbing_potential(r_or_R='r', parallel=parallel) if T is None else T
@@ -562,14 +614,16 @@ class GlobalGeopotentialModel:
         
         return zeta
     
-    def geoid(self, T=None, icgem: bool = False, parallel: bool = False) -> np.ndarray: #, n_workers: int = None
+    def geoid(self, T=None, icgem: bool = False, parallel: bool = False, batch_size: int = 1000) -> np.ndarray:
         '''
-        Geoid heights based on Bruns' method
+        Geoid heights based on Bruns' method with automatic batching for large arrays
         
         Parameters
         ----------
-        T         : Disturbing potential array (m2/s2)
-        icgem     : Use ICGEM formula which accounts for topographic effect
+        T          : Disturbing potential array (m2/s2)
+        icgem      : Use ICGEM formula which accounts for topographic effect
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
@@ -578,11 +632,17 @@ class GlobalGeopotentialModel:
         Notes
         -----
         1. Torge, Muller, & Pail (2023): Geodesy, Eq. 6.8, p.288
-        2. ICGEM computes the reference geoid using two contributions:
+        2. For arrays larger than batch_size, automatic batching is used to prevent memory issues
+        3. ICGEM computes the reference geoid using two contributions:
                 1. The geoid as computed by `geoid` method (N)
                 2. The contribution of topography (N_topo)
                 3. Finally, they obtain the geoid as N = N - N_topo
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('geoid', batch_size=batch_size, T=T, icgem=icgem, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
 
         T = self.disturbing_potential(r_or_R='R', parallel=parallel) if T is None else T
@@ -599,7 +659,7 @@ class GlobalGeopotentialModel:
                 print(f'ICGEM version requested. Computing topographic contribution to geoid height (N_topo) using {self.dtm_model.stem}')
             from geoidlab.dtm import DigitalTerrainModel
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid, model_name=self.dtm_model)
-            H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False) #, n_workers=n_workers)
+            H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)
             N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
             print('Subtracting topographic effect from geoid height...')
         
@@ -719,14 +779,25 @@ class GlobalGeopotentialModel:
         
         return H
     
-    def separation(self, parallel: bool=True) -> np.ndarray:
+    def separation(self, parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
-        Method to call either separation_parallel() or separation_sequential().
+        Method to call either separation_parallel() or separation_sequential()
+        with automatic batching for large arrays
+        
+        Parameters
+        ----------
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        H : Geoid-quasi geoid separation values.
+        H          : Geoid-quasi geoid separation values
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('separation', batch_size=batch_size, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.separation_parallel()
         else:
@@ -858,39 +929,56 @@ class GlobalGeopotentialModel:
         return dTdtheta
     
     
-    def disturbing_potential_derivative(self, r_or_R='r', parallel: bool=True) -> np.ndarray:
+    def disturbing_potential_derivative(self, r_or_R='r', parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
         '''
-        Method to call either disturbing_potential_parallel() or disturbing_potential_sequential()
+        Method to call either disturbing_potential_derivative_parallel() or disturbing_potential_derivative_sequential()
+        with automatic batching for large arrays
         
         Parameters
         ----------
-        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        r_or_R     : Either 'r' for radial distance or 'R' for reference radius
+        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        batch_size : Maximum batch size for large arrays (default: 1000)
+        
         Returns
         -------
-        dTdtheta  : Derivative of disturbing potential [m2/s2/rad]
+        dTdtheta   : Derivative of disturbing potential [m2/s2/rad]
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('disturbing_potential_derivative', batch_size=batch_size, 
+                                     r_or_R=r_or_R, parallel=parallel)
+        
+        # Original implementation for smaller arrays
         if parallel:
             return self.disturbing_potential_derivative_parallel(r_or_R=r_or_R)
         else:
             return self.disturbing_potential_derivative_sequential(r_or_R=r_or_R)
 
-    def ellipsoidal_correction(self, parallel: bool = True, r_or_R='r') -> np.ndarray:
+    def ellipsoidal_correction(self, parallel: bool = True, r_or_R='r', batch_size: int = 1000) -> np.ndarray:
         '''
-        Compute the ellipsoidal correction for gravity anomalies
+        Compute the ellipsoidal correction for gravity anomalies with automatic batching for large arrays
         
         Parameters
         ----------
-        parallel  : whether to use parallel processing
-        r_or_R    : Either 'r' for radial distance or 'R' for reference radius
+        parallel   : whether to use parallel processing (forced to False for large arrays)
+        r_or_R     : Either 'r' for radial distance or 'R' for reference radius
+        batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
         -------
-        Dg_ell    : Ellipsoidal correction [mGal], shaped as input coordinates or grid [mGal]
+        Dg_ell     : Ellipsoidal correction [mGal], shaped as input coordinates or grid [mGal]
         
         References
         ----------
         1. Jekeli (1981): The Downward Continuation to the Earth's Surface of Truncated Spherical and Ellipsoidal Harmonic Series of the Gravity and Height Anomalies
         '''
+        # Check if batching is needed
+        if len(self.lon) > batch_size:
+            return self._batch_process('ellipsoidal_correction', batch_size=batch_size, 
+                                     parallel=parallel, r_or_R=r_or_R)
+        
+        # Original implementation for smaller arrays
         if not all(col in self.grav_data.columns for col in ['lon', 'lat']) or not ('elevation' in self.grav_data.columns or 'height' in self.grav_data.columns):
             raise ValueError('grav_data must contain columns: lon, lat, elevation | height')
         
@@ -916,6 +1004,72 @@ class GlobalGeopotentialModel:
         
         print('Ellipsoidal correction computed successfully.')
         return Delta_g_ell
+
+    def _batch_process(self, method_name, batch_size=1000, **kwargs):
+        '''
+        Automatically batch process large arrays to avoid memory issues
+        
+        Parameters
+        ----------
+        method_name : Name of the method to call ('geoid', 'disturbing_potential', etc.)
+        batch_size  : Maximum batch size (default: 1000)
+        **kwargs    : Arguments to pass to the method
+        
+        Returns
+        -------
+        result : Concatenated results from all batches
+        '''
+        n_points = len(self.lon)
+        
+        if n_points <= batch_size:
+            # No batching needed
+            method = getattr(self, method_name)
+            return method(**kwargs)
+        
+        # Batching needed
+        print(f"Large array detected ({n_points} points). Processing in batches of {batch_size} to avoid memory issues...")
+        
+        # Force parallel=False for large arrays to prevent memory issues
+        if kwargs.get('parallel', False):
+            print("Forcing parallel=False for large arrays to prevent memory issues.")
+            kwargs['parallel'] = False
+        
+        results = []
+        n_batches = (n_points + batch_size - 1) // batch_size
+        
+        for i in range(n_batches):
+            start_idx = i * batch_size
+            end_idx = min((i + 1) * batch_size, n_points)
+            
+            print(f"Processing batch {i + 1}/{n_batches} (points {start_idx + 1}-{end_idx})...")
+            
+            # Create a temporary GGM object for this batch
+            batch_ggm = GlobalGeopotentialModel(
+                shc=self.shc,
+                model_name=self.model,
+                ellipsoid=self.ellipsoid,
+                nmax=self.nmax,
+                grav_data=pd.DataFrame({
+                    'lon': self.lon[start_idx:end_idx],
+                    'lat': self.lat[start_idx:end_idx],
+                    'height': self.h[start_idx:end_idx]
+                }),
+                zonal_harmonics=False,  # Already done in original object
+                model_dir=self.model_dir,
+                chunk_size=self.chunk,
+                dtm_model=self.dtm_model
+            )
+            
+            # Call the method on this batch
+            method = getattr(batch_ggm, method_name)
+            batch_result = method(**kwargs)
+            results.append(batch_result)
+        
+        # Concatenate results
+        final_result = np.concatenate(results)
+        print(f"Completed processing all {n_batches} batches.")
+        
+        return final_result
 
         
 class GlobalGeopotentialModel2D():
