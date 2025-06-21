@@ -416,8 +416,8 @@ def dem4geoid(
     #     y=slice(bbox_subset[1], bbox_subset[3])
     # )
     print(f'Resampling DEM to {resolution} arc-seconds...') if resolution != 30 else None
-    minx, maxx = bbox_subset[0], bbox_subset[2]
-    miny, maxy = bbox_subset[1], bbox_subset[3]
+    minx, maxx = bbox_subset[0], bbox_subset[1]
+    miny, maxy = bbox_subset[2], bbox_subset[3]
     
     num_x_points = int((maxx - minx) / (resolution/3600)) + 1
     num_y_points = int((maxy - miny) / (resolution/3600)) + 1
