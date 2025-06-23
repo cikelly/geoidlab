@@ -28,6 +28,7 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e', model_dir='downloads
     -----
     1. Automatically writes global model to file
     '''
+    model_name = model_name + '.gfc' if '.gfc' not in model_name else model_name
     base_url = "https://icgem.gfz-potsdam.de/tom_longtime"
     model_url_prefix = 'https://icgem.gfz-potsdam.de'
     model_dir = Path(model_dir).resolve()
