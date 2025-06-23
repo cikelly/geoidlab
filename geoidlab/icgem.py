@@ -32,7 +32,8 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e', model_dir='downloads
     base_url = "https://icgem.gfz-potsdam.de/tom_longtime"
     model_url_prefix = 'https://icgem.gfz-potsdam.de'
     model_dir = Path(model_dir).resolve()
-    file_path = model_dir / (model_name + '.gfc')
+    # file_path = model_dir / (model_name + '.gfc')
+    file_path = model_dir / (model_name)
     
     def validate_gfc_file(file_path) -> bool:
         '''Check if the file is a valid .gfc file.'''
@@ -51,15 +52,15 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e', model_dir='downloads
                 # Try to connect to check for updates
                 response = requests.get(base_url, timeout=10)
                 response.raise_for_status()
-                print(f'{model_name}.gfc exists in \n\t{model_dir} \nand is valid.\n')
+                print(f'{model_name} exists in \n\t{model_dir} \nand is valid.\n')
                 return 
             except requests.RequestException:
                 # If can't connect but file is valid, use existing file
-                print(f'{model_name}.gfc exists and appears valid. Using the existing file.\n')
+                print(f'{model_name} exists and appears valid. Using the existing file.\n')
                 return 
         else:
             # File exists but is invalid
-            print(f'{model_name}.gfc exists but is invalid or corrupted. Redownloading...\n')
+            print(f'{model_name} exists but is invalid or corrupted. Redownloading...\n')
             file_path.unlink()
     
     # Connect to server to get model listing
@@ -104,20 +105,20 @@ def download_ggm(model_name: str = 'GO_CONS_GCF_2_TIM_R6e', model_dir='downloads
                 print("ERROR, something went wrong during the download.")
                 if file_path.exists():
                     file_path.unlink()
-                raise IOError(f"Failed to download {model_name}.gfc")
+                raise IOError(f"Failed to download {model_name}")
         except (KeyboardInterrupt, Exception) as e:
             print(f'\nDownload interrupted or failed: {e}')
             if file_path.exists():
                 file_path.unlink()  # Remove partial file
-            raise IOError(f"Failed to download {model_name}.gfc")
+            raise IOError(f"Failed to download {model_name}")
             
     # Verify the downloaded file
     if not validate_gfc_file(file_path):
-        print(f'Downloaded file {model_name}.gfc is invalid.')
+        print(f'Downloaded file {model_name} is invalid.')
         file_path.unlink()
-        raise IOError(f"Downloaded file {model_name}.gfc is invalid.")
+        raise IOError(f"Downloaded file {model_name} is invalid.")
 
-    print(f"\n{model_name}.gfc saved to {model_dir}")
+    print(f"\n{model_name} saved to {model_dir}")
     return 
 
 
