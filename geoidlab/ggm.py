@@ -253,7 +253,7 @@ class GlobalGeopotentialModel:
         Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
         dg  = np.zeros(len(self.lon))
         
-        for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
+        for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity disturbance'):
             sum = np.zeros(len(self.lon))
             for m in range(n + 1):
                 mlambda = m * self.lambda_
