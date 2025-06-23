@@ -143,6 +143,8 @@ def subtract_zonal_harmonics(
     if 'Cnm' not in shc or 'a' not in shc:
         raise KeyError('shc must have "Cnm" and "a" keys')
     
+    shc1 = copy.deepcopy(shc)
+    
     # Reference ellipsoid: remove the even zonal harmonics from sine and cosine coefficients.
     ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
     GMe = ref_ellipsoid['GM']
@@ -153,7 +155,7 @@ def subtract_zonal_harmonics(
     for n, Cn0 in zip([2, 4, 6, 8, 10], zonal_harmonics):
         if Cn0 not in ref_ellipsoid:
             raise KeyError(f"{Cn0} coefficient not found in the reference ellipsoid")
-        shc['Cnm'][n, 0] = shc['Cnm'][n, 0] - (GMe / shc['GM']) * (a_e / shc['a']) ** n * ref_ellipsoid[Cn0]
+        shc1['Cnm'][n, 0] = shc1['Cnm'][n, 0] - (GMe / shc1['GM']) * (a_e / shc1['a']) ** n * ref_ellipsoid[Cn0]
 
-    return shc
+    return shc1
 
