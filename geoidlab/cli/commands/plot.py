@@ -132,6 +132,24 @@ def main(args=None) -> None:
                 data = data * UNIT_CONVERSIONS[args.unit]
                 units = f'{args.unit}'
         pcm = ax.pcolormesh(lon, lat, data, cmap=get_colormap(args.cmap), shading='auto', vmin=args.vmin, vmax=args.vmax)
+        
+        # Set format_coord for status bar to show z value
+        def make_format_coord(lon, lat, data):
+            def format_coord(x, y):
+                # Only show z if x and y are within the data bounds
+                if (lon.min() <= x <= lon.max()) and (lat.min() <= y <= lat.max()):
+                    ix = np.abs(lon - x).argmin()
+                    iy = np.abs(lat - y).argmin()
+                    try:
+                        z = data[iy, ix]
+                        return f"x={x:.2f}, y={y:.2f}, z={z:.2f}"
+                    except Exception:
+                        return f"x={x:.2f}, y={y:.2f}"
+                else:
+                    return f"x={x:.2f}, y={y:.2f}"
+            return format_coord
+        ax.format_coord = make_format_coord(lon, lat, data)
+        
         long_name = var.attrs.get('long_name', var.name)
         ax.set_title(f'{long_name if args.title is None else args.title}', fontweight='bold', fontsize=args.title_font_size)
         ax.grid(which='both', linewidth=0.01)
