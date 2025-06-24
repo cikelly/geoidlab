@@ -415,7 +415,8 @@ def dem4geoid(
     #     x=slice(bbox_subset[0], bbox_subset[2]),
     #     y=slice(bbox_subset[1], bbox_subset[3])
     # )
-    print(f'Resampling DEM to {resolution} arc-seconds...') if resolution != 30 else None
+    print(f'Aligning DEM to bounding box and resampling DEM to {resolution} arc-seconds...') #if resolution != 30 else None
+    start_time = time.time()
     minx, maxx = bbox_subset[0], bbox_subset[1]
     miny, maxy = bbox_subset[2], bbox_subset[3]
     
@@ -427,7 +428,7 @@ def dem4geoid(
         y=np.linspace(miny, maxy, num_y_points),
         method=interp_method
     )
-    
+    print(f'DEM alignment and resampling completed in {time.time() - start_time:.2f} seconds.\n')
     if dem.rio.crs is None:
         dem.rio.write_crs('EPSG:4326', inplace=True)
 
@@ -577,20 +578,20 @@ def download_dem_cog(
     print(f'DEM created successfully in {time.time() - start_time:.2f} seconds!\n')
     
     
-    print(f'Interpolating DEM ...')
-    start_time = time.time()
-    minx, maxx = bbox_subset[0], bbox_subset[1]
-    miny, maxy = bbox_subset[2], bbox_subset[3]
+    # print(f'Interpolating DEM ...')
+    # start_time = time.time()
+    # minx, maxx = bbox_subset[0], bbox_subset[1]
+    # miny, maxy = bbox_subset[2], bbox_subset[3]
     
-    num_x_points = int((maxx - minx) / (resolution)) + 1
-    num_y_points = int((maxy - miny) / (resolution)) + 1
+    # num_x_points = int((maxx - minx) / (resolution)) + 1
+    # num_y_points = int((maxy - miny) / (resolution)) + 1
     
-    dem = dem.interp(
-        x=np.linspace(minx, maxx, num_x_points),
-        y=np.linspace(miny, maxy, num_y_points),
-        method=interp_method
-    )
-    print(f'DEM interpolation completed in {time.time() - start_time:.2f} seconds.\n')
+    # dem = dem.interp(
+    #     x=np.linspace(minx, maxx, num_x_points),
+    #     y=np.linspace(miny, maxy, num_y_points),
+    #     method=interp_method
+    # )
+    # print(f'DEM interpolation completed in {time.time() - start_time:.2f} seconds.\n')
     
     print(f'Saving DEM to {ncfile}...')
     dem.to_netcdf(ncfile)
