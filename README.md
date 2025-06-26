@@ -104,9 +104,17 @@
 ### Recommended
 Install the development version. Navigate to your directory of choice (where `geoidlab` will be downloaded to). Example:
 
+- Create conda environment (optional but recommended to avoid dependency conflicts
+```bash
+conda create -n geoid_env
+conda activate geoid_env
+```
+
+- Create directory to download geoidlab to and install package
 ```bash
 cd ~ && mkdir tools && cd tools
 git clone https://github.com/cikelly/geoidlab.git
+cd geoidlab
 pip install -e .
 ```
 
