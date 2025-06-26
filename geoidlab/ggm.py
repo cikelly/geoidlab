@@ -1005,7 +1005,7 @@ class GlobalGeopotentialModel:
         print('Ellipsoidal correction computed successfully.')
         return Delta_g_ell
 
-    def _batch_process(self, method_name, batch_size=1000, **kwargs):
+    def _batch_process(self, method_name, batch_size=1000, **kwargs) -> np.ndarray:
         '''
         Automatically batch process large arrays to avoid memory issues
         
