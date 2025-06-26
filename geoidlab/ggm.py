@@ -127,9 +127,9 @@ class GlobalGeopotentialModel:
         self.r, self.vartheta, _ = co.geodetic2spherical(phi=self.lat, lambd=self.lon, height=self.h, ellipsoid=self.ellipsoid)
         
         # Set self.r = self.shc['a'] if all self.h = 0 (Doesn't really make a big difference)
-        if np.all(self.h == 0):
-            print('Setting r = R ...')
-            self.r = self.shc['a'] * np.ones(len(self.lon))
+        # if np.all(self.h == 0):
+        #     print('Setting r = R ...')
+        #     self.r = self.shc['a'] * np.ones(len(self.lon))
             
         self.lambda_ = np.radians(self.lon)
         # self.phi     = np.radians(self.lat)
