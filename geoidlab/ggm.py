@@ -645,7 +645,7 @@ class GlobalGeopotentialModel:
         # Original implementation for smaller arrays
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
 
-        T = self.disturbing_potential(r_or_R='R', parallel=parallel) if T is None else T
+        T = self.disturbing_potential(r_or_R='r', parallel=parallel) if T is None else T
         gamma0 = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
 
         N = T / gamma0
