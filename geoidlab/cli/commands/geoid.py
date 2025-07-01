@@ -317,7 +317,8 @@ class ResidualAnomalyComputation:
         return merged_df
     
     def compute_residual_anomalies_station(self) -> tuple[xr.Dataset, str]:
-        '''Compute residual anomalies at observation points (Approach 1)
+        '''
+        Compute residual anomalies at observation points (Approach 1)
         
         Returns
         -------

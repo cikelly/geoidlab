@@ -177,6 +177,15 @@ class TerrainQuantities:
         self.cosphip = np.cos(phip)
         self.sinphip = np.sin(phip)
         
+        
+        # Force window_mode to 'radius' if bbox_off==0 or if computation grid matches original grid
+        if self.window_mode == 'fixed':
+            same_x = np.allclose(self.ori_P['x'].values, self.ori_topo['x'].values)
+            same_y = np.allclose(self.ori_P['y'].values, self.ori_topo['y'].values)
+            if self.bbox_off == 0 or (same_x and same_y):
+                print("[WARNING] bbox_offset=0 or computation grid matches original grid. Forcing window_mode='radius' for robust windowing.")
+                self.window_mode = 'radius'
+        
         # Precompute window sizes
         if self.window_mode == 'fixed':
             self.dn = int(np.round(self.ncols - self.ori_P['z'].shape[1])) + 1
