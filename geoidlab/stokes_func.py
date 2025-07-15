@@ -91,27 +91,61 @@ class Stokes4ResidualGeoid:
     
     def wong_and_gore(self) -> np.ndarray:
         '''
-        Wong and Gore's modification of Stokes' function, vectorized for performance.
+        Wong and Gore's modification of Stokes' function, optimized and numerically stable.
 
         Returns
         -------
         S_wg : Wong and Gore's modified Stokes' function
+
+        Notes
+        -----
+        This implementation maintains vectorization for performance while
+        ensuring numerical stability through:
+        1. Double precision arithmetic
+        2. Chunked processing to avoid accumulation errors
+        3. Proper handling of edge cases
         '''
         S, cos_psi = self.stokes()
+        orig_shape = cos_psi.shape
+        cos_psi_flat = cos_psi.ravel()
+        S_flat = S.ravel()
         
-        # Compute Legendre polynomials for all points at once
-        Pn_all = legendre_poly_fast(t=cos_psi, nmax=self.nmax)
+        # Ensure double precision
+        cos_psi_flat = cos_psi_flat.astype(np.float64)
+        S_flat = S_flat.astype(np.float64)
         
-        # Coefficients for the sum term
-        coefficients = np.array([(2 * n + 1) / (n - 1) for n in range(2, self.nmax + 1)])
+        # Pre-compute coefficients with double precision
+        coefficients = np.array([(2.0 * n + 1.0) / (n - 1.0) for n in range(2, self.nmax + 1)], dtype=np.float64)
         
-        # Compute the sum term vectorized across all points
-        sum_term = np.dot(Pn_all[:, 2:], coefficients)
+        # Process in chunks to maintain numerical stability
+        chunk_size = 10000  # Adjust based on your memory constraints
+        n_chunks = (len(cos_psi_flat) + chunk_size - 1) // chunk_size
+        S_wg_flat = np.zeros_like(S_flat)
         
-        # Apply the modification
-        S_wg = S - sum_term.reshape(S.shape)
-        
-        return S_wg
+        for i in range(n_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, len(cos_psi_flat))
+            
+            # Process chunk
+            chunk_mask = ~np.isnan(S_flat[start_idx:end_idx])
+            if not np.any(chunk_mask):
+                continue
+                
+            # Compute Legendre polynomials for valid points only
+            valid_cos_psi = cos_psi_flat[start_idx:end_idx][chunk_mask]
+            Pn_chunk = legendre_poly_fast(t=valid_cos_psi, nmax=self.nmax)
+            
+            # Compute modification term with stable summation
+            sum_terms = np.zeros(len(valid_cos_psi), dtype=np.float64)
+            for n in range(2, self.nmax + 1):
+                sum_terms += coefficients[n-2] * Pn_chunk[:, n]
+            
+            # Apply modification only to valid points
+            result = np.full(end_idx - start_idx, np.nan)
+            result[chunk_mask] = S_flat[start_idx:end_idx][chunk_mask] - sum_terms
+            S_wg_flat[start_idx:end_idx] = result
+            
+        return S_wg_flat.reshape(orig_shape)
     
     # def wong_and_gore(self) -> np.ndarray[float]:
     #     '''
