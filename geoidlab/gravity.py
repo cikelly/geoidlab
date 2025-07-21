@@ -255,3 +255,32 @@ def gravity_reduction(gravity, elevation) -> tuple:
     bouguer_gravity = free_air_gravity - 0.1119 * elevation
 
     return free_air_gravity, bouguer_gravity
+
+def prey_reduction(gP, HP, HQ) -> float:
+    '''
+    Compute gravity at a point in the Earth using Poincaré-Prey reduction.
+    
+    Parameters
+    ----------
+    gP       : Gravity of point P (gal)
+    HP       : Height of point P on the Earth surface (m)
+    HQ       : Height of point Q inside the Earth (m)
+    
+    Returns
+    -------
+    gQ       : Gravity of point Q (gal)
+    
+    Notes
+    -----
+    1. Section 3.5 of Physical Geodesy (2nd Edition)
+    2. Equation 3-45, Page 139 (Physical Geodesy, 2nd Edition)
+    3. This is an approximation, but often used in practice. For an exact solution,
+       we need to know the actual gravity gradient inside the Earth
+    4. This reduction has practical applications for height systems (orthometric heights)
+    '''
+    HP /= 1000 # m to km
+    HQ /= 1000 # m to km
+    
+    gQ = gP + 0.0848 * (HP - HQ)
+    
+    return gQ
