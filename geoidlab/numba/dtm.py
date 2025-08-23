@@ -3,8 +3,14 @@
 # Copyright (c) 2025, Caleb Kelly                          #
 # Author: Caleb Kelly  (2025)                              #
 ############################################################
+# import os
+# os.environ['OMP_MAX_ACTIVE_LEVELS'] = '2'
+
 import numpy as np
+
 from numba import njit, prange
+# , config
+# config.NUMBA_NUM_THREADS = 0  # Use all available threads
 
 @njit(parallel=True)
 def compute_harmonic_sum(Pnm, HCnm, HSnm, cosm, sinm) -> np.ndarray:

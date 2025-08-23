@@ -3,6 +3,10 @@
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
+# import os
+# os.environ['OMP_MAX_ACTIVE_LEVELS'] = '2'  # Set this at the very beginning
+# os.environ['OMP_DISPLAY_ENV'] = 'FALSE'    # Optional: disable OpenMP environment display
+
 import lzma
 
 import numpy as np
@@ -43,6 +47,7 @@ class DigitalTerrainModel:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
             print(f'Using compressed DTM2006.0 file in {script_dir}/data ...')
+            print('Note: Maximum degree for DTM2006.0 is 2190')
             with lzma.open(self.name, 'rt') as f:
                 self.dtm = f.readlines()
         else:

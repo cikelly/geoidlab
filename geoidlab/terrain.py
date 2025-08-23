@@ -111,7 +111,39 @@ class TerrainQuantities:
 
         # Set ocean areas to zero
         if self.ref_topo is not None:
+            ori_bounds = {
+            'x': (self.ori_topo.x.min().item(), self.ori_topo.x.max().item()),
+            'y': (self.ori_topo.y.min().item(), self.ori_topo.y.max().item())
+            }
+            ref_bounds = {
+                'x': (self.ref_topo.x.min().item(), self.ref_topo.x.max().item()),
+                'y': (self.ref_topo.y.min().item(), self.ref_topo.y.max().item())
+            }
+            
+            # Check if original grid extends beyond reference grid
+            x_extrap = (ori_bounds['x'][0] < ref_bounds['x'][0] or 
+                    ori_bounds['x'][1] > ref_bounds['x'][1])
+            y_extrap = (ori_bounds['y'][0] < ref_bounds['y'][0] or 
+                    ori_bounds['y'][1] > ref_bounds['y'][1])
+            
+            if x_extrap or y_extrap:
+                import warnings
+                warnings.warn(
+                    "Original topography extends beyond reference topography bounds. "
+                    "Extrapolation will be required, which may lead to inaccurate results. "
+                    f"Original bounds: x={ori_bounds['x']}, y={ori_bounds['y']} "
+                    f"Reference bounds: x={ref_bounds['x']}, y={ref_bounds['y']}"
+                )
+            
+            # Proceed with resampling
+            print("Resampling reference topography to match original topography grid...")
+            self.ref_topo = self.ref_topo.interp(
+                x=self.ori_topo.x,
+                y=self.ori_topo.y,
+                method='linear'
+            )
             self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
+            
         self.ori_topo['z'] = self.ori_topo['z'].where(self.ori_topo['z'] >= 0, 0)
 
         # Define sub-grid and extract data
@@ -141,7 +173,7 @@ class TerrainQuantities:
         # Extract sub-grid topography
         self.ori_P = self.ori_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
         self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
-
+        
         # Grid size in x and y
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
         self.dphi = (max(lat) - min(lat)) / (self.nrows - 1)
@@ -195,6 +227,7 @@ class TerrainQuantities:
             self.dm = int(np.ceil(self.radius_deg / self.dphi)) * 2 + 1
             self.dn = min(self.dn, self.ncols)
             self.dm = min(self.dm, self.nrows)
+            
 
     def get_window(
         self,
@@ -687,7 +720,8 @@ class TerrainQuantities:
         parallel: bool=True, 
         chunk_size: int=10,
         approximation: bool=False, 
-        tc=None
+        tc=None,
+        progress: bool=False
     ) -> np.ndarray:
         '''
         Parameters
@@ -706,7 +740,7 @@ class TerrainQuantities:
         elif approximation and tc is not None:
             dg_RTM = self.rtm_anomaly_approximation(tc=tc)[0]
         elif parallel:
-            dg_RTM = self.rtm_anomaly_parallel(chunk_size=chunk_size)
+            dg_RTM = self.rtm_anomaly_parallel(chunk_size=chunk_size, progress=progress)
         else:
             dg_RTM = self.rtm_anomaly_sequential()
         

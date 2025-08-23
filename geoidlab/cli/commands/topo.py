@@ -59,6 +59,8 @@ class TopographicQuantities:
         self,
         topo: str,
         ref_topo: str = None,
+        dtm_nmax: int = 360,
+        dtm_chunk_size: int = 200,
         model_dir: str | Path = None,
         output_dir: str | Path = 'results',
         ellipsoid: str = 'wgs84',
@@ -77,6 +79,7 @@ class TopographicQuantities:
         approximation: bool = False,
         tc: xr.Dataset = None,
         atm_method: str = 'noaa',
+        tasks: list[str] = None,
     ) -> None:
         '''
         
@@ -84,6 +87,8 @@ class TopographicQuantities:
         ----------
         topo           : Path to DEM file
         ref_topo       : Path to reference topo file
+        dtm_nmax       : Maximum degree for DTM spherical harmonic synthesis
+        dtm_chunk_size : Chunk size for DTM spherical harmonic synthesis
         model_dir      : Directory for DEM files
         output_dir     : Directory for output files
         ellipsoid      : Ellipsoid to use
@@ -102,6 +107,7 @@ class TopographicQuantities:
         approximation  : Use the approximate formula for RTM gravity anomalies
         tc             : Terrain correction. Necessary to avoid recomputing TC for RTM anomalies
         atm_method     : Atmospheric correction method. Options: 'noaa', 'ngi', 'wenzel'
+        tasks          : List of tasks to perform. Options: 'download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'
         
         Returns
         -------
@@ -109,6 +115,8 @@ class TopographicQuantities:
         '''
         self.topo = topo
         self.ref_topo = ref_topo
+        self.dtm_nmax = dtm_nmax
+        self.dtm_chunk_size = dtm_chunk_size
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.output_dir = Path(output_dir)
         self.ellipsoid = ellipsoid
@@ -127,6 +135,7 @@ class TopographicQuantities:
         self.approximation = approximation
         self.tc = tc
         self.atm_method = atm_method
+        self.tasks = tasks or []
         
         self.grid_size = to_seconds(grid_size, grid_unit)
         
@@ -174,10 +183,56 @@ class TopographicQuantities:
         )
         return dem
     
+    def _get_reference_topography(self) -> xr.Dataset:
+        '''Generate reference topography from DTM2006.0 if not provided'''
+        if self.ref_topo is None:
+            from geoidlab.dtm import DigitalTerrainModel
+            print(f'Generating reference topography from DTM2006.0 up to degree {self.dtm_nmax}...')
+            
+            # Create coordinates matching original topography
+            ori_x = self.ori_topo['x'].values
+            ori_y = self.ori_topo['y'].values
+            lon, lat = np.meshgrid(ori_x, ori_y)
+            
+            # Initialize DTM object and compute heights
+            dtm = DigitalTerrainModel(nmax=self.dtm_nmax, ellipsoid=self.ellipsoid)
+            H = dtm.dtm2006_height(lon=lon, lat=lat, chunk_size=self.dtm_chunk_size, save=False)
+            # Create xarray Dataset
+            ref_topo = xr.Dataset(
+                {
+                    'z': (('y', 'x'), H)
+                },
+                coords={
+                    'x': (('x',), ori_x),
+                    'y': (('y',), ori_y)
+                }
+            )
+            ref_topo.attrs['description'] = f'Reference topography from DTM2006.0 up to degree {self.dtm_nmax}'
+            
+            # Save for future use
+            out_file = Path(self.proj_name) / 'downloads' / f'DTM2006.0_nmax{self.dtm_nmax}.nc'
+            ref_topo.to_netcdf(out_file)
+            print(f'Saved reference topography to {out_file}')
+            
+            return ref_topo
+        else:
+            return xr.open_dataset(self.ref_topo)
+                
+    
     def _initialize_terrain(self) -> None:
         '''Intialize the TerrainQuantities object with the DEM'''
         self.ori_topo = self.download()
-        self.ref_topo = xr.open_dataset(self.ref_topo) if self.ref_topo else None
+        
+        # Check if RTM tasks are requested
+        needs_ref_topo = any(task in ['rtm-anomaly', 'height-anomaly'] for task in self.tasks)
+        
+        # Get reference topogarphy if needed for RTM tasks
+        if needs_ref_topo:
+            self.ref_topo = self._get_reference_topography()
+        # elif self.ref_topo:
+        #     self.ref_topo = xr.open_dataset(self.ref_topo)
+        # self.ref_topo = xr.open_dataset(self.ref_topo) if self.ref_topo else None
+        
         self.tq = terrain.TerrainQuantities(
             ori_topo=self.ori_topo,
             ref_topo=self.ref_topo,
@@ -321,6 +376,10 @@ def add_topo_arguments(parser) -> None:
                         help='Bounding box [W, E, S, N] in degrees')
     parser.add_argument('--ref-topo', type=str, 
                         help='Path to reference elevation file (required for residual terrain quantities)')
+    parser.add_argument('--dtm-nmax', type=int, default=360,
+                        help='Maximum degree for DTM2006.0 when computing reference topography. Default: 360')
+    parser.add_argument('--dtm-chunk-size', type=int, default=200,
+                        help='Chunk size for DTM2006.0 spherical harmonic synthesis. Use smaller chunks for larger grids or large dtm-nmax. Default: 200')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for DEM files')
     parser.add_argument('--radius', type=float, default=110.0, 
@@ -400,7 +459,8 @@ def main(args=None) -> int:
         grid_unit=args.grid_unit,
         window_mode=args.window_mode,
         parallel=args.parallel,
-        interp_method=args.interpolation_method
+        interp_method=args.interpolation_method,
+        tasks=tasks
     )
     
     # Ensure DEM is available before running tasks
