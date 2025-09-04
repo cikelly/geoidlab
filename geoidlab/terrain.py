@@ -1203,6 +1203,8 @@ class TerrainQuantities:
     
     @staticmethod
     def rename_variables(ds) -> xr.Dataset:
+        if isinstance(ds, str):
+            ds = xr.open_dataset(ds)
         coord_names = {
             'x': ['lon'],
             'y': ['lat'],
