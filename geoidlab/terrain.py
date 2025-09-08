@@ -111,9 +111,15 @@ class TerrainQuantities:
 
         # Set ocean areas to zero
         if self.ref_topo is not None:
+            # Check if coordinates match exactly
+            coords_match = (
+                self.ref_topo.x.equals(self.ori_topo.x) and 
+                self.ref_topo.y.equals(self.ori_topo.y)
+            )
+            
             ori_bounds = {
-            'x': (self.ori_topo.x.min().item(), self.ori_topo.x.max().item()),
-            'y': (self.ori_topo.y.min().item(), self.ori_topo.y.max().item())
+                'x': (self.ori_topo.x.min().item(), self.ori_topo.x.max().item()),
+                'y': (self.ori_topo.y.min().item(), self.ori_topo.y.max().item())
             }
             ref_bounds = {
                 'x': (self.ref_topo.x.min().item(), self.ref_topo.x.max().item()),
@@ -126,22 +132,25 @@ class TerrainQuantities:
             y_extrap = (ori_bounds['y'][0] < ref_bounds['y'][0] or 
                     ori_bounds['y'][1] > ref_bounds['y'][1])
             
-            if x_extrap or y_extrap:
-                import warnings
-                warnings.warn(
-                    "Original topography extends beyond reference topography bounds. "
-                    "Extrapolation will be required, which may lead to inaccurate results. "
-                    f"Original bounds: x={ori_bounds['x']}, y={ori_bounds['y']} "
-                    f"Reference bounds: x={ref_bounds['x']}, y={ref_bounds['y']}"
+            
+            # Only resample if coordinates don't match exactly
+            if not coords_match:
+                print("Resampling reference topography to match original topography grid...\n")
+                if x_extrap or y_extrap:
+                    import warnings
+                    warnings.warn(
+                        "Original topography extends beyond reference topography bounds. "
+                        "Extrapolation will be required, which may lead to inaccurate results. "
+                        f"Original bounds: x={ori_bounds['x']}, y={ori_bounds['y']} "
+                        f"Reference bounds: x={ref_bounds['x']}, y={ref_bounds['y']}"
+                    )
+                self.ref_topo = self.ref_topo.interp(
+                    x=self.ori_topo.x,
+                    y=self.ori_topo.y,
+                    method='linear'
                 )
             
-            # Proceed with resampling
-            print("Resampling reference topography to match original topography grid...")
-            self.ref_topo = self.ref_topo.interp(
-                x=self.ori_topo.x,
-                y=self.ori_topo.y,
-                method='linear'
-            )
+            # Always ensure non-negative values
             self.ref_topo['z'] = self.ref_topo['z'].where(self.ref_topo['z'] >= 0, 0)
             
         self.ori_topo['z'] = self.ori_topo['z'].where(self.ori_topo['z'] >= 0, 0)
@@ -582,7 +591,6 @@ class TerrainQuantities:
                     y = self.cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
                         self.coslamp[i, j] * self.sinphip[i, j] * (smallX - self.Xp[i, j]) - \
                         self.sinlamp[i, j] * self.sinphip[i, j] * (smallY - self.Yp[i, j])
-
                     # Distances
                     d = np.hypot(x, y)
                     d[(d > self.radius) | (d == 0)] = np.nan
@@ -744,7 +752,7 @@ class TerrainQuantities:
         else:
             dg_RTM = self.rtm_anomaly_sequential()
         
-        print(f'Saving RTM gravity anomalies to {self.proj_dir}/rtm.nc...')
+        print(f'Saving RTM gravity anomalies to {self.proj_dir}/RTM.nc...')
         save_to_netcdf(
             data=dg_RTM,
             lon=self.ori_P['x'].values,
@@ -1192,7 +1200,7 @@ class TerrainQuantities:
             data=z_rtm,
             lon=self.ori_P['x'].values,
             lat=self.ori_P['y'].values,
-            dataset_key='zeta',
+            dataset_key='zeta_rtm',  
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )

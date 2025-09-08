@@ -31,7 +31,7 @@ class TopographicQuantities:
         'rtm-anomaly': {
             'method': 'compute_rtm', 
             'terrain_method': 'rtm_anomaly',
-            'output': {'key': 'dg_RTM', 'file': 'dg_RTM'},
+            'output': {'key': 'dg_RTM', 'file': 'RTM'},  # Change from 'dg_RTM' to 'rtm'
         },
         'indirect-effect': {
             'method': 'compute_ind',
@@ -240,7 +240,7 @@ class TopographicQuantities:
             ellipsoid=self.ellipsoid,
             bbox_off=self.bbox_offset,
             sub_grid=self.bbox,
-            proj_dir=self.proj_name,
+            proj_dir=self.output_dir,  # Change from proj_name to output_dir
             window_mode=self.window_mode
         )
 

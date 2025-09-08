@@ -182,10 +182,8 @@ def save_to_netcdf(
             else:
                 proj_dir = Path(proj_dir)
             
-            # Set up save directory and filename
-            save_dir = proj_dir / 'results'
-            save_dir.mkdir(parents=True, exist_ok=True)
-            filename = save_dir / Path(config['fname'] + '.nc')
+            # Remove the extra 'results' directory creation
+            filename = proj_dir / Path(config['fname'] + '.nc')
         else:
             filename = Path(filepath)
         
