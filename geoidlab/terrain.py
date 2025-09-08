@@ -1200,7 +1200,7 @@ class TerrainQuantities:
             data=z_rtm,
             lon=self.ori_P['x'].values,
             lat=self.ori_P['y'].values,
-            dataset_key='zeta_rtm',  
+            dataset_key='zeta_rtm',
             proj_dir=self.proj_dir,
             overwrite=self.overwrite
         )
