@@ -478,7 +478,10 @@ class TerrainQuantities:
             tc = self.terrain_correction_sequential()
         
         # Save terrain correction
-        print(f'Saving terrain correction to {self.proj_dir}/TC.nc...')
+        if self.proj_dir:
+            print(f'Saving terrain correction to {self.proj_dir}/TC.nc...')
+        else:
+            print('Saving terrain correction to current directory (TC.nc)...')
         save_to_netcdf(
             data=tc,
             lon=self.ori_P['x'].values,
@@ -752,7 +755,11 @@ class TerrainQuantities:
         else:
             dg_RTM = self.rtm_anomaly_sequential()
         
-        print(f'Saving RTM gravity anomalies to {self.proj_dir}/RTM.nc...')
+        if self.proj_dir:
+            print(f'Saving RTM gravity anomalies to {self.proj_dir}/RTM.nc...')
+        else:
+            print('Saving RTM gravity anomalies to current directory (RTM.nc)...')
+        
         save_to_netcdf(
             data=dg_RTM,
             lon=self.ori_P['x'].values,
@@ -988,7 +995,10 @@ class TerrainQuantities:
             ind = self.indirect_effect_sequential()
         
         # Save indirect effect
-        print(f'Saving the indirect effect to {self.proj_dir}/N_ind.nc...')
+        if self.proj_dir:
+            print(f'Saving the indirect effect to {self.proj_dir}/N_ind.nc...')
+        else:
+            print('Saving the indirect effect to current directory (N_ind.nc)...')
         save_to_netcdf(
             data=ind,
             lon=self.ori_P['x'].values,
@@ -1195,7 +1205,10 @@ class TerrainQuantities:
         else:
             z_rtm = self.rtm_height_anomaly_sequential()
 
-        print(f'Saving RTM height anomaly to {self.proj_dir}/zeta_rtm.nc...')
+        if self.proj_dir:
+            print(f'Saving RTM height anomaly to {self.proj_dir}/zeta_rtm.nc...')
+        else:
+            print('Saving RTM height anomaly to current directory (zeta_rtm.nc)...')
         save_to_netcdf(
             data=z_rtm,
             lon=self.ori_P['x'].values,
@@ -1314,7 +1327,10 @@ class TerrainQuantities:
             raise ValueError(f'Unsupported atmospheric correction method: {method}')
         
         
-        print(f'Saving atmospheric corrections to {self.proj_dir}/Dg_atm.nc...')
+        if self.proj_dir:
+            print(f'Saving atmospheric corrections to {self.proj_dir}/Dg_atm.nc...')
+        else:
+            print('Saving atmospheric corrections to current directory (Dg_atm.nc)...')
         save_to_netcdf(
             data=atm_corr,
             lon=self.ori_P['x'].values,
