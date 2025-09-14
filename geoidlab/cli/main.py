@@ -46,6 +46,10 @@ def auto_visualize(args) -> None:
     viz_args = copy.deepcopy(args)
     viz_args.subcommand = 'viz'
     viz_args.save = True
+    viz_args.title = None
+    viz_args.cbar_title = None
+    viz_args.variable = None
+    viz_args.list_cmaps = False
     
     # Process each NetCDF file
     print(f'Plotting and saving all NetCDF files in {results_dir}.\n')
