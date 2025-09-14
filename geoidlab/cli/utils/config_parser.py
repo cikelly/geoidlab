@@ -98,6 +98,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         # topography
         'topo'                  : ('topo', None),
         'ref_topo'              : ('ref_topo', None),
+        'dtm_nmax'              : ('dtm_nmax', None),
+        'dtm_chunk_size'        : ('dtm_chunk_size', None),
         'radius'                : ('radius', None),
         'ellipsoid'             : ('ellipsoid', None),
         'interpolation_method'  : ('interpolation_method', None),
@@ -105,6 +107,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'tc_file'               : ('tc_file', None),
         'tc_grid_size'          : ('tc_grid_size', 30.0),
         'window_mode'           : ('window_mode', None),
+        'approximation'          : ('approximation', False),
         # computation
         'do'                    : ('do', None),
         'start'                 : ('start', None),
@@ -151,9 +154,9 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction'}:
+        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation'}:
             return value.lower() in {'true', 'yes', '1'}
-        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi'}:
+        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size'}:
             return int(value)
         if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax'}:
             return float(value)
