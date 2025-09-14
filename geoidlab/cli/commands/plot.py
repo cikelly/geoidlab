@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from pathlib import Path
 from matplotlib.colors import Colormap
@@ -58,9 +59,9 @@ def add_north_arrow(ax, x=0.95, y=0.95, size=30, color='black') -> None:
     
 def add_plot_arguments(parser) -> None:
     '''Add plotting arguments to an ArgumentParser instance'''
-    parser.add_argument('-f', '--filename', type=str, help='NetCDF file to plot')
+    parser.add_argument('-f', '--filename', type=str, nargs='+', help='NetCDF file(s) to plot. Can specify multiple files for subplot layout.')
     parser.add_argument('-v', '--variable', action='append', type=str, help='Variable name(s) to plot')
-    parser.add_argument('-c', '--cmap', type=str, help='Colormap to use. For GMT .cpt files, use the file name with extension.', default='GMT_rainbow.cpt')
+    parser.add_argument('-c', '--cmap', type=str, nargs='+', help='Colormap(s) to use. Can specify multiple colormaps for multiple files. For GMT .cpt files, use the file name with extension.', default=['GMT_rainbow.cpt'])
     parser.add_argument('--fig-size', type=float, nargs=2, default=[5, 5], help='Figure size in inches')
     parser.add_argument('--vmin', type=float, help='Minimum value for colorbar')
     parser.add_argument('--vmax', type=float, help='Maximum value for colorbar')
@@ -79,6 +80,11 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
+    parser.add_argument('--boundary', type=str, help='CSV file containing boundary coordinates (columns: lon, lat)')
+    parser.add_argument('--bound-color', type=str, default='k', help='Color for boundary lines (default: k)')
+    parser.add_argument('--bound-linewidth', type=float, default=1.2, help='Line width for boundary lines (default: 1.2)')
+    parser.add_argument('--sharex', action='store_true', help='Share x-axis between subplots')
+    parser.add_argument('--sharey', action='store_true', help='Share y-axis between subplots')
 
 def main(args=None) -> None:
     if args is None:
@@ -99,23 +105,75 @@ def main(args=None) -> None:
 
     plt.rcParams.update({'font.size': args.font_size, 'font.family': args.font_family})
     
-    ds = xr.open_dataset(args.filename)
-    if args.variable:
-        variables = [ds[var] for var in args.variable]
+    # Load boundary data if specified
+    boundary_data = None
+    if args.boundary:
+        try:
+            boundary_data = pd.read_csv(args.boundary)
+            if 'lon' not in boundary_data.columns or 'lat' not in boundary_data.columns:
+                print(f'Warning: Boundary file {args.boundary} must contain "lon" and "lat" columns. Skipping boundary plotting.')
+                boundary_data = None
+        except Exception as e:
+            print(f'Warning: Could not load boundary file {args.boundary}: {e}. Skipping boundary plotting.')
+            boundary_data = None
+    
+    # Handle single vs multiple files
+    if len(args.filename) == 1:
+        # Single file mode (existing behavior)
+        ds = xr.open_dataset(args.filename[0])
+        if args.variable:
+            variables = [ds[var] for var in args.variable]
+        else:
+            variables = list(ds.data_vars.values())
+            if not variables:
+                raise ValueError('No data variables found in the NetCDF file.')
+        
+        # Determine subplot grid based on variables
+        n_vars = len(variables)
+        ncols = int(np.ceil(np.sqrt(n_vars)))
+        nrows = int(np.ceil(n_vars / ncols))
+        
+        # Create datasets list for consistent processing
+        datasets = [ds] * n_vars
+        file_variables = [(ds, var) for var in variables]
+        
     else:
-        variables = list(ds.data_vars.values())
-        if not variables:
-            raise ValueError('No data variables found in the NetCDF file.')
+        # Multiple files mode (new feature)
+        datasets = []
+        file_variables = []
+        
+        for filename in args.filename:
+            ds = xr.open_dataset(filename)
+            datasets.append(ds)
+            
+            if args.variable:
+                # Use specified variables (cycle through if fewer variables than files)
+                var_name = args.variable[len(file_variables) % len(args.variable)]
+                if var_name in ds.data_vars:
+                    file_variables.append((ds, ds[var_name]))
+                else:
+                    print(f'Warning: Variable "{var_name}" not found in {filename}. Using first available variable.')
+                    file_variables.append((ds, list(ds.data_vars.values())[0]))
+            else:
+                # Use first data variable from each file
+                if len(ds.data_vars) == 0:
+                    raise ValueError(f'No data variables found in {filename}.')
+                file_variables.append((ds, list(ds.data_vars.values())[0]))
+        
+        # Determine subplot grid based on number of files
+        n_files = len(args.filename)
+        ncols = int(np.ceil(np.sqrt(n_files)))
+        nrows = int(np.ceil(n_files / ncols))
     
-    # Determine subplot grid
-    n_vars = len(variables)
-    ncols = int(np.ceil(np.sqrt(n_vars)))
-    nrows = int(np.ceil(n_vars / ncols))
+    # Determine sharing parameters
+    sharex = 'all' if args.sharex else False
+    sharey = 'all' if args.sharey else False
     
-    fig, axes = plt.subplots(nrows, ncols, figsize=(args.fig_size[0] * ncols, args.fig_size[1] * nrows))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(args.fig_size[0] * ncols, args.fig_size[1] * nrows), 
+                            sharex=sharex, sharey=sharey)
     axes = np.atleast_2d(axes)
     
-    for i, var in enumerate(variables):
+    for i, (ds, var) in enumerate(file_variables):
         row, col = divmod(i, ncols)
         ax = axes[row, col]
         try:
@@ -131,7 +189,16 @@ def main(args=None) -> None:
             if units == 'meters' or units == 'm':
                 data = data * UNIT_CONVERSIONS[args.unit]
                 units = f'{args.unit}'
-        pcm = ax.pcolormesh(lon, lat, data, cmap=get_colormap(args.cmap), shading='auto', vmin=args.vmin, vmax=args.vmax)
+        
+        # Select colormap for this subplot
+        if len(args.cmap) == 1:
+            cmap = get_colormap(args.cmap[0])
+        else:
+            # Use colormap corresponding to this file, cycling if fewer colormaps than files
+            cmap_name = args.cmap[i % len(args.cmap)]
+            cmap = get_colormap(cmap_name)
+        
+        pcm = ax.pcolormesh(lon, lat, data, cmap=cmap, shading='auto', vmin=args.vmin, vmax=args.vmax)
         
         # Set format_coord for status bar to show z value
         def make_format_coord(lon, lat, data):
@@ -150,13 +217,23 @@ def main(args=None) -> None:
             return format_coord
         ax.format_coord = make_format_coord(lon, lat, data)
         
+        # Get long_name for use in title and colorbar
         long_name = var.attrs.get('long_name', var.name)
-        ax.set_title(f'{long_name if args.title is None else args.title}', fontweight='bold', fontsize=args.title_font_size)
+        
+        # Use consistent title style: always use long_name unless custom title specified
+        title = f'{long_name if args.title is None else args.title}'
+        
+        ax.set_title(title, fontweight='bold', fontsize=args.title_font_size)
         ax.grid(which='both', linewidth=0.01)
         ax.minorticks_on()
         ax.grid(which='minor', linewidth=0.01)
         ax.set_xlim(args.xlim)
         ax.set_ylim(args.ylim)
+        
+        # Add boundary if specified
+        if boundary_data is not None:
+            ax.plot(boundary_data.lon, boundary_data.lat, color=args.bound_color, linewidth=args.bound_linewidth)
+        
         if args.cbar_title is not None:
             cbar = fig.colorbar(pcm, ax=ax, label=f'{args.cbar_title} [{units}]' if units else args.cbar_title)
         else:
@@ -235,7 +312,7 @@ def main(args=None) -> None:
                 ax.add_artist(sb)
     
     # Hide unused subplots
-    for i in range(len(variables), nrows * ncols):
+    for i in range(len(file_variables), nrows * ncols):
         row, col = divmod(i, ncols)
         ax = axes[row, col]
         ax.set_visible(False)
@@ -244,7 +321,12 @@ def main(args=None) -> None:
     
     if args.save:
         figures_dir = Path(f'{args.proj_name}/results/figures')
-        file_name = args.filename.split('/')[-1].split('.')[0]
+        if len(args.filename) == 1:
+            file_name = args.filename[0].split('/')[-1].split('.')[0]
+        else:
+            # For multiple files, create a combined filename
+            file_names = [f.split('/')[-1].split('.')[0] for f in args.filename]
+            file_name = '_'.join(file_names)
         plt.savefig(f'{figures_dir}/{file_name}.png', dpi=args.dpi, bbox_inches='tight')
     else:
         plt.show()

@@ -28,9 +28,9 @@ DATASET_CONFIG = {
     'rtm': {
         'var_name'   : 'rtm_anomaly',
         'units'      : 'mGal',
-        'description': 'RTM gravity anomaly',
+        'description': 'Residual Terrain Model gravity anomaly',
         'fname'      : 'RTM',
-        'long_name'  : 'Residual Terrain Model Gravity Anomalies',
+        'long_name'  : 'RTM Gravity Anomalies',
     },
     'zeta': {
         'var_name'   : 'zeta',
@@ -63,7 +63,7 @@ DATASET_CONFIG = {
     'zeta_rtm':{
         'var_name'   : 'zeta_rtm',
         'units'      : 'm',
-        'description': 'RTM height anomaly',
+        'description': 'Residual Terrain Model height anomaly',
         'fname'      : 'zeta_rtm',
         'long_name'  : 'RTM Height Anomaly'
     },
