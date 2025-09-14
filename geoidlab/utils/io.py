@@ -28,7 +28,7 @@ DATASET_CONFIG = {
     'rtm': {
         'var_name'   : 'rtm_anomaly',
         'units'      : 'mGal',
-        'description': 'Residual Terrain Model (RTM) Gravity Anomalies',
+        'description': 'RTM gravity anomaly',
         'fname'      : 'RTM',
         'long_name'  : 'Residual Terrain Model Gravity Anomalies',
     },
