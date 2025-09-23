@@ -47,7 +47,8 @@ class DigitalTerrainModel:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
             print(f'Using compressed DTM2006.0 file in {script_dir}/data ...')
-            print('Note: Maximum degree for DTM2006.0 is 2190')
+            if self.nmax < 2190:
+                print('Note: Maximum degree for DTM2006.0 is 2190') 
             with lzma.open(self.name, 'rt') as f:
                 self.dtm = f.readlines()
         else:
