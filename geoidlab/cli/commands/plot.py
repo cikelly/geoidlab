@@ -5,6 +5,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from typing import Callable
 from pathlib import Path
 from matplotlib.colors import Colormap
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -66,7 +67,7 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--vmin', type=float, help='Minimum value for colorbar')
     parser.add_argument('--vmax', type=float, help='Maximum value for colorbar')
     parser.add_argument('--font-size', type=int, default=10, help='Font size for labels')
-    parser.add_argument('--title', type=str, default=None, help='Title for the figure')
+    parser.add_argument('--title', type=str, nargs='+', default=None, help='Title(s) for the figure. Can specify multiple titles for multiple files.')
     parser.add_argument('--title-font-size', type=int, default=12, help='Font size for title')
     parser.add_argument('--font-family', type=str, default='Arial', help='Font family for labels')
     parser.add_argument('--cbar-title', type=str, default=None, help='Title for colorbar')
@@ -201,8 +202,8 @@ def main(args=None) -> None:
         pcm = ax.pcolormesh(lon, lat, data, cmap=cmap, shading='auto', vmin=args.vmin, vmax=args.vmax)
         
         # Set format_coord for status bar to show z value
-        def make_format_coord(lon, lat, data):
-            def format_coord(x, y):
+        def make_format_coord(lon, lat, data) -> Callable:
+            def format_coord(x, y) -> str:
                 # Only show z if x and y are within the data bounds
                 if (lon.min() <= x <= lon.max()) and (lat.min() <= y <= lat.max()):
                     ix = np.abs(lon - x).argmin()
@@ -220,8 +221,15 @@ def main(args=None) -> None:
         # Get long_name for use in title and colorbar
         long_name = var.attrs.get('long_name', var.name)
         
-        # Use consistent title style: always use long_name unless custom title specified
-        title = f'{long_name if args.title is None else args.title}'
+        # Select title for this subplot
+        if args.title is None:
+            title = long_name
+        elif len(args.title) == 1:
+            # Use single title for all subplots
+            title = args.title[0]
+        else:
+            # Use title corresponding to this file, cycling if fewer titles than files
+            title = args.title[i % len(args.title)]
         
         ax.set_title(title, fontweight='bold', fontsize=args.title_font_size)
         ax.grid(which='both', linewidth=0.01)
@@ -327,7 +335,9 @@ def main(args=None) -> None:
             # For multiple files, create a combined filename
             file_names = [f.split('/')[-1].split('.')[0] for f in args.filename]
             file_name = '_'.join(file_names)
-        plt.savefig(f'{figures_dir}/{file_name}.png', dpi=args.dpi, bbox_inches='tight')
+        output_path = figures_dir / f'{file_name}.png'
+        plt.savefig(output_path, dpi=args.dpi, bbox_inches='tight')
+        print(f'Figure saved to: {output_path.absolute()}')
     else:
         plt.show()
 
