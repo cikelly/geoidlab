@@ -54,7 +54,31 @@ class GGMSynthesis():
             'ggm_method': 'ellipsoidal_correction',
             'output': {'key': 'Dg_ELL', 'file': 'Dg_ELL'}
         },
-        # Add more tasks (e.g., disturbing_potential, second_radial_derivative)
+        'disturbing-potential': {
+            'method': 'compute_disturbing_potential',
+            'ggm_method': 'disturbing_potential',
+            'output': {'key': 'T', 'file': 'T'}
+        },
+        'disturbing-potential-derivative': {
+            'method': 'compute_disturbing_potential_derivative',
+            'ggm_method': 'disturbing_potential_derivative',
+            'output': {'key': 'dTdtheta', 'file': 'dTdtheta'}
+        },
+        'second-radial-derivative': {
+            'method': 'compute_second_radial_derivative',
+            'ggm_method': 'second_radial_derivative',
+            'output': {'key': 'Tzz', 'file': 'Tzz'}
+        },
+        'separation': {
+            'method': 'compute_separation',
+            'ggm_method': 'separation',
+            'output': {'key': 'H', 'file': 'H'}
+        },
+        'zero-degree-term': {
+            'method': 'compute_zero_degree_term',
+            'ggm_method': 'zero_degree_term',
+            'output': {'key': 'zero_degree_term', 'file': 'zero_degree_term'}
+        },
     }
     
     def __init__(
@@ -76,7 +100,8 @@ class GGMSynthesis():
         proj_name: str = 'GeoidProject',
         icgem: bool = False,
         dtm_model: str | Path = None,
-        ellipsoidal_correction: bool = False
+        ellipsoidal_correction: bool = False,
+        zero_degree_target: str = 'geoid'
     ) -> None:
         '''
         Initialize GGMSynthesis class
@@ -124,6 +149,7 @@ class GGMSynthesis():
         self.icgem = icgem
         self.dtm_model = dtm_model
         self.ellipsoidal_correction = ellipsoidal_correction
+        self.zero_degree_target = zero_degree_target
         
         # Directory setup
         directory_setup(proj_name)
@@ -245,16 +271,25 @@ class GGMSynthesis():
             download_ggm(self.model, self.model_dir)
         return {'status': 'success', 'output_file': str(model_path)}
     
-    def _compute_functional(self, ggm_method: str, task_name: str, output_key: str, output_file: str, icgem: bool = None) -> dict:
+    def _compute_functional(self, ggm_method: str, task_name: str, output_key: str, output_file: str, icgem: bool = None, method_kwargs: dict | None = None) -> dict:
         '''Compute a gravity functional using GlobalGeopotentialModel.'''
         print(f'\nComputing {task_name.title()} with max_deg={self.max_deg}, ellipsoid={self.ellipsoid}')
         model_path = (self.model_dir / self.model).with_suffix('.gfc')
         extension = 'csv' if self.input_file else 'nc'
         output_file = self.output_dir / f'{output_file}.{extension}'
 
+        method_kwargs = dict(method_kwargs or {})
+
         # Process input if not already done
         if self.lonlatheight is None:
             self._process_input(task=task_name.lower())
+
+        if method_kwargs.pop('_zero_degree_placeholder', False):
+            if self.input_file:
+                size = len(self.lonlatheight)
+            else:
+                size = self.lon_grid.size
+            method_kwargs['geoid'] = np.zeros(size)
 
         # Handle tide conversion
         converted_data_path = None
@@ -277,11 +312,15 @@ class GGMSynthesis():
             dtm_model=self.dtm_model,
         )
 
-        # Compute functional, use if to pass method specific parameters
+        # Prepare call kwargs
+        call_kwargs = method_kwargs
         if ggm_method == 'geoid' and icgem is not None:
-            result = getattr(model, ggm_method)(parallel=self.parallel, icgem=icgem)
-        else:
-            result = getattr(model, ggm_method)(parallel=self.parallel)
+            call_kwargs.setdefault('icgem', icgem)
+        if 'parallel' not in call_kwargs:
+            call_kwargs['parallel'] = self.parallel
+
+        # Compute functional
+        result = getattr(model, ggm_method)(**call_kwargs)
 
         # Save output
         if self.input_file:
@@ -352,6 +391,47 @@ class GGMSynthesis():
             output_file='Dg_ELL'
         )
 
+    def compute_disturbing_potential(self) -> dict:
+        return self._compute_functional(
+            ggm_method='disturbing_potential',
+            task_name='Disturbing potential',
+            output_key='T',
+            output_file='T'
+        )
+
+    def compute_disturbing_potential_derivative(self) -> dict:
+        return self._compute_functional(
+            ggm_method='disturbing_potential_derivative',
+            task_name='Disturbing potential derivative',
+            output_key='dTdtheta',
+            output_file='dTdtheta'
+        )
+
+    def compute_second_radial_derivative(self) -> dict:
+        return self._compute_functional(
+            ggm_method='second_radial_derivative',
+            task_name='Second radial derivative',
+            output_key='Tzz',
+            output_file='Tzz'
+        )
+
+    def compute_separation(self) -> dict:
+        return self._compute_functional(
+            ggm_method='separation',
+            task_name='Geoid-quasi geoid separation',
+            output_key='H',
+            output_file='H'
+        )
+
+    def compute_zero_degree_term(self) -> dict:
+        return self._compute_functional(
+            ggm_method='zero_degree_term',
+            task_name='Zero-degree term',
+            output_key='zero_degree_term',
+            output_file='zero_degree_term',
+            method_kwargs={'_zero_degree_placeholder': True, 'zeta_or_geoid': self.zero_degree_target}
+        )
+
         
     def run(self, tasks: list) -> dict:
         results = {}
@@ -374,7 +454,7 @@ def add_reference_arguments(parser) -> None:
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for GGM files')
     parser.add_argument('--do', type=str, default='all', 
-                        choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction', 'all'],
+                        choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction', 'disturbing-potential', 'disturbing-potential-derivative', 'second-radial-derivative', 'separation', 'zero-degree-term', 'all'],
                         help='Computation steps to perform')
     parser.add_argument('-s', '--start', type=str, default=None, 
                         help='Start task')
@@ -409,20 +489,22 @@ def add_reference_arguments(parser) -> None:
                         help='Use ICGEM formula for reference geoid computation (only for reference-geoid task)')
     parser.add_argument('--dtm-model', type=str, default=None,
                         help='Path to DTM model file for correcting topographic contribution to the geoid. Used if ICGEM is True (Defaults to DTM2006.0)')
-    parser.add_argument('--ell-cor', '--ellipsoidal-correction', action='store_true', default=False,
+    parser.add_argument('--ell-cor', '--ellipsoidal-correction', dest='ellipsoidal_correction', action='store_true', default=False,
                         help='Enable ellipsoidal correction')
+    parser.add_argument('--zero-degree-target', type=str, default='geoid', choices=['geoid', 'zeta'],
+                        help='Target quantity for zero-degree term correction when computing zero-degree-term task.')
 
 def main(args=None) -> int:
     if args is None:
         parser = argparse.ArgumentParser(
             description=(
                 'Calculate gravity functionals and geoid heights from a Global Geopotential Model (GGM). '
-                'Supported tasks: download, gravity-anomaly, reference-geoid, height-anomaly, gravity-disturbance, ellipsoidal-correction.'
+                'Supported tasks: download, disturbing-potential, disturbing-potential-derivative, second-radial-derivative, gravity-anomaly, gravity-disturbance, reference-geoid, height-anomaly, separation, zero-degree-term, ellipsoidal-correction.'
             )
         )
         args = parser.parse_args()
         
-    workflow = ['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction']
+    workflow = ['download', 'disturbing-potential', 'disturbing-potential-derivative', 'second-radial-derivative', 'gravity-anomaly', 'gravity-disturbance', 'reference-geoid', 'height-anomaly', 'separation', 'zero-degree-term', 'ellipsoidal-correction']
     if args.do != 'all' and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
     if args.do == 'all':
@@ -456,7 +538,8 @@ def main(args=None) -> int:
         proj_name=args.proj_name,
         icgem=args.icgem,
         dtm_model=args.dtm_model,
-        ellipsoidal_correction=args.ellipsoidal_correction
+        ellipsoidal_correction=args.ellipsoidal_correction,
+        zero_degree_target=args.zero_degree_target
     )
 
     result = workflow.run(tasks)

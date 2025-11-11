@@ -122,6 +122,41 @@ DATASET_CONFIG = {
         'description': 'Atmospheric correction for gravity anomalies',
         'fname'      : 'Dg_atm',
         'long_name'  : 'Atmospheric Correction on Gravity',
+    },
+    'T': {
+        'var_name'   : 'T',
+        'units'      : 'm2/s2',
+        'description': 'Disturbing potential synthesized from a global geopotential model (GGM)',
+        'fname'      : 'T',
+        'long_name'  : 'Disturbing Potential',
+    },
+    'dTdtheta': {
+        'var_name'   : 'dTdtheta',
+        'units'      : 'm2/s2/rad',
+        'description': 'Derivative of disturbing potential with respect to colatitude, synthesized from a global geopotential model (GGM)',
+        'fname'      : 'dTdtheta',
+        'long_name'  : 'Disturbing Potential Derivative',
+    },
+    'Tzz': {
+        'var_name'   : 'Tzz',
+        'units'      : 'E',
+        'description': 'Second radial derivative (vertical gradient) synthesized from a global geopotential model (GGM)',
+        'fname'      : 'Tzz',
+        'long_name'  : 'Second Radial Derivative',
+    },
+    'H': {
+        'var_name'   : 'H',
+        'units'      : 'm',
+        'description': 'Geoid-quasigeoid separation synthesized from a global geopotential model (GGM)',
+        'fname'      : 'H',
+        'long_name'  : 'Geoid-Quasigeoid Separation',
+    },
+    'zero_degree_term': {
+        'var_name'   : 'zero_degree_term',
+        'units'      : 'm',
+        'description': 'Zero-degree term correction for geoid or height anomaly',
+        'fname'      : 'zero_degree_term',
+        'long_name'  : 'Zero-Degree Term',
     }
     # Add more datasets as needed
 }
