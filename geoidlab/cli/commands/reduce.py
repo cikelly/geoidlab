@@ -11,6 +11,8 @@ import xarray as xr
 import numpy as np
 
 from pathlib import Path
+from datetime import datetime
+from tzlocal import get_localzone
 from scipy.interpolate import RegularGridInterpolator
 
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
@@ -681,6 +683,16 @@ class GravityReduction:
             # Add tide system information if available
             if self.ggm_tide is not None:
                 ds.attrs['tide_system'] = self.ggm_tide
+            
+            # Add standard attributes
+            local_tz = get_localzone()
+            date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+            ds.attrs.update({
+                'date_created': f'{date_created} {local_tz}',
+                'created_by'  : 'GeoidLab',
+                'website'     : 'https://github.com/cikelly/geoidlab',
+                'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+            })
             
             # Save the dataset
             ds.to_netcdf(output_file_nc, mode='w')

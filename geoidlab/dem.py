@@ -11,6 +11,8 @@ import netCDF4
 import re
 import certifi
 import time
+from datetime import datetime
+from tzlocal import get_localzone
 
 import xarray as xr
 import rioxarray as rxr
@@ -219,6 +221,15 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         datasets: list[xr.Dataset] = [xr.open_dataset(fp) for fp in filepaths]
         # Resolve attribute conflicts
         merged_dataset = xr.combine_by_coords(datasets, combine_attrs='drop_conflicts')
+        # Add standard attributes
+        local_tz = get_localzone()
+        date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+        merged_dataset.attrs.update({
+            'date_created': f'{date_created} {local_tz}',
+            'created_by'  : 'GeoidLab',
+            'website'     : 'https://github.com/cikelly/geoidlab',
+            'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+        })
         merged_filepath = downloads_dir / 'merged_dem.nc'
         merged_dataset.to_netcdf(merged_filepath)
         return merged_filepath.parts[-1]
@@ -387,6 +398,15 @@ def dem4geoid(
             else:
                 dem = models_dict[model]()
                 ncfile = expected_filename
+                # Add standard attributes
+                local_tz = get_localzone()
+                date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+                dem.attrs.update({
+                    'date_created': f'{date_created} {local_tz}',
+                    'created_by'  : 'GeoidLab',
+                    'website'     : 'https://github.com/cikelly/geoidlab',
+                    'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+                })
                 dem.to_netcdf(downloads_dir / ncfile)
                 return dem
         except Exception as e:
@@ -594,6 +614,15 @@ def download_dem_cog(
     # print(f'DEM interpolation completed in {time.time() - start_time:.2f} seconds.\n')
     
     print(f'Saving DEM to {ncfile}...')
+    # Add standard attributes
+    local_tz = get_localzone()
+    date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+    dem.attrs.update({
+        'date_created': f'{date_created} {local_tz}',
+        'created_by'  : 'GeoidLab',
+        'website'     : 'https://github.com/cikelly/geoidlab',
+        'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+    })
     dem.to_netcdf(ncfile)
 
     return dem

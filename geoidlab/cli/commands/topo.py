@@ -11,6 +11,8 @@ import numpy as np
 import xarray as xr
 
 from pathlib import Path
+from datetime import datetime
+from tzlocal import get_localzone
 
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab import terrain
@@ -208,6 +210,16 @@ class TopographicQuantities:
                 }
             )
             ref_topo.attrs['description'] = f'Reference topography from DTM2006.0 up to degree {self.dtm_nmax}'
+            
+            # Add standard attributes
+            local_tz = get_localzone()
+            date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+            ref_topo.attrs.update({
+                'date_created': f'{date_created} {local_tz}',
+                'created_by'  : 'GeoidLab',
+                'website'     : 'https://github.com/cikelly/geoidlab',
+                'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+            })
             
             # Save for future use
             out_file = Path(self.proj_name) / 'downloads' / f'DTM2006.0_nmax{self.dtm_nmax}.nc'

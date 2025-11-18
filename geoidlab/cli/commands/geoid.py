@@ -10,6 +10,8 @@ import xarray as xr
 import numpy as np
 
 from pathlib import Path
+from datetime import datetime
+from tzlocal import get_localzone
 from scipy.interpolate import RegularGridInterpolator
 
 from geoidlab.cli.commands.reference import add_reference_arguments, GGMSynthesis
@@ -453,6 +455,16 @@ class ResidualAnomalyComputation:
             }
         )
         
+        # Add standard attributes
+        local_tz = get_localzone()
+        date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+        residual_ds.attrs.update({
+            'date_created': f'{date_created} {local_tz}',
+            'created_by'  : 'GeoidLab',
+            'website'     : 'https://github.com/cikelly/geoidlab',
+            'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+        })
+        
         # Save to NetCDF
         output_file = self.output_dir / 'Dg_res.nc'
         residual_ds.to_netcdf(output_file, mode='w')
@@ -718,6 +730,16 @@ class ResidualAnomalyComputation:
             },
             coords=gridded_ds.coords
         )
+        
+        # Add standard attributes
+        local_tz = get_localzone()
+        date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+        residual_ds.attrs.update({
+            'date_created': f'{date_created} {local_tz}',
+            'created_by'  : 'GeoidLab',
+            'website'     : 'https://github.com/cikelly/geoidlab',
+            'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+        })
         
         # Save to NetCDF
         output_file = self.output_dir / 'Dg_res.nc'
