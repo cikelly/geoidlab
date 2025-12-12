@@ -319,6 +319,10 @@ class GGMSynthesis():
         if 'parallel' not in call_kwargs:
             call_kwargs['parallel'] = self.parallel
 
+        # Remove 'parallel' from call_kwargs for zero_degree_term
+        if ggm_method == 'zero_degree_term' and 'parallel' in call_kwargs:
+            call_kwargs = {k: v for k, v in call_kwargs.items() if k != 'parallel'}
+    
         # Compute functional
         result = getattr(model, ggm_method)(**call_kwargs)
 
