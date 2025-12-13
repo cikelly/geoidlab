@@ -32,4 +32,6 @@ pykrige>=1.7.0
 # sphinx-rtd-theme>=1.0
 # twine>=3.4
 # build>=0.7
+h5py>=3.6.0
+cartopy>=0.20.0
 

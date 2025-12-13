@@ -40,6 +40,8 @@ dependencies = [
     'ipython>=8.0.0',
     'tzlocal>=4.0',
     'pykrige>=1.7.0',
+    'h5py>=3.6.0',
+    'cartopy>=0.20.0',
     'ipykernel>=6.0.0'
 ]
 classifiers = [

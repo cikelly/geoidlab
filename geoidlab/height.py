@@ -7,9 +7,8 @@ import numpy as np
 import pandas as pd
 
 from pathlib import Path
-from typing import Dict, Any, Iterable, Optional, Union
+from typing import Union
 
-from sqlalchemy import Float
 
 
 from geoidlab.gravity import normal_gravity, normal_gravity_above_ellipsoid as normalGravityBM
