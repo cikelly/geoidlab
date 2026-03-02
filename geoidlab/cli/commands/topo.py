@@ -81,6 +81,14 @@ class TopographicQuantities:
         approximation: bool = False,
         tc: xr.Dataset = None,
         atm_method: str = 'noaa',
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
         tasks: list[str] = None,
     ) -> None:
         '''
@@ -137,6 +145,14 @@ class TopographicQuantities:
         self.approximation = approximation
         self.tc = tc
         self.atm_method = atm_method
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = density_file
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
         self.tasks = tasks or []
         
         self.grid_size = to_seconds(grid_size, grid_unit)
@@ -254,7 +270,15 @@ class TopographicQuantities:
             sub_grid=self.bbox,
             proj_dir=self.output_dir,  # Change from proj_name to output_dir
             window_mode=self.window_mode,
-            density_download_dir=self.model_dir
+            density_download_dir=self.model_dir,
+            constant_density=self.constant_density,
+            density_model=self.density_model,
+            density_resolution=self.density_resolution,
+            density_resolution_unit=self.density_resolution_unit,
+            density_file=self.density_file,
+            density_interp_method=self.density_interp_method,
+            density_unit=self.density_unit,
+            density_save=self.density_save,
         )
 
     def compute_tc(self) -> dict:
@@ -423,6 +447,23 @@ def add_topo_arguments(parser) -> None:
                         help='Interpolation method to resample the DEM to --resolution. Default: slinear')
     parser.add_argument('--atm-method', type=str, default='noaa', choices=['noaa', 'ngi', 'wenzel'],
                         help='Atmospheric correction method. Default: noaa')
+    parser.add_argument('--variable-density', action='store_true', default=False,
+                        help='Enable variable topographic density (UNB model ingestion) instead of constant crustal density.')
+    parser.add_argument('--density-model', type=str, default='30s',
+                        help='UNB density model key/file to ingest. Default: 30s')
+    parser.add_argument('--density-resolution', type=int, default=None,
+                        help='Optional density model resolution value used with --density-resolution-unit.')
+    parser.add_argument('--density-resolution-unit', type=str, default=None, choices=['d', 'm', 's'],
+                        help='Density model resolution unit: d, m, or s.')
+    parser.add_argument('--density-file', type=str, default=None,
+                        help='Path to preprocessed density NetCDF file. If provided, download/ingest is skipped.')
+    parser.add_argument('--density-interp-method', type=str, default='nearest',
+                        choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
+                        help='Interpolation method for aligning density to DEM grid. Default: nearest')
+    parser.add_argument('--density-unit', type=str, default='kg/m3', choices=['kg/m3', 'g/cm3'],
+                        help='Density unit used internally after ingestion. Default: kg/m3')
+    parser.add_argument('--no-density-save', dest='density_save', action='store_false', default=True,
+                        help='Disable saving processed density NetCDF cache file in the download/model directory.')
 
 def main(args=None) -> int:
     '''
@@ -475,6 +516,14 @@ def main(args=None) -> int:
         window_mode=args.window_mode,
         parallel=args.parallel,
         interp_method=args.interpolation_method,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
         tasks=tasks
     )
     

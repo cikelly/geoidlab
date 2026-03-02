@@ -115,7 +115,15 @@ class GravityReduction:
         # decimate: bool = False,
         # decimate_threshold: int = 600,
         site: bool = False,
-        max_deg: int = 90
+        max_deg: int = 90,
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
     ) -> None:
         self.input_file = input_file
         self.model = model
@@ -152,6 +160,14 @@ class GravityReduction:
         self.ggm_tide = None
         self.site = site
         self.max_deg = max_deg
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = density_file
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
 
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -288,7 +304,15 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
-                interp_method=self.interp_method
+                interp_method=self.interp_method,
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
             topo_workflow._initialize_terrain()
             result = topo_workflow.run(['terrain-correction'])
@@ -333,7 +357,15 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
-                interp_method=self.interp_method
+                interp_method=self.interp_method,
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
         self.topo_workflow._initialize_terrain()
         site = self.topo_workflow.run(['site'])
@@ -377,7 +409,15 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
-                interp_method=self.interp_method
+                interp_method=self.interp_method,
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
         self.topo_workflow._initialize_terrain()
         atm = self.topo_workflow.run(['atm-corr'])
@@ -906,6 +946,23 @@ def add_reduce_arguments(parser) -> None:
     #                     help='Threshold for automatic decimation of marine data (default: 600 points).')
     parser.add_argument('--site', action='store_true',
                         help='Apply secondary indirect topographic effect (SITE) on gravity')
+    parser.add_argument('--variable-density', action='store_true', default=False,
+                        help='Enable variable topographic density for terrain-based corrections.')
+    parser.add_argument('--density-model', type=str, default='30s',
+                        help='UNB density model key/file to ingest. Default: 30s')
+    parser.add_argument('--density-resolution', type=int, default=None,
+                        help='Optional density model resolution value used with --density-resolution-unit.')
+    parser.add_argument('--density-resolution-unit', type=str, default=None, choices=['d', 'm', 's'],
+                        help='Density model resolution unit: d, m, or s.')
+    parser.add_argument('--density-file', type=str, default=None,
+                        help='Path to preprocessed density NetCDF file. If provided, download/ingest is skipped.')
+    parser.add_argument('--density-interp-method', type=str, default='nearest',
+                        choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
+                        help='Interpolation method for aligning density to DEM grid/points. Default: nearest')
+    parser.add_argument('--density-unit', type=str, default='kg/m3', choices=['kg/m3', 'g/cm3'],
+                        help='Density unit used internally after ingestion. Default: kg/m3')
+    parser.add_argument('--no-density-save', dest='density_save', action='store_false', default=True,
+                        help='Disable saving processed density NetCDF cache file in the model directory.')
 
 def main(args=None) -> None:
     '''
@@ -962,7 +1019,15 @@ def main(args=None) -> None:
         # decimate=args.decimate,
         # decimate_threshold=args.decimate_threshold,
         site=args.site,
-        max_deg=args.max_deg
+        max_deg=args.max_deg,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
     )
     result = reduction.run(tasks)
     print(f'Completed tasks: {", ".join(tasks)}')

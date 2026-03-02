@@ -108,6 +108,14 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'tc_grid_size'          : ('tc_grid_size', 30.0),
         'window_mode'           : ('window_mode', None),
         'approximation'          : ('approximation', False),
+        'variable_density'      : ('variable_density', False),
+        'density_model'         : ('density_model', '30s'),
+        'density_resolution'    : ('density_resolution', None),
+        'density_resolution_unit': ('density_resolution_unit', None),
+        'density_file'          : ('density_file', None),
+        'density_interp_method' : ('density_interp_method', 'nearest'),
+        'density_unit'          : ('density_unit', 'kg/m3'),
+        'density_save'          : ('density_save', True),
         # computation
         'do'                    : ('do', None),
         'start'                 : ('start', None),
@@ -154,9 +162,9 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation'}:
+        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save'}:
             return value.lower() in {'true', 'yes', '1'}
-        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size'}:
+        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution'}:
             return int(value)
         if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax'}:
             return float(value)
@@ -164,7 +172,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
             return [float(x) for x in value.split()]
         if key == 'variable':
             return [x.strip() for x in value.split(',')]
-        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir'}:
+        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir', 'density_file'}:
             # Resolve relative paths relative to config file directory
             path = Path(value)
             if not path.is_absolute():

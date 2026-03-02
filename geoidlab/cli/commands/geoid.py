@@ -187,7 +187,15 @@ class ResidualAnomalyComputation:
         decimate_threshold: int = 600,
         site: bool = False,
         max_deg: int = 90,
-        residual_method: str = 'station'
+        residual_method: str = 'station',
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
     ) -> None:
         self.input_file = input_file
         self.marine_data = marine_data
@@ -221,6 +229,14 @@ class ResidualAnomalyComputation:
         self.site = site
         self.max_deg = max_deg
         self.residual_method = residual_method
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = density_file
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
         
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -358,7 +374,15 @@ class ResidualAnomalyComputation:
             grid_size=self.grid_size,
             grid_unit=self.grid_unit,
             proj_name=self.proj_name,
-            input_file=str(self.output_dir / 'surface_points.csv')  # Save surface points to a temporary file
+            input_file=str(self.output_dir / 'surface_points.csv'),  # Save surface points to a temporary file
+            constant_density=self.constant_density,
+            density_model=self.density_model,
+            density_resolution=self.density_resolution,
+            density_resolution_unit=self.density_resolution_unit,
+            density_file=self.density_file,
+            density_interp_method=self.density_interp_method,
+            density_unit=self.density_unit,
+            density_save=self.density_save,
         )
         # Save surface points to a temporary file for GGM computation
         surface_df[['lon', 'lat', 'height']].to_csv(ggm_surface.input_file, index=False)
@@ -383,7 +407,15 @@ class ResidualAnomalyComputation:
                 grid_size=self.grid_size,
                 grid_unit=self.grid_unit,
                 proj_name=self.proj_name,
-                input_file=str(self.output_dir / 'marine_points.csv')  # Save marine points to a temporary file
+                input_file=str(self.output_dir / 'marine_points.csv'),  # Save marine points to a temporary file
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
             # Save marine points to a temporary file for GGM computation
             marine_df[['lon', 'lat', 'height']].to_csv(ggm_marine.input_file, index=False)
@@ -638,7 +670,15 @@ class ResidualAnomalyComputation:
             grid_unit=self.grid_unit,
             window_mode=self.window_mode,
             parallel=self.parallel,
-            interp_method=self.interp_method
+            interp_method=self.interp_method,
+            constant_density=self.constant_density,
+            density_model=self.density_model,
+            density_resolution=self.density_resolution,
+            density_resolution_unit=self.density_resolution_unit,
+            density_file=self.density_file,
+            density_interp_method=self.density_interp_method,
+            density_unit=self.density_unit,
+            density_save=self.density_save,
         )
         
         # 5. Handle terrain correction and other corrections
@@ -664,7 +704,15 @@ class ResidualAnomalyComputation:
                 bbox_offset=0,     # No additional offset needed
                 grid_size=self.grid_size,
                 grid_unit=self.grid_unit,
-                proj_name=self.proj_name
+                proj_name=self.proj_name,
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
             ec_file = self.output_dir / 'Dg_ELL.nc'
             if ec_file.exists() and not self._should_recompute_grid(ec_file, target_grid_size_deg):
@@ -703,7 +751,15 @@ class ResidualAnomalyComputation:
             bbox_offset=0,     # No additional offset needed
             grid_size=self.grid_size,
             grid_unit=self.grid_unit,
-            proj_name=self.proj_name
+            proj_name=self.proj_name,
+            constant_density=self.constant_density,
+            density_model=self.density_model,
+            density_resolution=self.density_resolution,
+            density_resolution_unit=self.density_resolution_unit,
+            density_file=self.density_file,
+            density_interp_method=self.density_interp_method,
+            density_unit=self.density_unit,
+            density_save=self.density_save,
         )
         ggm_result = ggm.run(['gravity-anomaly'])
         ggm_grid = xr.open_dataset(ggm_result['output_files'][0])
@@ -820,7 +876,15 @@ def main(args=None) -> None:
         decimate_threshold=args.decimate_threshold,
         site=args.site,
         max_deg=args.max_deg,
-        residual_method=args.residual_method
+        residual_method=args.residual_method,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
     )
     
     # Compute residual anomalies using the chosen method
@@ -876,7 +940,15 @@ def main(args=None) -> None:
         grid_unit=grid_unit,
         proj_name=args.proj_name,
         icgem=args.icgem,
-        dtm_model= args.dtm_model
+        dtm_model= args.dtm_model,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
     )
     
     ggm_result = ggm_synthesis.run(['reference-geoid'])
@@ -901,6 +973,14 @@ def main(args=None) -> None:
         proj_name=args.proj_name,
         window_mode=args.window_mode,
         interp_method=args.interp_method,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
     )
     topo_result = topo_quantities.run(['indirect-effect'])
     N_ind_file = topo_result['output_files'][0]

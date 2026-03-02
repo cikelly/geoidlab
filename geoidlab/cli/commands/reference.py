@@ -101,7 +101,15 @@ class GGMSynthesis():
         icgem: bool = False,
         dtm_model: str | Path = None,
         ellipsoidal_correction: bool = False,
-        zero_degree_target: str = 'geoid'
+        zero_degree_target: str = 'geoid',
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
     ) -> None:
         '''
         Initialize GGMSynthesis class
@@ -150,6 +158,14 @@ class GGMSynthesis():
         self.dtm_model = dtm_model
         self.ellipsoidal_correction = ellipsoidal_correction
         self.zero_degree_target = zero_degree_target
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = density_file
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
         
         # Directory setup
         directory_setup(proj_name)
@@ -310,6 +326,14 @@ class GGMSynthesis():
             model_dir=self.model_dir,
             chunk_size=self.chunk_size,
             dtm_model=self.dtm_model,
+            constant_density=self.constant_density,
+            density_model=self.density_model,
+            density_resolution=self.density_resolution,
+            density_resolution_unit=self.density_resolution_unit,
+            density_file=self.density_file,
+            density_interp_method=self.density_interp_method,
+            density_unit=self.density_unit,
+            density_save=self.density_save,
         )
 
         # Prepare call kwargs
@@ -497,6 +521,23 @@ def add_reference_arguments(parser) -> None:
                         help='Enable ellipsoidal correction')
     parser.add_argument('--zero-degree-target', type=str, default='geoid', choices=['geoid', 'zeta'],
                         help='Target quantity for zero-degree term correction when computing zero-degree-term task.')
+    parser.add_argument('--variable-density', action='store_true', default=False,
+                        help='Enable variable topographic density for ICGEM topographic term in reference geoid computation.')
+    parser.add_argument('--density-model', type=str, default='30s',
+                        help='UNB density model key/file to ingest. Default: 30s')
+    parser.add_argument('--density-resolution', type=int, default=None,
+                        help='Optional density model resolution value used with --density-resolution-unit.')
+    parser.add_argument('--density-resolution-unit', type=str, default=None, choices=['d', 'm', 's'],
+                        help='Density model resolution unit: d, m, or s.')
+    parser.add_argument('--density-file', type=str, default=None,
+                        help='Path to preprocessed density NetCDF file. If provided, download/ingest is skipped.')
+    parser.add_argument('--density-interp-method', type=str, default='nearest',
+                        choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
+                        help='Interpolation method for sampling density at computation points. Default: nearest')
+    parser.add_argument('--density-unit', type=str, default='kg/m3', choices=['kg/m3', 'g/cm3'],
+                        help='Density unit used internally after ingestion. Default: kg/m3')
+    parser.add_argument('--no-density-save', dest='density_save', action='store_false', default=True,
+                        help='Disable saving processed density NetCDF cache file in the model directory.')
 
 def main(args=None) -> int:
     if args is None:
@@ -543,7 +584,15 @@ def main(args=None) -> int:
         icgem=args.icgem,
         dtm_model=args.dtm_model,
         ellipsoidal_correction=args.ellipsoidal_correction,
-        zero_degree_target=args.zero_degree_target
+        zero_degree_target=args.zero_degree_target,
+        constant_density=not args.variable_density,
+        density_model=args.density_model,
+        density_resolution=args.density_resolution,
+        density_resolution_unit=args.density_resolution_unit,
+        density_file=args.density_file,
+        density_interp_method=args.density_interp_method,
+        density_unit=args.density_unit,
+        density_save=args.density_save,
     )
 
     result = workflow.run(tasks)
