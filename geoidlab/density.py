@@ -26,6 +26,67 @@ MODELS = {
 }
 
 
+def _resolve_model_filename(
+    model: str | None = None,
+    resolution: int | None = None,
+    resolution_unit: str | None = None,
+) -> str:
+    '''
+    Resolve the UNB model filename from either explicit model name or resolution hint.
+    '''
+    if model is None:
+        if resolution is None:
+            model_key = '30s'
+        else:
+            unit = (resolution_unit or 's').lower()
+            model_key = f"{resolution}{unit}"
+            if model_key not in MODELS:
+                print(f"{model_key} not in MODELS; falling back on default 30s model.")
+                model_key = '30s'
+    else:
+        model_key = model
+
+    return MODELS[model_key] if model_key in MODELS else model_key
+
+
+def _extract_lon_lat_coords(target) -> tuple[np.ndarray, np.ndarray]:
+    '''
+    Extract 1D lon/lat coordinate arrays from an xarray object.
+    Accepts either x/y or lon/lat coordinate names.
+    '''
+    if isinstance(target, (xr.Dataset, xr.DataArray)):
+        coords = target.coords
+        if 'x' in coords and 'y' in coords:
+            lon = target['x'].values
+            lat = target['y'].values
+            return np.asarray(lon), np.asarray(lat)
+        if 'lon' in coords and 'lat' in coords:
+            lon = target['lon'].values
+            lat = target['lat'].values
+            return np.asarray(lon), np.asarray(lat)
+    raise ValueError("target_grid must provide 1D coordinates named ('x','y') or ('lon','lat').")
+
+
+def _normalize_bbox(
+    bbox: list | tuple,
+    bbox_offset: float = 0.0,
+) -> tuple[float, float, float, float]:
+    '''
+    Validate and normalize bbox as (W, E, S, N), applying optional offset.
+    '''
+    if bbox is None or len(bbox) != 4:
+        raise ValueError("bbox must be provided as [W, E, S, N].")
+    w, e, s, n = [float(v) for v in bbox]
+    if w > e or s > n:
+        raise ValueError("Invalid bbox. Expected [W, E, S, N] with W<=E and S<=N.")
+    off = float(bbox_offset or 0.0)
+    w = max(-180.0, w - off)
+    e = min(180.0, e + off)
+    s = max(-90.0, s - off)
+    n = min(90.0, n + off)
+    return w, e, s, n
+
+
 def load_unb_topo_density(file_path) -> xr.Dataset:
     '''
     Load UNB topographic density data from a text file and return as an xarray Dataset.
@@ -154,7 +215,7 @@ def download_density_model(
     resolution: int | None = None, 
     resolution_unit: str | None = None,
     download_dir: Path = '.'
-) -> None:
+) -> Path:
     '''
     Download one of the UNB topographic‑density models.
     
@@ -189,25 +250,11 @@ def download_density_model(
     download_dir = Path(download_dir)
     download_dir.mkdir(parents=True, exist_ok=True)
     
-    # determine which model to grab
-    if model is None:
-        if resolution is None:
-            # no user preference; pick 30‑second product
-            model_key = '30s'
-        else:
-            unit = resolution_unit or 's'
-            model_key = f"{resolution}{unit}"
-            if model_key not in MODELS:
-                print(f"{model_key} not in MODELS; Falling back on default 30s model.")
-                model_key = '30s'
-    else:
-        model_key = model
-    
-    # allow explicit file name (model_key might already be full filename)
-    if model_key in MODELS:
-        filename = MODELS[model_key]
-    else:
-        filename = model_key
+    filename = _resolve_model_filename(
+        model=model,
+        resolution=resolution,
+        resolution_unit=resolution_unit,
+    )
     
     # defer existence/validation checks to the robust downloader below
     
@@ -241,7 +288,7 @@ def download_density_model(
         local_size = dest.stat().st_size
         if total and local_size == total and validate_file(dest):
             print(f'{filename} already exists and appears complete. Skipping download.')
-            return
+            return dest
         # try to resume if server supports it and partial file is smaller
         if accept_ranges and local_size < total:
             print(f'Resuming download for {filename} from {local_size} bytes...')
@@ -256,7 +303,7 @@ def download_density_model(
             # validate after resume
             if validate_file(dest):
                 print('Download complete (resumed and validated).')
-                return
+                return dest
             else:
                 print('Resumed file failed validation; removing and re-downloading.')
                 try:
@@ -285,7 +332,7 @@ def download_density_model(
     # final validation
     if validate_file(dest):
         print('Download complete and validated.')
-        return
+        return dest
     else:
         # try one more time: remove and download without resume
         print('Downloaded file failed validation; retrying once.')
@@ -303,20 +350,25 @@ def download_density_model(
                         bar.update(len(chunk))
         if validate_file(dest):
             print('Download complete and validated.')
-            return
+            return dest
         raise Exception('Failed to download a valid file after retrying.')
 
 
-def geoidlab(
+def ingest_unb_density(
     base_url: str = 'https://gge.ext.unb.ca/Resources/TopographicalDensity/', 
     model: str | None = None, 
     resolution: int | None = None, 
     resolution_unit: str | None = None,
-    download_dir: Path = '.',
-    bbox: list | None = None
+    download_dir: Path | None = None,
+    bbox: list | tuple | None = None,
+    bbox_offset: float = 0.0,
+    target_grid: xr.Dataset | xr.DataArray | None = None,
+    align: bool = True,
+    interp_method: str = 'linear',
+    keep_dataset: bool = False,
 ) -> xr.Dataset:
     '''
-    Call functions for geoidlab ingestion
+    Download/load UNB topographic density and prepare it for GeoidLab ingestion.
     
     Parameters
     ----------
@@ -337,26 +389,61 @@ def geoidlab(
         ``'s'`` seconds.  Defaults to ``'s'`` if omitted when ``resolution`` is
         supplied.
     download_dir : Path
-        Directory to download the model to.
+        Directory to download the model to. If None, defaults to cwd/downloads.
     bbox : list or None
-        Bounding box of the area to download (W, E, S, N).  If ``None`` the
-        function downloads the full model.
+        Bounding box (W, E, S, N) for subsetting.
+    bbox_offset : float
+        Optional offset (degrees) applied to all bbox edges.
+    target_grid : xr.Dataset | xr.DataArray | None
+        Target grid whose coordinates are used for alignment. Must provide
+        either x/y or lon/lat coordinates.
+    align : bool
+        If True, interpolate to target_grid coordinates.
+    interp_method : str
+        Interpolation method for xarray.interp.
+    keep_dataset : bool
+        If True return full Dataset. If False return Dataset with only
+        density variable.
 
     Returns
     -------
     xr.Dataset
-        The requested topographic density model as an xarray Dataset.
+        Topographic density model, optionally subset and aligned to target grid.
     '''
-    if bbox is None:
-        print("The requested model will be downloaded, but processing will be skipped.")
-        download_density_model(base_url, model, resolution, resolution_unit, download_dir)
-        return None
+    if download_dir is None:
+        download_dir = Path.cwd() / 'downloads'
     else:
-        download_density_model(base_url, model, resolution, resolution_unit, download_dir)
-        filename = MODELS.get(model) if model in MODELS else model
-        file_path = Path(download_dir) / filename
-        ds = load_unb_topo_density(file_path)
-        # subset to bbox if provided
-        w, e, s, n = bbox
-        ds_subset = ds.sel(lon=slice(w, e), lat=slice(s, n))
-        return ds_subset
+        download_dir = Path(download_dir)
+
+    # Ensure single source of truth for model selection and on-disk location.
+    file_path = download_density_model(
+        base_url=base_url,
+        model=model,
+        resolution=resolution,
+        resolution_unit=resolution_unit,
+        download_dir=download_dir,
+    )
+    ds = load_unb_topo_density(file_path)
+
+    # Determine AOI from explicit bbox or target grid.
+    if bbox is None and target_grid is not None:
+        lon_t, lat_t = _extract_lon_lat_coords(target_grid)
+        bbox = [np.nanmin(lon_t), np.nanmax(lon_t), np.nanmin(lat_t), np.nanmax(lat_t)]
+
+    if bbox is not None:
+        w, e, s, n = _normalize_bbox(bbox=bbox, bbox_offset=bbox_offset)
+        ds = ds.sel(lon=slice(w, e), lat=slice(s, n))
+
+    if align:
+        if target_grid is None:
+            raise ValueError("target_grid must be provided when align=True.")
+        lon_t, lat_t = _extract_lon_lat_coords(target_grid)
+        ds = ds.interp(
+            lon=xr.DataArray(lon_t, dims=('lon',)),
+            lat=xr.DataArray(lat_t, dims=('lat',)),
+            method=interp_method,
+        )
+
+    if not keep_dataset and 'density' in ds.data_vars:
+        return ds[['density']]
+    return ds
