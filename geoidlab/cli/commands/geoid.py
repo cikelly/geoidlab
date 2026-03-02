@@ -249,7 +249,7 @@ class ResidualAnomalyComputation:
             
         return marine_df
     
-    def _compute_gravity_anomalies(self, anomaly_type: str) -> pd.DataFrame:
+    def _compute_gravity_anomalies(self, anomaly_type: str, include_corrections: bool = True) -> pd.DataFrame:
         '''Compute gravity anomalies using GravityReduction
         
         Parameters
@@ -288,11 +288,11 @@ class ResidualAnomalyComputation:
             interp_method=self.interp_method,
             parallel=self.parallel,
             chunk_size=self.chunk_size,
-            atm=self.atm,
+            atm=self.atm if include_corrections else False,
             atm_method=self.atm_method,
-            ellipsoidal_correction=self.ellipsoidal_correction,
+            ellipsoidal_correction=self.ellipsoidal_correction if include_corrections else False,
             window_mode=self.window_mode,
-            site=self.site,
+            site=self.site if include_corrections else False,
             max_deg=self.max_deg
         )
         
@@ -498,10 +498,20 @@ class ResidualAnomalyComputation:
         'ellipsoidal-correction': 'Dg_ELL'  # Add this for consistency with GGMSynthesis task name
     }
 
+    CORRECTION_FILE_MAP = {
+        'terrain-correction': 'TC.nc',
+        'site': 'Dg_SITE.nc',
+        'atm-corr': 'Dg_atm.nc',
+        'ellipsoidal_correction': 'Dg_ELL.nc',
+        'ellipsoidal-correction': 'Dg_ELL.nc',
+    }
+
     def _load_or_compute_correction(self, correction_type: str, topo_workflow: TopographicQuantities, 
-                                  target_grid_size_deg: float) -> xr.DataArray:
+                                  target_grid_size_deg: float,
+                                  target_extent: tuple[float, float, float, float]) -> xr.DataArray:
         """Load existing correction or compute new one if needed"""
-        correction_file = self.output_dir / f'{correction_type}.nc'
+        correction_fname = self.CORRECTION_FILE_MAP.get(correction_type, f'{correction_type}.nc')
+        correction_file = self.output_dir / correction_fname
         var_name = self.CORRECTION_VAR_MAP.get(correction_type, correction_type)
         
         if correction_file.exists():
@@ -512,8 +522,8 @@ class ResidualAnomalyComputation:
                 if np.abs(np.diff(ds.lat.values)[0]) != target_grid_size_deg:
                     print(f'Resampling {correction_type} to target grid...')
                     ds = ds.interp(
-                        lat=np.arange(self.bbox[2], self.bbox[3] + target_grid_size_deg, target_grid_size_deg),
-                        lon=np.arange(self.bbox[0], self.bbox[1] + target_grid_size_deg, target_grid_size_deg),
+                        lat=np.arange(target_extent[2], target_extent[3] + target_grid_size_deg, target_grid_size_deg),
+                        lon=np.arange(target_extent[0], target_extent[1] + target_grid_size_deg, target_grid_size_deg),
                         method='linear'
                     )
                 return ds[var_name]
@@ -547,7 +557,7 @@ class ResidualAnomalyComputation:
         
         # 1. Compute Bouguer anomalies
         print('Computing Bouguer anomalies...')
-        bouguer_df = self._compute_gravity_anomalies('bouguer')
+        bouguer_df = self._compute_gravity_anomalies('bouguer', include_corrections=False)
         
         # 2. Load and process marine data if available
         marine_df = self._load_marine_data()
@@ -633,11 +643,11 @@ class ResidualAnomalyComputation:
         
         # 5. Handle terrain correction and other corrections
         if self.topo or self.tc_file:
-            gridded_ds['tc'] = self._load_or_compute_correction('terrain-correction', topo_workflow, target_grid_size_deg)
+            gridded_ds['tc'] = self._load_or_compute_correction('terrain-correction', topo_workflow, target_grid_size_deg, grid_extent)
         
         # Handle other corrections if requested
         if self.site:
-            gridded_ds['site'] = self._load_or_compute_correction('site', topo_workflow, target_grid_size_deg)
+            gridded_ds['site'] = self._load_or_compute_correction('site', topo_workflow, target_grid_size_deg, grid_extent)
         
         if self.ellipsoidal_correction:
             ggm = GGMSynthesis(
@@ -656,7 +666,7 @@ class ResidualAnomalyComputation:
                 grid_unit=self.grid_unit,
                 proj_name=self.proj_name
             )
-            ec_file = self.output_dir / 'ellipsoidal_correction.nc'
+            ec_file = self.output_dir / 'Dg_ELL.nc'
             if ec_file.exists() and not self._should_recompute_grid(ec_file, target_grid_size_deg):
                 print('Loading existing ellipsoidal correction grid...')
                 ec_grid = xr.open_dataset(ec_file)
@@ -675,7 +685,7 @@ class ResidualAnomalyComputation:
                 gridded_ds['ellipsoidal_correction'] = ec_grid['Dg_ELL']
         
         if self.atm:
-            gridded_ds['atm_correction'] = self._load_or_compute_correction('atm-corr', topo_workflow, target_grid_size_deg)
+            gridded_ds['atm_correction'] = self._load_or_compute_correction('atm-corr', topo_workflow, target_grid_size_deg, grid_extent)
         
         # 6. Compute GGM anomalies on the same grid
         print('Computing GGM anomalies on the same grid...')
