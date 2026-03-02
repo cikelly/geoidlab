@@ -253,7 +253,8 @@ class TopographicQuantities:
             bbox_off=self.bbox_offset,
             sub_grid=self.bbox,
             proj_dir=self.output_dir,  # Change from proj_name to output_dir
-            window_mode=self.window_mode
+            window_mode=self.window_mode,
+            density_download_dir=self.model_dir
         )
 
     def compute_tc(self) -> dict:

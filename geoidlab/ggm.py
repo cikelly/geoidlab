@@ -13,6 +13,7 @@ from geoidlab import(
     coordinates as co, 
     shtools
     ) 
+from geoidlab.density import ingest_unb_density, get_processed_density_path
 
 
 from geoidlab.legendre import ALFsGravityAnomaly, ALF
@@ -30,6 +31,7 @@ from IPython.display import clear_output
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 
 class GlobalGeopotentialModel:
@@ -43,22 +45,38 @@ class GlobalGeopotentialModel:
         zonal_harmonics=True,
         model_dir='downloads',
         chunk_size=None,
-        dtm_model=None
+        dtm_model=None,
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
     ) -> None:
         '''
         Initialize the GlobalGeopotentialModel class for potential modeling
         
         Parameters
         ----------
-        shc             : Spherical Harmonic Coefficients -- output of icgem.read_icgem()
-        model_name      : Name of gravity model without extension
-        ellipsoid       : Reference ellipsoid ('wgs84' or 'grs80')
-        nmax            : Maximum spherical harmonic degree
-        grav_data       : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
-        zonal_harmonics : Whether to subtract even zonal harmonics or not
-        model_dir       : Directory where model file is stored
-        chunk_size      : Size of chunks for parallel processing (default: 100)
-        dtm_model       : Digital Terrain Model (DTM) to use for topographic effects (optional)
+        shc                     : Spherical Harmonic Coefficients -- output of icgem.read_icgem()
+        model_name              : Name of gravity model without extension
+        ellipsoid               : Reference ellipsoid ('wgs84' or 'grs80')
+        nmax                    : Maximum spherical harmonic degree
+        grav_data               : Gravity data with columns lon, lat, and elevation: lat and lon units: degrees
+        zonal_harmonics         : Whether to subtract even zonal harmonics or not
+        model_dir               : Directory where model file is stored
+        chunk_size              : Size of chunks for parallel processing (default: 100)
+        dtm_model               : Digital Terrain Model (DTM) to use for topographic effects (optional)
+        constant_density        : Whether to assume constant density for topographic effects (default: True)
+        density_model           : Density model to use for topographic effects (default: '30s')
+        density_resolution      : Resolution of density model (default: None)
+        density_resolution_unit : Unit of density resolution (default: None)
+        density_file            : Path to density file (default: None)
+        density_interp_method   : Interpolation method for density file (default: 'nearest')
+        density_unit            : Unit of density (default: 'kg/m3')
+        density_save            : Whether to save density file (default: True)
         '''
         self.shc       = shc
         self.model     = model_name
@@ -68,6 +86,14 @@ class GlobalGeopotentialModel:
         self.model_dir = model_dir
         self.chunk     = chunk_size
         self.dtm_model = dtm_model
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = Path(density_file) if density_file is not None else None
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
         
         # Input validation
         if self.model_dir is None:
@@ -133,6 +159,70 @@ class GlobalGeopotentialModel:
             
         self.lambda_ = np.radians(self.lon)
         # self.phi     = np.radians(self.lat)
+
+    def _get_density_points(self) -> np.ndarray:
+        '''
+        Return density values [kg/m3] aligned to computation points.
+        '''
+        lon_norm = ((self.lon + 180.0) % 360.0) - 180.0
+        bbox = [
+            float(np.nanmin(lon_norm)),
+            float(np.nanmax(lon_norm)),
+            float(np.nanmin(self.lat)),
+            float(np.nanmax(self.lat)),
+        ]
+        download_dir = Path(self.model_dir)
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        density_path = self.density_file
+        if density_path is None:
+            density_path = get_processed_density_path(
+                download_dir=download_dir,
+                model=self.density_model,
+                resolution=self.density_resolution,
+                resolution_unit=self.density_resolution_unit,
+            )
+
+        need_ingest = True
+        if density_path.exists():
+            try:
+                with xr.open_dataset(density_path) as ds_cached:
+                    ds_cached = ds_cached.load()
+                if 'density' in ds_cached.data_vars:
+                    lon_min = float(ds_cached['lon'].min().item())
+                    lon_max = float(ds_cached['lon'].max().item())
+                    lat_min = float(ds_cached['lat'].min().item())
+                    lat_max = float(ds_cached['lat'].max().item())
+                    need_ingest = not (
+                        lon_min <= bbox[0] <= lon_max and lon_min <= bbox[1] <= lon_max and
+                        lat_min <= bbox[2] <= lat_max and lat_min <= bbox[3] <= lat_max
+                    )
+            except Exception:
+                need_ingest = True
+
+        if need_ingest:
+            ds_density = ingest_unb_density(
+                model=self.density_model,
+                resolution=self.density_resolution,
+                resolution_unit=self.density_resolution_unit,
+                download_dir=download_dir,
+                bbox=bbox,
+                align=False,
+                interp_method=self.density_interp_method,
+                unit=self.density_unit,
+                save=self.density_save,
+                keep_dataset=False,
+            )
+        else:
+            with xr.open_dataset(density_path) as ds_cached:
+                ds_density = ds_cached.load()
+
+        rho_pts = ds_density['density'].interp(
+            lon=xr.DataArray(lon_norm, dims=('points',)),
+            lat=xr.DataArray(self.lat, dims=('points',)),
+            method=self.density_interp_method,
+        ).values
+        return rho_pts
 
 
     def gravity_anomaly_sequential(self) -> np.ndarray:
@@ -660,7 +750,11 @@ class GlobalGeopotentialModel:
             from geoidlab.dtm import DigitalTerrainModel
             dtm = DigitalTerrainModel(nmax=self.nmax, ellipsoid=self.ellipsoid, model_name=self.dtm_model)
             H = dtm.dtm2006_height(lon=self.lon, lat=self.lat, chunk_size=self.chunk, save=False)
-            N_topo = 2 * np.pi * constants.earth()['G'] * constants.earth()['rho'] * H ** 2 / gamma0
+            if self.constant_density:
+                rho_topo = constants.earth()['rho']
+            else:
+                rho_topo = self._get_density_points()
+            N_topo = 2 * np.pi * constants.earth()['G'] * rho_topo * H ** 2 / gamma0
             print('Subtracting topographic effect from geoid height...')
         
         N -= N_topo
@@ -1057,7 +1151,15 @@ class GlobalGeopotentialModel:
                 zonal_harmonics=False,  # Already done in original object
                 model_dir=self.model_dir,
                 chunk_size=self.chunk,
-                dtm_model=self.dtm_model
+                dtm_model=self.dtm_model,
+                constant_density=self.constant_density,
+                density_model=self.density_model,
+                density_resolution=self.density_resolution,
+                density_resolution_unit=self.density_resolution_unit,
+                density_file=self.density_file,
+                density_interp_method=self.density_interp_method,
+                density_unit=self.density_unit,
+                density_save=self.density_save,
             )
             
             # Call the method on this batch

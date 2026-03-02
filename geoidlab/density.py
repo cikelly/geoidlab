@@ -26,6 +26,24 @@ MODELS = {
 }
 
 
+def get_processed_density_path(
+    download_dir: str | Path,
+    model: str | None = None,
+    resolution: int | None = None,
+    resolution_unit: str | None = None,
+) -> Path:
+    '''
+    Return the canonical processed density NetCDF path for a given model selection.
+    '''
+    download_dir = Path(download_dir)
+    filename = _resolve_model_filename(
+        model=model,
+        resolution=resolution,
+        resolution_unit=resolution_unit,
+    )
+    return download_dir / f"density_{Path(filename).stem}.nc"
+
+
 def _resolve_model_filename(
     model: str | None = None,
     resolution: int | None = None,
@@ -364,8 +382,10 @@ def ingest_unb_density(
     bbox_offset: float = 0.0,
     target_grid: xr.Dataset | xr.DataArray | None = None,
     align: bool = True,
-    interp_method: str = 'linear',
+    interp_method: str = 'nearest',
     keep_dataset: bool = False,
+    unit: str = 'kg/m3',
+    save: bool = False,
 ) -> xr.Dataset:
     '''
     Download/load UNB topographic density and prepare it for GeoidLab ingestion.
@@ -404,6 +424,10 @@ def ingest_unb_density(
     keep_dataset : bool
         If True return full Dataset. If False return Dataset with only
         density variable.
+    unit : str
+        Desired output unit for density. Supported values: 'kg/m3', 'g/cm3'.
+    save : bool
+        If True, save the processed dataset to a NetCDF file in the download_dir.
 
     Returns
     -------
@@ -444,6 +468,25 @@ def ingest_unb_density(
             method=interp_method,
         )
 
-    if not keep_dataset and 'density' in ds.data_vars:
-        return ds[['density']]
-    return ds
+    if unit == 'kg/m3':
+        # Convert from g/cm³ to kg/m³
+        ds['density'] = ds['density'] * 1000.0
+        if 'std' in ds.data_vars:
+            ds['std'] = ds['std'] * 1000.0
+    
+    ds.attrs['source'] = f"UNB Topographic Density Model ({file_path.name})"
+    ds.attrs['units'] = unit if unit in {'kg/m3', 'g/cm3'} else 'g/cm3'
+    
+    ds_out = ds[['density']] if (not keep_dataset and 'density' in ds.data_vars) else ds
+
+    if save:
+        output_path = get_processed_density_path(
+            download_dir=download_dir,
+            model=model,
+            resolution=resolution,
+            resolution_unit=resolution_unit,
+        )
+        ds_out.to_netcdf(output_path)
+        print(f"Processed density saved to {output_path}")
+
+    return ds_out

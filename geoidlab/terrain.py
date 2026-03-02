@@ -11,9 +11,12 @@ import bottleneck as bn
 import time
 import sys
 import threading
+from pathlib import Path
+import warnings
 
 from geoidlab import constants
 from geoidlab.coordinates import geodetic2cartesian
+from geoidlab.density import ingest_unb_density, get_processed_density_path
 from geoidlab.numba.terrain import (
     compute_tc_chunk, 
     compute_rtm_tc_chunk, 
@@ -46,6 +49,15 @@ class TerrainQuantities:
         proj_dir: str = None,
         window_mode: str = 'radius',
         overwrite: bool = True,
+        constant_density: bool = True,
+        density_model: str | None = '30s',
+        density_resolution: int | None = None,
+        density_resolution_unit: str | None = None,
+        density_file: str | Path | None = None,
+        density_download_dir: str | Path | None = None,
+        density_interp_method: str = 'nearest',
+        density_unit: str = 'kg/m3',
+        density_save: bool = True,
     ) -> None:
         '''
         Initialize the TerrainQuantities class for terrain modeling
@@ -93,6 +105,16 @@ class TerrainQuantities:
         self.proj_dir      = proj_dir
         self.window_mode   = window_mode.lower()
         self.overwrite     = overwrite
+        self.constant_density = constant_density
+        self.density_model = density_model
+        self.density_resolution = density_resolution
+        self.density_resolution_unit = density_resolution_unit
+        self.density_file = Path(density_file) if density_file is not None else None
+        self.density_download_dir = Path(density_download_dir) if density_download_dir is not None else Path.cwd() / 'downloads'
+        self.density_interp_method = density_interp_method
+        self.density_unit = density_unit
+        self.density_save = density_save
+        self.rho_grid = None
         
         # Validate window mode
         if self.window_mode not in self.VALID_WINDOW_MODES:
@@ -108,6 +130,80 @@ class TerrainQuantities:
         self.ori_topo = ori_topo
         self.ref_topo = ref_topo
         self.nrows, self.ncols = self.ori_topo['z'].shape
+
+        # Optionally ingest variable density over the original DEM grid.
+        if not self.constant_density:
+            self.density_download_dir.mkdir(parents=True, exist_ok=True)
+            bbox_density = [
+                float(self.ori_topo['x'].min().item()),
+                float(self.ori_topo['x'].max().item()),
+                float(self.ori_topo['y'].min().item()),
+                float(self.ori_topo['y'].max().item()),
+            ]
+
+            if self.density_file is not None:
+                density_path = self.density_file
+            else:
+                density_path = get_processed_density_path(
+                    download_dir=self.density_download_dir,
+                    model=self.density_model,
+                    resolution=self.density_resolution,
+                    resolution_unit=self.density_resolution_unit,
+                )
+
+            need_ingest = True
+            if density_path.exists():
+                try:
+                    with xr.open_dataset(density_path) as ds_cached:
+                        ds_cached = ds_cached.load()
+                    if 'density' in ds_cached.data_vars:
+                        need_ingest = False
+                except Exception:
+                    need_ingest = True
+
+            if need_ingest:
+                ds_density = ingest_unb_density(
+                    model=self.density_model,
+                    resolution=self.density_resolution,
+                    resolution_unit=self.density_resolution_unit,
+                    download_dir=self.density_download_dir,
+                    bbox=bbox_density,
+                    bbox_offset=self.bbox_off,
+                    target_grid=self.ori_topo,
+                    align=True,
+                    interp_method=self.density_interp_method,
+                    unit=self.density_unit,
+                    save=self.density_save,
+                    keep_dataset=False,
+                )
+            else:
+                with xr.open_dataset(density_path) as ds_cached:
+                    ds_density = ds_cached.load()
+                # Use canonical lon/lat interpolation axes to avoid xarray rename conflicts.
+                if 'lon' in ds_density.coords and 'lat' in ds_density.coords:
+                    ds_density = ds_density.interp(
+                        lon=xr.DataArray(self.ori_topo['x'].values, dims=('lon',)),
+                        lat=xr.DataArray(self.ori_topo['y'].values, dims=('lat',)),
+                        method=self.density_interp_method,
+                    )
+                elif 'x' in ds_density.coords and 'y' in ds_density.coords:
+                    ds_density = ds_density.interp(
+                        x=xr.DataArray(self.ori_topo['x'].values, dims=('x',)),
+                        y=xr.DataArray(self.ori_topo['y'].values, dims=('y',)),
+                        method=self.density_interp_method,
+                    )
+
+            rho_da = ds_density['density']
+            if 'lon' in rho_da.dims and 'lat' in rho_da.dims:
+                rho_da = rho_da.rename({'lon': 'x', 'lat': 'y'})
+            rho_da = rho_da.transpose('y', 'x')
+            self.rho_grid = rho_da.values
+            self.rho = float(np.nanmean(self.rho_grid))
+            warnings.warn(
+                "Variable density grid ingested, but terrain kernels currently apply an effective "
+                "mean density in scalar terms. Full per-cell variable-density kernels are not yet enabled.",
+                UserWarning,
+            )
 
         # Set ocean areas to zero
         if self.ref_topo is not None:
@@ -137,7 +233,6 @@ class TerrainQuantities:
             if not coords_match:
                 print("Resampling reference topography to match original topography grid...\n")
                 if x_extrap or y_extrap:
-                    import warnings
                     warnings.warn(
                         "Original topography extends beyond reference topography bounds. "
                         "Extrapolation will be required, which may lead to inaccurate results. "
