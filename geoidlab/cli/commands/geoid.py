@@ -162,6 +162,7 @@ class ResidualAnomalyComputation:
         marine_data: str = None,
         model: str = None,
         model_dir: str | Path = None,
+        dtm_model: str | Path = None,
         gravity_tide: str = None,
         ellipsoid: str = 'wgs84',
         ellipsoid_name: str | None = None,
@@ -202,6 +203,7 @@ class ResidualAnomalyComputation:
         self.marine_data = marine_data
         self.model = model
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
+        self.dtm_model = Path(dtm_model) if dtm_model is not None else None
         self.gravity_tide = gravity_tide
         self.ellipsoid = ellipsoid
         self.ellipsoid_name = ellipsoid_name
@@ -664,6 +666,7 @@ class ResidualAnomalyComputation:
         
         topo_workflow = TopographicQuantities(
             topo=self.topo,
+            dtm_model=self.dtm_model,
             model_dir=self.model_dir,
             output_dir=self.output_dir,
             ellipsoid=self.ellipsoid,
@@ -862,6 +865,7 @@ def main(args=None) -> None:
         marine_data=args.marine_data,
         model=args.model,
         model_dir=model_dir,
+        dtm_model=args.dtm_model,
         gravity_tide=args.gravity_tide,
         ellipsoid=args.ellipsoid,
         ellipsoid_name=args.ellipsoid_name,
@@ -975,6 +979,7 @@ def main(args=None) -> None:
     topo_quantities = TopographicQuantities(
         topo=args.topo,
         ref_topo=args.ref_topo,
+        dtm_model=args.dtm_model,
         model_dir=model_dir,
         output_dir=output_dir,
         ellipsoid=args.ellipsoid,

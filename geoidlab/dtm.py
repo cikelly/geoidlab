@@ -13,18 +13,18 @@ import numpy as np
 
 from pathlib import Path
 from geoidlab import coordinates as co
+from geoidlab import curtin
 from geoidlab.legendre import ALF, ALFsGravityAnomaly
 from geoidlab.numba.dtm import compute_harmonic_sum
 from tqdm import tqdm
 
 from multiprocessing import Pool, cpu_count
-from pathlib import Path
 
 
 
 
 class DigitalTerrainModel:
-    def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84') -> None:
+    def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84', model_format=None) -> None:
         '''
         Initialize the DigitalTerrainModel class
         
@@ -33,6 +33,8 @@ class DigitalTerrainModel:
         model_name : Name of the DTM model file (full path)
         nmax       : Maximum degree of spherical harmonics
         ellipsoid  : Reference ellipsoid
+        model_format: Optional explicit model format.
+                      Supported: 'dtm2006_text', 'bshc'
 
         Returns
         -------
@@ -41,11 +43,13 @@ class DigitalTerrainModel:
         self.name = model_name
         self.nmax = nmax
         self.ellipsoid = ellipsoid
+        self.model_format = model_format
         # self.progress = show_progress
 
         if self.name is None:
             script_dir: Path = Path(__file__).resolve().parent
             self.name = script_dir / 'data' / 'DTM2006.xz'
+            self.model_format = self.model_format or 'dtm2006_text'
             print(f'Using compressed DTM2006.0 file in {script_dir}/data ...')
             if self.nmax < 2190:
                 print('Note: Maximum degree for DTM2006.0 is 2190') 
@@ -53,17 +57,32 @@ class DigitalTerrainModel:
                 self.dtm = f.readlines()
         else:
             self.name = Path(self.name)
+            self.model_format = self.model_format or self._infer_model_format(self.name)
             try:
                 print(f'Reading DTM file {self.name} ...')
-                if self.name.suffix == '.xz':
+                if self.model_format == 'dtm2006_text' and self.name.suffix == '.xz':
                     with lzma.open(self.name, 'rt') as f:
                         self.dtm = f.readlines()
-                else:
+                elif self.model_format == 'dtm2006_text':
                     with open(self.name, 'r') as f:
                         self.dtm = f.readlines() # self.dtm is the DTM2006 text file
+                elif self.model_format == 'bshc':
+                    # Binary format: read lazily in read_coefficients().
+                    pass
+                else:
+                    raise ValueError(
+                        f'Unsupported model_format: {self.model_format}. '
+                        "Supported: 'dtm2006_text', 'bshc'"
+                    )
             except Exception as e:
                 raise Exception(f'Error reading DTM file {self.name}: {str(e)}')
                 
+    @staticmethod
+    def _infer_model_format(filename: Path) -> str:
+        suffix = filename.suffix.lower()
+        if suffix == '.bshc':
+            return 'bshc'
+        return 'dtm2006_text'
 
     @staticmethod
     def process_chunk(args) -> np.ndarray:
@@ -83,8 +102,15 @@ class DigitalTerrainModel:
 
     def read_dtm2006(self) -> None:
         '''
-        Read DTM data stored as compressed LZMA file or the original DTM2006 file
+        Backward-compatible reader for DTM2006 text format.
+
+        For format-agnostic loading, use `read_coefficients()`.
         '''
+        if self.model_format != 'dtm2006_text':
+            raise ValueError(
+                f'read_dtm2006 is only valid for dtm2006_text format, got {self.model_format}'
+            )
+
         HCnm = np.zeros((self.nmax + 1, self.nmax + 1))
         HSnm = np.zeros((self.nmax + 1, self.nmax + 1))
 
@@ -102,6 +128,28 @@ class DigitalTerrainModel:
                 HSnm[n, m] = float(line[3].replace('D', 'E'))
         self.HCnm = HCnm
         self.HSnm = HSnm
+
+    def read_coefficients(self) -> None:
+        '''
+        Read spherical harmonic coefficients for the configured potential model.
+        '''
+        if hasattr(self, 'HCnm') and hasattr(self, 'HSnm'):
+            return
+
+        if self.model_format == 'dtm2006_text':
+            self.read_dtm2006()
+            return
+
+        if self.model_format == 'bshc':
+            coeffs = curtin.read_bshc_coefficients(self.name, nmax=self.nmax)
+            self.HCnm = coeffs['HCnm']
+            self.HSnm = coeffs['HSnm']
+            return
+
+        raise ValueError(
+            f'Unsupported model_format: {self.model_format}. '
+            "Supported: 'dtm2006_text', 'bshc'"
+        )
     
     def dtm2006_height_point(
         self,
@@ -123,7 +171,7 @@ class DigitalTerrainModel:
         '''
         # Check if self has the HCnm attribute
         if not hasattr(self, 'HCnm') or not hasattr(self, 'HSnm'):
-            self.read_dtm2006()
+            self.read_coefficients()
             
         if height is None:
             height = 0
@@ -187,7 +235,7 @@ class DigitalTerrainModel:
         
         # Check if self has the HCnm attribute
         if not hasattr(self, 'HCnm') or not hasattr(self, 'HSnm'):
-            self.read_dtm2006()
+            self.read_coefficients()
         
         if num_points == 1:
             return self.dtm2006_height_point(lon_flat[0], lat_flat[0])

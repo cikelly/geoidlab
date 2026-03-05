@@ -63,6 +63,7 @@ class TopographicQuantities:
         self,
         topo: str,
         ref_topo: str = None,
+        dtm_model: str | Path = None,
         dtm_nmax: int = 360,
         dtm_chunk_size: int = 200,
         model_dir: str | Path = None,
@@ -128,6 +129,7 @@ class TopographicQuantities:
         '''
         self.topo = topo
         self.ref_topo = ref_topo
+        self.dtm_model = Path(dtm_model) if dtm_model is not None else None
         self.dtm_nmax = dtm_nmax
         self.dtm_chunk_size = dtm_chunk_size
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
@@ -216,7 +218,11 @@ class TopographicQuantities:
             lon, lat = np.meshgrid(ori_x, ori_y)
             
             # Initialize DTM object and compute heights
-            dtm = DigitalTerrainModel(nmax=self.dtm_nmax, ellipsoid=self.ellipsoid)
+            dtm = DigitalTerrainModel(
+                model_name=self.dtm_model,
+                nmax=self.dtm_nmax,
+                ellipsoid=self.ellipsoid
+            )
             H = dtm.dtm2006_height(lon=lon, lat=lat, chunk_size=self.dtm_chunk_size, save=False)
             # Create xarray Dataset
             ref_topo = xr.Dataset(
@@ -228,7 +234,8 @@ class TopographicQuantities:
                     'y': (('y',), ori_y)
                 }
             )
-            ref_topo.attrs['description'] = f'Reference topography from DTM2006.0 up to degree {self.dtm_nmax}'
+            model_desc = self.dtm_model.name if self.dtm_model is not None else 'DTM2006.0'
+            ref_topo.attrs['description'] = f'Reference topography from {model_desc} up to degree {self.dtm_nmax}'
             
             # Add standard attributes
             local_tz = get_localzone()
@@ -419,6 +426,8 @@ def add_topo_arguments(parser) -> None:
                         help='Path to reference elevation file (required for residual terrain quantities)')
     parser.add_argument('--dtm-nmax', type=int, default=360,
                         help='Maximum degree for DTM2006.0 when computing reference topography. Default: 360')
+    parser.add_argument('--dtm-model', type=str, default=None,
+                        help='Optional path to custom potential model file used for reference topography synthesis (.xz text or .bshc).')
     parser.add_argument('--dtm-chunk-size', type=int, default=200,
                         help='Chunk size for DTM2006.0 spherical harmonic synthesis. Use smaller chunks for larger grids or large dtm-nmax. Default: 200')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
@@ -507,6 +516,7 @@ def main(args=None) -> int:
     topo_workflow = TopographicQuantities(
         topo=args.topo,
         ref_topo=args.ref_topo,
+        dtm_model=args.dtm_model,
         dtm_nmax=args.dtm_nmax,
         dtm_chunk_size=args.dtm_chunk_size,
         model_dir=args.model_dir,
