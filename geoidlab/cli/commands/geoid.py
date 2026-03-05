@@ -20,7 +20,7 @@ from geoidlab.cli.commands.topo import add_topo_arguments, TopographicQuantities
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab.geoid import ResidualGeoid
 from geoidlab.icgem import get_ggm_tide_system
-from geoidlab.utils.io import save_to_netcdf
+from geoidlab.utils.io import save_to_netcdf, apply_ellipsoid_attrs
 
 METHODS_DICT = {
     'hg': "Heck & Gruninger's modification",
@@ -164,6 +164,7 @@ class ResidualAnomalyComputation:
         model_dir: str | Path = None,
         gravity_tide: str = None,
         ellipsoid: str = 'wgs84',
+        ellipsoid_name: str | None = None,
         converted: bool = False,
         grid: bool = False,
         grid_size: float = None,
@@ -203,6 +204,7 @@ class ResidualAnomalyComputation:
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.gravity_tide = gravity_tide
         self.ellipsoid = ellipsoid
+        self.ellipsoid_name = ellipsoid_name
         self.converted = converted
         self.grid = grid
         self.grid_size = grid_size
@@ -290,6 +292,7 @@ class ResidualAnomalyComputation:
             model_dir=self.model_dir,
             gravity_tide=self.gravity_tide,
             ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
             converted=self.converted,
             grid=True,
             grid_size=self.grid_size,
@@ -365,6 +368,7 @@ class ResidualAnomalyComputation:
             model_dir=self.model_dir,
             output_dir=self.output_dir,
             ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
             chunk_size=self.chunk_size,
             parallel=self.parallel,
             tide_system=self.gravity_tide,
@@ -398,6 +402,7 @@ class ResidualAnomalyComputation:
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
                 chunk_size=self.chunk_size,
                 parallel=self.parallel,
                 tide_system=self.gravity_tide,
@@ -499,6 +504,7 @@ class ResidualAnomalyComputation:
         
         # Save to NetCDF
         output_file = self.output_dir / 'Dg_res.nc'
+        apply_ellipsoid_attrs(residual_ds, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
         residual_ds.to_netcdf(output_file, mode='w')
         
         return residual_ds, str(output_file)
@@ -661,6 +667,7 @@ class ResidualAnomalyComputation:
             model_dir=self.model_dir,
             output_dir=self.output_dir,
             ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
             chunk_size=self.chunk_size,
             radius=self.radius,
             proj_name=self.proj_name,
@@ -696,6 +703,7 @@ class ResidualAnomalyComputation:
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
                 chunk_size=self.chunk_size,
                 parallel=self.parallel,
                 tide_system=self.gravity_tide,
@@ -743,6 +751,7 @@ class ResidualAnomalyComputation:
             model_dir=self.model_dir,
             output_dir=self.output_dir,
             ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
             chunk_size=self.chunk_size,
             parallel=self.parallel,
             tide_system=self.gravity_tide,
@@ -809,6 +818,7 @@ class ResidualAnomalyComputation:
         
         # Save to NetCDF
         output_file = self.output_dir / 'Dg_res.nc'
+        apply_ellipsoid_attrs(residual_ds, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
         residual_ds.to_netcdf(output_file, mode='w')
         
         return residual_ds, str(output_file)
@@ -854,6 +864,7 @@ def main(args=None) -> None:
         model_dir=model_dir,
         gravity_tide=args.gravity_tide,
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         converted=args.converted,
         grid=True,
         grid_size=grid_size,
@@ -920,6 +931,8 @@ def main(args=None) -> None:
         filepath=output_dir / 'N_res.nc',
         tide_system=ggm_tide,
         method=METHODS_DICT[args.method],
+        ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
     )
     
     print('Residual geoid computation completed.\n')
@@ -931,6 +944,7 @@ def main(args=None) -> None:
         model_dir=model_dir,
         output_dir=output_dir,
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         parallel=args.parallel,
         tide_system=args.gravity_tide,
@@ -964,6 +978,7 @@ def main(args=None) -> None:
         model_dir=model_dir,
         output_dir=output_dir,
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         radius=args.radius,
         parallel=args.parallel,
@@ -1031,6 +1046,8 @@ def main(args=None) -> None:
         filepath=output_file,
         tide_system=args.target_tide_system if args.target_tide_system else ggm_tide,
         method=METHODS_DICT[args.method],
+        ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
     )
     
     print(f'Geoid heights written to {output_file}.\n')

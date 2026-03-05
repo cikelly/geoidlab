@@ -38,7 +38,11 @@ def normal_gravity(phi, ellipsoid='wgs84') -> float:
     2. $a\gamma_b$ in Eq. 4.41b should be $a\gamma_a$
     3. This is correctly specified in the 4th Edition of the book.
     '''
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'semi_minor', 'gamma_a', 'gamma_b', 'e2'],
+        context='normal_gravity'
+    )
     a = ref_ellipsoid['semi_major']
     b = ref_ellipsoid['semi_minor']
 
@@ -75,7 +79,11 @@ def normal_gravity_somigliana(phi, ellipsoid='wgs84') -> float:
     -----
     1. Equation 4.41a, Page 147
     '''
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'semi_minor', 'gamma_a', 'gamma_b', 'e2'],
+        context='normal_gravity_somigliana'
+    )
     a = ref_ellipsoid['semi_major']
     b = ref_ellipsoid['semi_minor']
 
@@ -102,7 +110,10 @@ def normal_gravity_above_ellipsoid(phi, h, ellipsoid='wgs84') -> float:
     -------
     gamma_h : normal gravity of a point above the ellipsoid (mgal)
     '''
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'f', 'm'], context='normal_gravity_above_ellipsoid'
+    )
     a = ref_ellipsoid['semi_major']
     f = ref_ellipsoid['f']
     m = ref_ellipsoid['m']
@@ -126,7 +137,10 @@ def ellipsoid_radius(phi, ellipsoid='wgs84') -> float:
     -------
     r        : local ellipsoid radius
     '''
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'e2'], context='ellipsoid_radius'
+    )
     a = ref_ellipsoid['semi_major']
 
     e2 = ref_ellipsoid['e2']

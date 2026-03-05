@@ -6,6 +6,7 @@
 import numpy as np
 
 from pathlib import Path
+from geoidlab import constants
 
 
 
@@ -33,8 +34,7 @@ def validate_params(args, lonlatheight=None) -> None:
             raise ValueError('chunk_size must be greater than 0')
 
     # Validate ellipsoid
-    if args.ellipsoid not in ['wgs84', 'grs80']:
-        raise ValueError('ellipsoid must be wgs84 or grs80')
+    constants.resolve_ellipsoid(args.ellipsoid)
 
     # Validate model
     if not args.model:

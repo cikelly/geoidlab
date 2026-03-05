@@ -18,6 +18,7 @@ from geoidlab.cli.commands.utils.common import(
     get_grid_lon_lat
 )
 from geoidlab.icgem import download_ggm, get_ggm_tide_system
+from geoidlab import constants
 from geoidlab.utils.io import save_to_netcdf
 from geoidlab.tide import GravityTideSystemConverter
 from geoidlab.ggm import GlobalGeopotentialModel
@@ -88,6 +89,7 @@ class GGMSynthesis():
         model_dir: str | Path = None,
         output_dir: str | Path = 'results',
         ellipsoid: str = 'wgs84',
+        ellipsoid_name: str | None = None,
         chunk_size: int = 500,
         parallel: bool = False,
         tide_system: str = None,
@@ -141,6 +143,7 @@ class GGMSynthesis():
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.output_dir = Path(output_dir)
         self.ellipsoid = ellipsoid
+        self.ellipsoid_name = ellipsoid_name
         self.chunk_size = chunk_size
         self.parallel = parallel
         self.tide_system = tide_system
@@ -181,8 +184,7 @@ class GGMSynthesis():
         
     def _validate_params(self) -> None:
         '''Validate parameters'''
-        if self.ellipsoid not in ['wgs84', 'grs80']:
-            raise ValueError('Ellipsoid must be \'wgs84\' or \'grs80\'')
+        constants.resolve_ellipsoid(self.ellipsoid)
         if self.tide_system and self.tide_system not in ['mean_tide', 'zero_tide', 'tide_free']:
             raise ValueError('Tide system must be one of: mean_tide, zero_tide, tide_free')
         if not self.input_file:
@@ -367,7 +369,9 @@ class GGMSynthesis():
                 dataset_key=output_key,
                 filepath=output_file,
                 tide_system=self.ggm_tide,
-                method='Topographic correction applied (ICGEM method)' if icgem else 'Regular method (no correction applied)'
+                method='Topographic correction applied (ICGEM method)' if icgem else 'Regular method (no correction applied)',
+                ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
             )
 
         print(f'{task_name} written to {output_file}\n')
@@ -506,7 +510,9 @@ def add_reference_arguments(parser) -> None:
     parser.add_argument('-p','--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
     parser.add_argument('-ell','--ellipsoid', type=str, default='wgs84', 
-                        help='Reference ellipsoid: wgs84, grs80')
+                        help='Reference ellipsoid: wgs84, grs80, or JSON object string')
+    parser.add_argument('--ellipsoid-name', type=str, default=None,
+                        help='Optional ellipsoid name to store in output metadata (e.g., NAD83, ITRF2014)')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Project directory')
     parser.add_argument('-gt', '--gravity-tide', type=str, default=None, 
@@ -571,6 +577,7 @@ def main(args=None) -> int:
         model_dir=args.model_dir,
         output_dir=Path(args.proj_name) / 'results',
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         parallel=args.parallel,
         tide_system=args.gravity_tide,

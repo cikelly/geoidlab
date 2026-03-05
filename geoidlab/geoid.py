@@ -8,7 +8,7 @@ import xarray as xr
 
 from geoidlab.utils.distances import haversine_fast, haversine_vectorized
 from geoidlab.gravity import normal_gravity_somigliana
-from geoidlab.constants import earth
+from geoidlab.constants import earth, resolve_ellipsoid
 from geoidlab.stokes_func import Stokes4ResidualGeoid
 
 from tqdm import tqdm
@@ -19,7 +19,6 @@ class ResidualGeoid:
     '''
     VALID_METHODS = {'hg', 'wg', 'og', 'ml'}  # Valid integration methods
     VALID_WINDOW_MODES = {'fixed', 'cap', 'radius'}
-    VALID_ELLIPSOIDS = {'wgs84', 'grs80'}
     DEFAULT_WINDOW_MODE = 'cap'
     METHODS_DICT = {
         'hg': 'Heck & Gruninger',
@@ -89,8 +88,10 @@ class ResidualGeoid:
                 raise ValueError(f'nmax must be a positive integer, got {nmax}')
         
         # Validate ellipsoid
-        if ellipsoid.lower() not in self.VALID_ELLIPSOIDS:
-            raise ValueError(f'Invalid ellipsoid: {ellipsoid}. Must be one of {sorted(self.VALID_ELLIPSOIDS)}')
+        try:
+            resolve_ellipsoid(ellipsoid)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f'Invalid ellipsoid specification: {exc}') from exc
             
         # Validate res_anomaly
         if not isinstance(res_anomaly, xr.Dataset):

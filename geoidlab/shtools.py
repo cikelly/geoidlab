@@ -23,7 +23,6 @@ def degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> dict:
     shc1 = copy.deepcopy(shc)
     if replace_zonal:
         shc1 = subtract_zonal_harmonics(shc1, ellipsoid=ellipsoid)
-    ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
     
     coefficients  = [['Cnm', 'Snm'], ['sCnm', 'sSnm']]
     variance_dict = {}
@@ -78,7 +77,6 @@ def error_degree_amplitude(shc:dict, ellipsoid='wgs84', replace_zonal=True) -> d
     
     if replace_zonal:
         shc1 = subtract_zonal_harmonics(shc1, ellipsoid=ellipsoid)
-    ellipsoid = constants.wgs84() if ellipsoid.lower()=='wgs84' else constants.grs80()
     
     variance_dict = {}
     
@@ -146,7 +144,11 @@ def subtract_zonal_harmonics(
     shc1 = copy.deepcopy(shc)
     
     # Reference ellipsoid: remove the even zonal harmonics from sine and cosine coefficients.
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['GM', 'semi_major', 'C20', 'C40', 'C60', 'C80', 'C100'],
+        context='subtract_zonal_harmonics'
+    )
     GMe = ref_ellipsoid['GM']
     a_e = ref_ellipsoid['semi_major']
 

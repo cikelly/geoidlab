@@ -17,6 +17,8 @@ from tzlocal import get_localzone
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab import terrain
 from geoidlab.dem import dem4geoid
+from geoidlab import constants
+from geoidlab.utils.io import apply_ellipsoid_attrs
 
 class TopographicQuantities:
     '''
@@ -66,6 +68,7 @@ class TopographicQuantities:
         model_dir: str | Path = None,
         output_dir: str | Path = 'results',
         ellipsoid: str = 'wgs84',
+        ellipsoid_name: str | None = None,
         chunk_size: int = 500,
         radius: float = 110.,
         proj_name: str = 'GeoidProject',
@@ -130,6 +133,7 @@ class TopographicQuantities:
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.output_dir = Path(output_dir)
         self.ellipsoid = ellipsoid
+        self.ellipsoid_name = ellipsoid_name
         self.chunk_size = chunk_size
         self.radius = radius
         self.parallel = parallel
@@ -167,8 +171,7 @@ class TopographicQuantities:
         
     def _validate_params(self) -> None:
         '''Validate parameters'''
-        if self.ellipsoid not in ['wgs84', 'grs80']:
-            raise ValueError('Ellipsoid must be \'wgs84\' or \'grs80\'')
+        constants.resolve_ellipsoid(self.ellipsoid)
         if any(x is None for x in self.bbox):
                 raise ValueError('bbox must contain four numbers [W, E, S, N] when input-file is not provided or --grid is used')
         if len(self.bbox) != 4:
@@ -236,6 +239,7 @@ class TopographicQuantities:
                 'website'     : 'https://github.com/cikelly/geoidlab',
                 'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             })
+            apply_ellipsoid_attrs(ref_topo, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
             
             # Save for future use
             out_file = Path(self.proj_name) / 'downloads' / f'DTM2006.0_nmax{self.dtm_nmax}.nc'
@@ -422,7 +426,9 @@ def add_topo_arguments(parser) -> None:
     parser.add_argument('--radius', type=float, default=110.0, 
                         help='Search radius in kilometers. Default: 110 km')
     parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', 
-                        help='Reference ellipsoid. Default: wgs84. Options: wgs84, grs80')
+                        help='Reference ellipsoid: wgs84, grs80, or JSON object string')
+    parser.add_argument('--ellipsoid-name', type=str, default=None,
+                        help='Optional ellipsoid name to store in output metadata')
     parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr', 'all'], 
                         help='Computation steps to perform.')
     parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'],
@@ -506,6 +512,7 @@ def main(args=None) -> int:
         model_dir=args.model_dir,
         output_dir=Path(args.proj_name) / 'results',
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         radius=args.radius,
         proj_name=args.proj_name,

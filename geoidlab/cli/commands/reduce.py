@@ -21,7 +21,8 @@ from geoidlab import gravity
 from geoidlab.cli.commands.topo import TopographicQuantities
 from geoidlab.tide import GravityTideSystemConverter
 from geoidlab.icgem import get_ggm_tide_system
-from geoidlab.utils.io import save_to_netcdf
+from geoidlab.utils.io import save_to_netcdf, apply_ellipsoid_attrs
+from geoidlab import constants
 
 
 # def decimate_data(df: pd.DataFrame, n_points: int, verbose: bool = False) -> pd.DataFrame:
@@ -93,6 +94,7 @@ class GravityReduction:
         # marine_data: str = None,
         gravity_tide: str = None,
         ellipsoid: str = 'wgs84',
+        ellipsoid_name: str | None = None,
         converted: bool = False,
         grid: bool = False,
         grid_size: float = None,
@@ -131,6 +133,7 @@ class GravityReduction:
         # self.marine_data = marine_data
         self.gravity_tide = gravity_tide
         self.ellipsoid = ellipsoid
+        self.ellipsoid_name = ellipsoid_name
         self.converted = converted
         self.grid = grid
         self.grid_size = grid_size
@@ -181,8 +184,7 @@ class GravityReduction:
         #     raise ValueError(f'Marine data file {self.marine_data} does not exist')
         if self.gravity_tide and self.gravity_tide not in ['mean_tide', 'zero_tide', 'tide_free']:
             raise ValueError('Gravity tide must be mean_tide, zero_tide, or tide_free')
-        if self.ellipsoid not in ['wgs84', 'grs80']:
-            raise ValueError('Ellipsoid must be wgs84 or grs80')
+        constants.resolve_ellipsoid(self.ellipsoid)
         if self.gravity_tide and self.gravity_tide not in ['mean_tide', 'zero_tide', 'tide_free']:
             raise ValueError('Gravity tide must be mean_tide, zero_tide, or tide_free')
         if self.grid:
@@ -296,6 +298,7 @@ class GravityReduction:
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
                 chunk_size=self.chunk_size,
                 radius=self.radius,
                 proj_name=self.proj_name,
@@ -349,6 +352,7 @@ class GravityReduction:
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
                 chunk_size=self.chunk_size,
                 radius=self.radius,
                 proj_name=self.proj_name,
@@ -401,6 +405,7 @@ class GravityReduction:
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
+                ellipsoid_name=self.ellipsoid_name,
                 chunk_size=self.chunk_size,
                 radius=self.radius,
                 proj_name=self.proj_name,
@@ -492,7 +497,9 @@ class GravityReduction:
             lat=lat_grid,
             dataset_key='Dg_ELL',
             filepath=ec_file,
-            tide_system=self.ggm_tide if self.ggm_tide is None else ggm_tide
+            tide_system=self.ggm_tide if self.ggm_tide is None else ggm_tide,
+            ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
         )
         
         print(f'Ellipsoidal correction saved to {ec_file}')
@@ -733,6 +740,7 @@ class GravityReduction:
                 'website'     : 'https://github.com/cikelly/geoidlab',
                 'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             })
+            apply_ellipsoid_attrs(ds, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
             
             # Save the dataset
             ds.to_netcdf(output_file_nc, mode='w')
@@ -846,7 +854,9 @@ class GravityReduction:
             lat=gridded_ds['lat'].values,
             dataset_key='Dg',
             filepath=output_file_nc,
-            tide_system=self.ggm_tide
+            tide_system=self.ggm_tide,
+            ellipsoid=self.ellipsoid,
+            ellipsoid_name=self.ellipsoid_name,
         )
         print(f'Gridded anomalies written to {output_file_nc}')
         
@@ -911,8 +921,10 @@ def add_reduce_arguments(parser) -> None:
                         help='Bounding box [W, E, S, N] in degrees. Required if --grid')
     parser.add_argument('-bo', '--bbox-offset', type=float, default=1.0,
                         help='Offset around the bounding box in degrees')
-    parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', choices=['wgs84', 'grs80'],
-                        help='Reference ellipsoid')
+    parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84',
+                        help='Reference ellipsoid: wgs84, grs80, or JSON object string')
+    parser.add_argument('--ellipsoid-name', type=str, default=None,
+                        help='Optional ellipsoid name to store in output metadata')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject',
                         help='Project directory for downloads and results')
     parser.add_argument('-c', '--converted', action='store_true',
@@ -998,6 +1010,7 @@ def main(args=None) -> None:
         # marine_data=args.marine_data,
         gravity_tide=args.gravity_tide,
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         converted=args.converted,
         grid=args.grid,
         grid_size=args.grid_size,
