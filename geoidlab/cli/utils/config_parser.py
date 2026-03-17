@@ -106,6 +106,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'dtm_chunk_size'        : ('dtm_chunk_size', None),
         'radius'                : ('radius', None),
         'ellipsoid'             : ('ellipsoid', None),
+        'ellipsoid_name'        : ('ellipsoid_name', None),
         'interpolation_method'  : ('interpolation_method', None),
         'interp_method'         : ('interp_method', None),
         'tc_file'               : ('tc_file', None),

@@ -791,7 +791,10 @@ class GlobalGeopotentialModel:
         if self.shc is not None and GM is None:
             GM = self.shc['GM']
         
-        ref_ellipsoid = constants.wgs84() if 'wgs84' in self.ellipsoid.lower() else constants.grs80()
+        ref_ellipsoid = constants.resolve_ellipsoid(self.ellipsoid)
+        constants.require_ellipsoid_params(
+            ref_ellipsoid, ['GM', 'U0', 'semi_major'], context='zero_degree_term'
+        )
         GM0 = ref_ellipsoid['GM']
         U0  = ref_ellipsoid['U0'] # Potential of ellipsoid (m2/s2)
         R   = ref_ellipsoid['semi_major'] if zeta_or_geoid == 'geoid' else self.r
@@ -1086,7 +1089,10 @@ class GlobalGeopotentialModel:
         # Negate dT since it is the first derivative of the potential with respect to colatitude
         dT_dphi = -dT
 
-        ellipsoid = constants.wgs84() if self.ellipsoid.lower() == 'wgs84' else constants.grs80()
+        ellipsoid = constants.resolve_ellipsoid(self.ellipsoid)
+        constants.require_ellipsoid_params(
+            ellipsoid, ['e2', 'semi_major'], context='ellipsoidal_correction'
+        )
         e2 = ellipsoid['e2']
         # GM = ellipsoid['GM']
         R = ellipsoid['semi_major']

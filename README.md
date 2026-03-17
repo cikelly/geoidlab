@@ -23,7 +23,7 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Command-Line Interface](#command-line-interface)
-- [Examples](#examples)
+- [Tutorials](#tutorials)
 - [Contributing](#contributing)
 - [License](#license)
 - [References](#references)
@@ -171,39 +171,16 @@ The simplest way to use `GeoidLab` for geoid computation is via the CLI tools an
 
 By default, `geoidlab` will create a project directory, `GeoidProject`, in `cwd`. If you didn't change this, you can find results and downloads in `Brazil/GeoidProject/results` and `Brazil/GeoidProject/downloads`. 
 
-**PS**: For computationally extensive steps, `geoidlab` will skip reprocessing if NetCDF files are found in `<proj-name/results>`. If you have made changes and want to recompute them, either delete them, move them, or set `<proj-name>` to a new value.
+**PS**: For computationally intensive/expensive steps, `geoidlab` will skip reprocessing if NetCDF files are found in `<proj-name/results>`. If you have made changes and want to recompute them, either delete them, move them, or set `<proj-name>` to a new value.
 
-Alternatively, if you are comfortable with CLI tools and want to use the different commands separately without the configuration file, please use `geoidlab <command> -h` to get helpful information about usage. Some steps include:
-
-1. **Data Preparation**
-   ```bash
-   # Process terrestrial gravity data
-   geoidlab reduce --input gravity.csv --model EGM2008 \
-                   --grid-size 1 --grid-unit minutes \
-                   --bbox [-5,5,-5,5] --grid-method kriging
-   ```
-
-2. **Residual Computation**
-   ```bash
-   # Compute residual geoid using Heck & Gruninger modification
-   geoidlab geoid --method hg --sph-cap 1.0 \
-                  --max-deg 90 --window-mode cap
-   ```
-
-3. **Final Geoid Model**
-   ```bash
-   # Generate final geoid with tide system conversion
-   geoidlab geoid --target-tide-system tide_free \
-                  --gravity-tide mean_tide
-   ```
 
 ### Key Parameters
 - `--method`: Kernel modification ['hg', 'wg', 'ml', 'og']
 - `--grid-method`: Interpolation method ['linear', 'spline', 'kriging', 'rbf', 'idw']
 - `--tide-system`: Tide system ['mean_tide', 'zero_tide', 'tide_free']
-- `--ellipsoid`: Reference ellipsoid ['wgs84', 'grs80']
+- `--ellipsoid`: Reference ellipsoid ['wgs84', 'grs80', custom]
 
-## Examples
+## Tutorials
 If you are interested in more detailed usage examples, please visit the [tutorial repository](https://github.com/cikelly/geoidlab-tutorial). Examples include:
 - Complete workflow demonstrations
 - Different kernel modification comparisons
@@ -234,6 +211,8 @@ See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for detail
 
 
 ## References
+- Kelly, C.I., V.G. Ferreira, D. Yang, S.A. Andam-Akorful, D. Yan1, S. Osah, C.M. Hancock, G. Jing, A.T. Kabo-bah, (2026): GeoidLab: An Automated Open-Source Python Toolbox for Gravity-Field Analysis and Vertical Datum Unification (Under review)
+  
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
 Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
 

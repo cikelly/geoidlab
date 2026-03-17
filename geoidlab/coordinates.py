@@ -1,4 +1,4 @@
-############################################################
+﻿############################################################
 # Utilities for converting between coordinate systems      #
 # Copyright (c) 2024, Caleb Kelly                          #
 # Author: Caleb Kelly  (2024)                              #
@@ -28,7 +28,10 @@ def geodetic2geocentric(phi, ellipsoid='wgs84') -> float:
     2. Physical Geodesy, Hofmann-Wellenhof and Moritz (2005)
     '''
     # if semi_major is None or semi_minor is None:
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'semi_minor'], context='geodetic2geocentric'
+    )
     a = ref_ellipsoid['semi_major']
     b = ref_ellipsoid['semi_minor']
     
@@ -52,7 +55,10 @@ def geodetic2cartesian(phi, lambd, ellipsoid, height=0) -> tuple:
     Y         : longitude (same as geodetic longitude)
     Z         :
     '''
-    ref_ellipsoid = constants.wgs84() if 'wgs84' in ellipsoid.lower() else constants.grs80()
+    ref_ellipsoid = constants.resolve_ellipsoid(ellipsoid)
+    constants.require_ellipsoid_params(
+        ref_ellipsoid, ['semi_major', 'e2'], context='geodetic2cartesian'
+    )
     a = ref_ellipsoid['semi_major']
     e2 = ref_ellipsoid['e2']
     
@@ -100,3 +106,4 @@ def geodetic2spherical(phi, lambd, ellipsoid, height=0) -> tuple:
     vartheta = np.pi/2 - psi # colatitude
     
     return r, vartheta, lambd
+

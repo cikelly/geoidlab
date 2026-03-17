@@ -17,6 +17,8 @@ from tzlocal import get_localzone
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab import terrain
 from geoidlab.dem import dem4geoid
+from geoidlab import constants
+from geoidlab.utils.io import apply_ellipsoid_attrs
 
 class TopographicQuantities:
     '''
@@ -61,11 +63,13 @@ class TopographicQuantities:
         self,
         topo: str,
         ref_topo: str = None,
+        dtm_model: str | Path = None,
         dtm_nmax: int = 360,
         dtm_chunk_size: int = 200,
         model_dir: str | Path = None,
         output_dir: str | Path = 'results',
         ellipsoid: str = 'wgs84',
+        ellipsoid_name: str | None = None,
         chunk_size: int = 500,
         radius: float = 110.,
         proj_name: str = 'GeoidProject',
@@ -125,11 +129,13 @@ class TopographicQuantities:
         '''
         self.topo = topo
         self.ref_topo = ref_topo
+        self.dtm_model = Path(dtm_model) if dtm_model is not None else None
         self.dtm_nmax = dtm_nmax
         self.dtm_chunk_size = dtm_chunk_size
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.output_dir = Path(output_dir)
         self.ellipsoid = ellipsoid
+        self.ellipsoid_name = ellipsoid_name
         self.chunk_size = chunk_size
         self.radius = radius
         self.parallel = parallel
@@ -167,8 +173,7 @@ class TopographicQuantities:
         
     def _validate_params(self) -> None:
         '''Validate parameters'''
-        if self.ellipsoid not in ['wgs84', 'grs80']:
-            raise ValueError('Ellipsoid must be \'wgs84\' or \'grs80\'')
+        constants.resolve_ellipsoid(self.ellipsoid)
         if any(x is None for x in self.bbox):
                 raise ValueError('bbox must contain four numbers [W, E, S, N] when input-file is not provided or --grid is used')
         if len(self.bbox) != 4:
@@ -213,7 +218,11 @@ class TopographicQuantities:
             lon, lat = np.meshgrid(ori_x, ori_y)
             
             # Initialize DTM object and compute heights
-            dtm = DigitalTerrainModel(nmax=self.dtm_nmax, ellipsoid=self.ellipsoid)
+            dtm = DigitalTerrainModel(
+                model_name=self.dtm_model,
+                nmax=self.dtm_nmax,
+                ellipsoid=self.ellipsoid
+            )
             H = dtm.dtm2006_height(lon=lon, lat=lat, chunk_size=self.dtm_chunk_size, save=False)
             # Create xarray Dataset
             ref_topo = xr.Dataset(
@@ -225,7 +234,8 @@ class TopographicQuantities:
                     'y': (('y',), ori_y)
                 }
             )
-            ref_topo.attrs['description'] = f'Reference topography from DTM2006.0 up to degree {self.dtm_nmax}'
+            model_desc = self.dtm_model.name if self.dtm_model is not None else 'DTM2006.0'
+            ref_topo.attrs['description'] = f'Reference topography from {model_desc} up to degree {self.dtm_nmax}'
             
             # Add standard attributes
             local_tz = get_localzone()
@@ -236,6 +246,7 @@ class TopographicQuantities:
                 'website'     : 'https://github.com/cikelly/geoidlab',
                 'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
             })
+            apply_ellipsoid_attrs(ref_topo, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
             
             # Save for future use
             out_file = Path(self.proj_name) / 'downloads' / f'DTM2006.0_nmax{self.dtm_nmax}.nc'
@@ -415,6 +426,8 @@ def add_topo_arguments(parser) -> None:
                         help='Path to reference elevation file (required for residual terrain quantities)')
     parser.add_argument('--dtm-nmax', type=int, default=360,
                         help='Maximum degree for DTM2006.0 when computing reference topography. Default: 360')
+    parser.add_argument('--dtm-model', type=str, default=None,
+                        help='Optional path to custom potential model file used for reference topography synthesis (.xz text or .bshc).')
     parser.add_argument('--dtm-chunk-size', type=int, default=200,
                         help='Chunk size for DTM2006.0 spherical harmonic synthesis. Use smaller chunks for larger grids or large dtm-nmax. Default: 200')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
@@ -422,7 +435,9 @@ def add_topo_arguments(parser) -> None:
     parser.add_argument('--radius', type=float, default=110.0, 
                         help='Search radius in kilometers. Default: 110 km')
     parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', 
-                        help='Reference ellipsoid. Default: wgs84. Options: wgs84, grs80')
+                        help='Reference ellipsoid: wgs84, grs80, or JSON object string')
+    parser.add_argument('--ellipsoid-name', type=str, default=None,
+                        help='Optional ellipsoid name to store in output metadata')
     parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr', 'all'], 
                         help='Computation steps to perform.')
     parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'],
@@ -501,11 +516,13 @@ def main(args=None) -> int:
     topo_workflow = TopographicQuantities(
         topo=args.topo,
         ref_topo=args.ref_topo,
+        dtm_model=args.dtm_model,
         dtm_nmax=args.dtm_nmax,
         dtm_chunk_size=args.dtm_chunk_size,
         model_dir=args.model_dir,
         output_dir=Path(args.proj_name) / 'results',
         ellipsoid=args.ellipsoid,
+        ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         radius=args.radius,
         proj_name=args.proj_name,

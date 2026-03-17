@@ -6,9 +6,12 @@
 
 import xarray as xr
 import numpy as np
+import json
+import math
 from pathlib import Path
 from datetime import datetime
 from tzlocal import get_localzone
+from geoidlab import constants
 
 DATASET_CONFIG = {
     'tc': {
@@ -174,6 +177,63 @@ TIDE_SYSTEM_DATASETS = {'Dg_ggm', 'N_ref', 'dg', 'N_res', 'N', 'zeta', 'free_air
 
 METHOD_DATASETS = {'N', 'N_res', 'N_ref'}
 
+
+def _is_missing(value) -> bool:
+    if value is None:
+        return True
+    try:
+        return math.isnan(value)
+    except (TypeError, ValueError):
+        return False
+
+
+def get_ellipsoid_attrs(ellipsoid=None, ellipsoid_name: str | None = None) -> dict:
+    '''
+    Build standardized ellipsoid metadata attributes for NetCDF outputs.
+    '''
+    if ellipsoid is None:
+        return {
+            'ellipsoid': 'None',
+            'ellipsoid_name': ellipsoid_name or 'None',
+            'ellipsoid_source': 'none',
+            'ellipsoid_parameters': '{}',
+        }
+
+    source = 'custom'
+    ellipsoid_class = 'Custom'
+    if isinstance(ellipsoid, str):
+        key = ellipsoid.strip().lower()
+        if key == 'wgs84':
+            ellipsoid_class = 'WGS84'
+            source = 'builtin'
+        elif key == 'grs80':
+            ellipsoid_class = 'GRS80'
+            source = 'builtin'
+        elif ellipsoid.strip().startswith('{') and ellipsoid.strip().endswith('}'):
+            source = 'custom_json'
+        else:
+            source = 'custom_string'
+    elif isinstance(ellipsoid, dict):
+        source = 'custom_dict'
+
+    resolved = constants.resolve_ellipsoid(ellipsoid)
+    params = {k: v for k, v in resolved.items() if not _is_missing(v)}
+
+    return {
+        'ellipsoid': ellipsoid_class,
+        'ellipsoid_name': ellipsoid_name or ellipsoid_class,
+        'ellipsoid_source': source,
+        'ellipsoid_parameters': json.dumps(params, sort_keys=True),
+    }
+
+
+def apply_ellipsoid_attrs(ds: xr.Dataset, ellipsoid=None, ellipsoid_name: str | None = None) -> xr.Dataset:
+    '''
+    Attach ellipsoid metadata to a dataset in-place and return it.
+    '''
+    ds.attrs.update(get_ellipsoid_attrs(ellipsoid=ellipsoid, ellipsoid_name=ellipsoid_name))
+    return ds
+
 def save_to_netcdf(
     data: np.ndarray,
     lon: np.ndarray,
@@ -183,7 +243,9 @@ def save_to_netcdf(
     overwrite: bool = True,
     filepath: str = None,
     tide_system: str = None,
-    method: str = None
+    method: str = None,
+    ellipsoid=None,
+    ellipsoid_name: str | None = None,
 ) -> str:
     '''
     Save a dataset to a NetCDF file using predefined or default configuration
@@ -198,6 +260,8 @@ def save_to_netcdf(
     overwrite   : Overwrite existing file if it exists
     tide_system : Tide system of the data (only for specific datasets)
     method      : Method used to compute the data (only for specific datasets)
+    ellipsoid   : Ellipsoid spec used in the computation
+    ellipsoid_name: Optional user-provided ellipsoid name
     dataset_key : Key to select the dataset configuration from DATASET_CONFIG
     
     Returns
@@ -261,6 +325,9 @@ def save_to_netcdf(
         # Add method
         if dataset_key in METHOD_DATASETS:
             ds.attrs['method'] = method if method is not None else 'Unspecified method'
+
+        # Add ellipsoid metadata
+        apply_ellipsoid_attrs(ds, ellipsoid=ellipsoid, ellipsoid_name=ellipsoid_name)
         
         # Save to NetCDF file
         if filename.exists() and not overwrite:
