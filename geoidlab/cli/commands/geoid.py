@@ -132,7 +132,13 @@ def add_geoid_arguments(parser) -> None:
     
     # Add marine data arguments
     parser.add_argument('--marine-data', type=str,
-                      help='Input file with marine gravity data (lon, lat, Dg, height)')
+                      help='Input file with marine gravity anomaly data (lon, lat, Dg, height)')
+    parser.add_argument('--marine-data-type', type=str, default='free_air_anomaly',
+                      choices=['free_air_anomaly'],
+                      help='Type of marine quantity supplied in --marine-data. Currently supported: free_air_anomaly.')
+    parser.add_argument('--marine-tide-system', type=str, default=None,
+                      choices=['mean_tide', 'tide_free', 'zero_tide'],
+                      help='Tide system of the marine anomaly data. Required when --marine-data is provided.')
     parser.add_argument('--decimate', action='store_true',
                       help='Decimate marine data. Default observations to retain is 600. Use --decimate-threshold to change this.')
     parser.add_argument('--decimate-threshold', type=int, default=600,
@@ -141,7 +147,7 @@ def add_geoid_arguments(parser) -> None:
     # Add residual computation method argument
     parser.add_argument('--residual-method', type=str, choices=['station', 'gridded'], 
                       default='station',
-                      help='Method for computing residual anomalies: station (compute at observation points) or gridded (compute after gridding). Note: The gridded method uses Bouguer anomalies which may lead to larger indirect effects (Torge et al., 2023).')
+                      help='Method for computing residual anomalies: station (compute at observation points) or gridded (compute from a land-only gridded complete-Bouguer field with slab restoration).')
     
     # Existing geoid arguments
     parser.add_argument('--sph-cap', type=float, default=1.0,
@@ -160,6 +166,8 @@ class ResidualAnomalyComputation:
         self,
         input_file: str,
         marine_data: str = None,
+        marine_data_type: str = 'free_air_anomaly',
+        marine_tide_system: str | None = None,
         model: str = None,
         model_dir: str | Path = None,
         gravity_tide: str = None,
@@ -199,6 +207,8 @@ class ResidualAnomalyComputation:
     ) -> None:
         self.input_file = input_file
         self.marine_data = marine_data
+        self.marine_data_type = marine_data_type
+        self.marine_tide_system = marine_tide_system
         self.model = model
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
         self.gravity_tide = gravity_tide
@@ -240,11 +250,48 @@ class ResidualAnomalyComputation:
         
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    def _validate_marine_configuration(self) -> None:
+        """Validate marine input metadata before it enters the RCR workflow."""
+        if not self.marine_data:
+            return
+
+        if self.marine_data_type != 'free_air_anomaly':
+            raise ValueError(
+                f'Unsupported marine_data_type={self.marine_data_type!r}. '
+                'Currently only free_air_anomaly is supported.'
+            )
+
+        if self.residual_method == 'gridded':
+            raise ValueError(
+                'Marine gravity is currently supported only with residual_method="station". '
+                'The gridded marine workflow requires a dedicated marine formulation and is not implemented.'
+            )
+
+        if self.marine_tide_system is None:
+            raise ValueError(
+                '--marine-tide-system must be provided when --marine-data is used so marine anomalies can be '
+                'validated against the surface-gravity tide system.'
+            )
+
+        if self.gravity_tide is None:
+            raise ValueError(
+                '--gravity-tide must be provided when --marine-data is used. '
+                'GeoidLab needs explicit tide-system metadata for both land and marine inputs.'
+            )
+
+        if self.marine_tide_system != self.gravity_tide:
+            raise ValueError(
+                f'Marine tide system ({self.marine_tide_system}) does not match gravity_tide ({self.gravity_tide}). '
+                'Preprocess the marine anomalies to the same tide system before running geoidlab geoid.'
+            )
+
     def _load_marine_data(self) -> pd.DataFrame:
         '''Load and process marine gravity data'''
         if not self.marine_data:
             return None
+
+        self._validate_marine_configuration()
             
         marine_path = Path(self.marine_data)
         if marine_path.suffix == '.csv':
@@ -256,14 +303,48 @@ class ResidualAnomalyComputation:
         else:
             raise ValueError(f'Unsupported file format: {marine_path.suffix}')
             
-        if not all(col in marine_df.columns for col in ['lon', 'lat', 'height', 'Dg']):
-            raise ValueError('Marine data must contain columns: lon, lat, height, and Dg')
+        required_columns = ['lon', 'lat', 'height', 'Dg']
+        if not all(col in marine_df.columns for col in required_columns):
+            raise ValueError(
+                'Marine data must contain columns: lon, lat, height, and Dg '
+                f'for marine_data_type={self.marine_data_type}.'
+            )
             
         # Apply decimation if requested
         if self.decimate and len(marine_df) > self.decimate_threshold:
             marine_df = decimate_data(marine_df, n_points=self.decimate_threshold, verbose=True)
             
         return marine_df
+
+    def _grid_dataframe(self, dataframe: pd.DataFrame, data_key: str, grid_extent: tuple[float, float, float, float],
+                        target_grid_size_deg: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Grid a single dataframe column onto the working grid."""
+        from geoidlab.utils.interpolators import Interpolators
+
+        interpolator = Interpolators(
+            dataframe=dataframe,
+            grid_extent=grid_extent,
+            resolution=target_grid_size_deg,
+            resolution_unit='degrees',
+            data_key=data_key,
+            verbose=False
+        )
+
+        if self.grid_method == 'kriging':
+            lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True)
+        elif self.grid_method == 'lsc':
+            lon, lat, gridded_values, *_ = interpolator.run(
+                method=self.grid_method,
+                merge=True,
+                robust_covariance=True,
+                covariance_model='exp'
+            )
+        elif self.grid_method == 'rbf':
+            lon, lat, gridded_values = interpolator.run(method='rbf', function='linear', merge=False)
+        else:
+            lon, lat, gridded_values = interpolator.run(method=self.grid_method, merge=True)
+
+        return lon, lat, gridded_values
     
     def _compute_gravity_anomalies(self, anomaly_type: str, include_corrections: bool = True) -> pd.DataFrame:
         '''Compute gravity anomalies using GravityReduction
@@ -425,6 +506,8 @@ class ResidualAnomalyComputation:
         # 4. Compute residuals at observation points
         surface_df['Dg_res'] = surface_df['helmert'] - surface_df['Dg_ggm']
         if marine_df is not None:
+            if self.marine_data_type != 'free_air_anomaly':
+                raise ValueError(f'Unsupported marine_data_type={self.marine_data_type!r}')
             marine_df['Dg_res'] = marine_df['Dg'] - marine_df['Dg_ggm']
         
         # 5. Merge surface and marine residuals
@@ -440,8 +523,6 @@ class ResidualAnomalyComputation:
         combined_df = combined_df.drop_duplicates(subset=['lon', 'lat'])
         
         # 6. Grid the combined residuals
-        from geoidlab.utils.interpolators import Interpolators
-        
         grid_size = to_seconds(self.grid_size, self.grid_unit) / 3600.0
         grid_extent = (
             self.bbox[0] - self.bbox_offset,
@@ -450,23 +531,12 @@ class ResidualAnomalyComputation:
             self.bbox[3] + self.bbox_offset
         )
         
-        interpolator = Interpolators(
+        lon, lat, gridded_values = self._grid_dataframe(
             dataframe=combined_df,
-            grid_extent=grid_extent,
-            resolution=grid_size,
-            resolution_unit='degrees',
             data_key='Dg_res',
-            verbose=False
+            grid_extent=grid_extent,
+            target_grid_size_deg=grid_size
         )
-        
-        if self.grid_method == 'kriging':
-            lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True)
-        elif self.grid_method == 'lsc':
-            lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True, robust_covariance=True, covariance_model='exp')
-        elif self.grid_method == 'rbf':
-            lon, lat, gridded_values = interpolator.run(method='rbf', function='linear', merge=False)
-        else:
-            lon, lat, gridded_values = interpolator.run(method=self.grid_method, merge=True)
         
         # Create dataset
         residual_ds = xr.Dataset(
@@ -593,42 +663,30 @@ class ResidualAnomalyComputation:
         
         # 2. Load and process marine data if available
         marine_df = self._load_marine_data()
-        
-        # 3. Merge surface and marine Bouguer anomalies
         if marine_df is not None:
-            marine_df['bouguer'] = marine_df['Dg'] - 0.1119 * marine_df['height']
-            combined_df = pd.concat([
-                bouguer_df[['lon', 'lat', 'bouguer']],
-                marine_df[['lon', 'lat', 'bouguer']]
-            ], ignore_index=True)
-        else:
-            combined_df = bouguer_df[['lon', 'lat', 'bouguer']]
-        
-        # Remove duplicates
-        combined_df = combined_df.drop_duplicates(subset=['lon', 'lat'])
-        
-        # 4. Grid the combined Bouguer anomalies
-        from geoidlab.utils.interpolators import Interpolators
-        
-        interpolator = Interpolators(
-            dataframe=combined_df,
-            grid_extent=grid_extent,  # Use extended grid extent
-            resolution=target_grid_size_deg,
-            resolution_unit='degrees',
+            raise ValueError(
+                'Marine data is not supported with residual_method="gridded". '
+                'Use residual_method="station" for marine free-air anomalies.'
+            )
+
+        # 3. Grid Bouguer anomalies and mean elevations over the extended extent
+        bouguer_grid_df = bouguer_df[['lon', 'lat', 'bouguer']].drop_duplicates(subset=['lon', 'lat'])
+        height_grid_df = bouguer_df[['lon', 'lat', 'height']].drop_duplicates(subset=['lon', 'lat'])
+
+        lon, lat, gridded_values = self._grid_dataframe(
+            dataframe=bouguer_grid_df,
             data_key='bouguer',
-            verbose=False
+            grid_extent=grid_extent,
+            target_grid_size_deg=target_grid_size_deg
         )
-        
-        if self.grid_method == 'kriging':
-            lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True)
-        elif self.grid_method == 'lsc':
-            lon, lat, gridded_values, *_ = interpolator.run(method=self.grid_method, merge=True, robust_covariance=True, covariance_model='exp')
-        elif self.grid_method == 'rbf':
-            lon, lat, gridded_values = interpolator.run(method='rbf', function='linear', merge=False)
-        else:
-            lon, lat, gridded_values = interpolator.run(method=self.grid_method, merge=True)
-        
-        # Create initial dataset with gridded Bouguer anomalies
+        _, _, height_grid = self._grid_dataframe(
+            dataframe=height_grid_df,
+            data_key='height',
+            grid_extent=grid_extent,
+            target_grid_size_deg=target_grid_size_deg
+        )
+
+        # Create initial dataset with gridded simple Bouguer anomalies and mean elevations
         gridded_ds = xr.Dataset(
             data_vars={
                 'bouguer': xr.DataArray(
@@ -638,6 +696,15 @@ class ResidualAnomalyComputation:
                         'units': 'mGal',
                         'long_name': 'Bouguer Gravity Anomaly',
                         'description': 'Gridded Bouguer gravity anomaly'
+                    }
+                ),
+                'height': xr.DataArray(
+                    data=height_grid,
+                    dims=['lat', 'lon'],
+                    attrs={
+                        'units': 'm',
+                        'long_name': 'Mean Height',
+                        'description': 'Gridded mean station height used to restore the Bouguer slab'
                     }
                 )
             },
@@ -684,7 +751,10 @@ class ResidualAnomalyComputation:
         # 5. Handle terrain correction and other corrections
         if self.topo or self.tc_file:
             gridded_ds['tc'] = self._load_or_compute_correction('terrain-correction', topo_workflow, target_grid_size_deg, grid_extent)
-        
+            gridded_ds['bouguer_complete'] = gridded_ds['bouguer'] + gridded_ds['tc']
+        else:
+            gridded_ds['bouguer_complete'] = gridded_ds['bouguer']
+
         # Handle other corrections if requested
         if self.site:
             gridded_ds['site'] = self._load_or_compute_correction('site', topo_workflow, target_grid_size_deg, grid_extent)
@@ -765,14 +835,11 @@ class ResidualAnomalyComputation:
         ggm_grid = xr.open_dataset(ggm_result['output_files'][0])
         gridded_ds['Dg_ggm'] = ggm_grid['Dg']
         
-        # 7. Compute residuals from gridded data
-        # Start with Bouguer anomalies
-        residual = gridded_ds['bouguer'].copy()
-        
-        # Add terrain correction if computed
-        if 'tc' in gridded_ds:
-            residual = residual + gridded_ds['tc']
-        
+        # 7. Reconstruct a Helmert-compatible anomaly grid before removing the GGM
+        # complete Bouguer + Bouguer slab = free-air + terrain correction
+        gridded_ds['bouguer_slab'] = 0.1119 * gridded_ds['height']
+        residual = gridded_ds['bouguer_complete'] + gridded_ds['bouguer_slab']
+
         # Add other corrections if computed
         for correction in ['site', 'ellipsoidal_correction', 'atm_correction']:
             if correction in gridded_ds:
@@ -850,6 +917,8 @@ def main(args=None) -> None:
     residual_computation = ResidualAnomalyComputation(
         input_file=args.input_file,
         marine_data=args.marine_data,
+        marine_data_type=args.marine_data_type,
+        marine_tide_system=args.marine_tide_system,
         model=args.model,
         model_dir=model_dir,
         gravity_tide=args.gravity_tide,

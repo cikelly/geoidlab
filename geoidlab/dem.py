@@ -244,8 +244,8 @@ def fetch_url(bbox) -> list[str]:
     Parameters
     ----------
     bbox      : bounding box of the area to download
-                    [min_lon, min_lat, max_lon, max_lat]
-                    [left, bottom, right, top]
+                    [min_lon, max_lon, min_lat, max_lat]
+                    [left, right, bottom, top]
 
     Returns
     -------
@@ -297,7 +297,7 @@ def dem4geoid(
     ----------
     bbox          : bounding box of area of interest 
                     [xmin, xmax, ymin, ymax]
-                    [left, bottom, right, top]
+                    [left, right, bottom, top]
                     [W, E, S, N]
     ncfile        : path to DEM netCDF file
     bbox_off      : offset for bounding box (in degrees)

@@ -17,6 +17,7 @@ from geoidlab.cli.commands.reduce import main as reduce_main
 from geoidlab.cli.commands.plot import main as plot_main
 from geoidlab.cli.commands.geoid import main as geoid_main
 from geoidlab.cli.commands.info import main as netcdf_info_main
+from geoidlab.cli.commands.prep import main as prep_main
 
 def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argparse.Namespace:
     '''
@@ -59,7 +60,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'reduce': reduce_main,
         'viz': plot_main,
         'geoid': geoid_main,
-        'ncinfo': netcdf_info_main
+        'ncinfo': netcdf_info_main,
+        'prep': prep_main
     }
     # if subcommand not in valid_subcommands:
     #     print(f"Error: Invalid subcommand '{subcommand}'. Must be one of {valid_subcommands}.")
@@ -80,6 +82,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         # input_data
         'input_file'            : ('input_file', None),
         'marine_data'           : ('marine_data', None),
+        'marine_data_type'      : ('marine_data_type', 'free_air_anomaly'),
+        'marine_tide_system'    : ('marine_tide_system', None),
         'residual_method'       : ('residual_method', 'station'),
         # ggm
         'model'                 : ('model', None),

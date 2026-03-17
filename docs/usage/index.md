@@ -24,6 +24,7 @@ geoidlab <command> [options]
 - `reduce`: Perform gravity reductions
 - `topo`: Compute topographic quantities
 - `viz`: Visualize results
+- `prep`: Normalize survey data into GeoidLab-ready tables
 
 ## Basic Workflow
 

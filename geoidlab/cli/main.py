@@ -16,6 +16,7 @@ from geoidlab.cli.commands.reduce import add_reduce_arguments, main as reduce_ma
 from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
+from geoidlab.cli.commands.prep import add_prep_arguments, main as prep_main
 from geoidlab.cli.utils.config_parser import parse_config_file
 
 def auto_visualize(args) -> None:
@@ -73,7 +74,7 @@ def main() -> None:
             'GeoidLab: A toolkit for geodetic computations including gravity reductions, '
             'terrain quantities, GGM synthesis, geoid computation, and visualization.'
         ),
-        epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo'
+        epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo, prep'
     )
     from geoidlab.__version__ import __version__
     parser.add_argument('-v', '--version', action='version', version=f'geoidlab {__version__}')
@@ -111,6 +112,10 @@ def main() -> None:
                                         help='Print out information about a NetCDF file')
     add_netcdf_info_arguments(info_parser)
     info_parser.set_defaults(func=netcdf_info_main)
+
+    prep_parser = subparsers.add_parser('prep', help='Normalize input survey data into GeoidLab-ready tables')
+    add_prep_arguments(prep_parser)
+    prep_parser.set_defaults(func=prep_main)
     
     args = parser.parse_args()
     
