@@ -5,6 +5,7 @@ import pytest
 
 from geoidlab.cli.commands.geoid import ResidualAnomalyComputation
 from geoidlab.cli.commands.prep import main as prep_main
+from geoidlab.preprocessing import standardize_observations
 
 
 def test_marine_requires_station_mode(tmp_path) -> None:
@@ -59,3 +60,24 @@ def test_prep_scaffold_normalizes_columns(tmp_path) -> None:
     assert list(normalized.columns) == ["lon", "lat", "height", "Dg", "tide_system", "platform", "data_type"]
     assert normalized.loc[0, "Dg"] == 4.0
     assert normalized.loc[0, "platform"] == "marine"
+
+
+def test_preprocessing_api_normalizes_without_cli() -> None:
+    df = pd.DataFrame(
+        {
+            "longitude": [1.0],
+            "latitude": [2.0],
+            "elev": [3.0],
+            "g": [980000.0],
+        }
+    )
+
+    normalized = standardize_observations(
+        data=df,
+        platform="terrestrial",
+        data_type="gravity",
+        tide_system="mean_tide",
+    )
+
+    assert list(normalized.columns) == ["lon", "lat", "height", "gravity", "tide_system", "platform", "data_type"]
+    assert normalized.loc[0, "gravity"] == 980000.0
