@@ -5,6 +5,7 @@
 ############################################################
 import argparse
 import sys
+import warnings
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -158,6 +159,9 @@ def add_geoid_arguments(parser) -> None:
                       help='Grid resolution for computing indirect effect. Keep this in seconds. Default: 30 seconds')
     parser.add_argument('--target-tide-system', type=str, default='tide_free', choices=['mean_tide', 'tide_free', 'zero_tide'],
                       help='The tide system that the final geoid should be in. Default: tide_free')
+    parser.add_argument('--no-terrain-correction', '--no-tc', dest='apply_terrain_correction',
+                      action='store_false', default=True,
+                      help='Disable terrain correction in the geoid workflow. This is only supported for the station residual method.')
     
 class ResidualAnomalyComputation:
     '''Class to handle computation of residual gravity anomalies using different methods'''
@@ -206,6 +210,7 @@ class ResidualAnomalyComputation:
         density_interp_method: str = 'nearest',
         density_unit: str = 'kg/m3',
         density_save: bool = True,
+        apply_terrain_correction: bool = True,
     ) -> None:
         self.input_file = input_file
         self.marine_data = marine_data
@@ -251,6 +256,7 @@ class ResidualAnomalyComputation:
         self.density_interp_method = density_interp_method
         self.density_unit = density_unit
         self.density_save = density_save
+        self.apply_terrain_correction = apply_terrain_correction
         
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -289,6 +295,29 @@ class ResidualAnomalyComputation:
                 f'Marine tide system ({self.marine_tide_system}) does not match gravity_tide ({self.gravity_tide}). '
                 'Preprocess the marine anomalies to the same tide system before running geoidlab geoid.'
             )
+
+    def _validate_terrain_correction_configuration(self) -> None:
+        """Validate terrain-correction requirements for the selected residual workflow."""
+        if self.apply_terrain_correction:
+            if not (self.topo or self.tc_file):
+                raise ValueError(
+                    'Terrain correction is enabled by default for geoid computation. '
+                    'Provide --topo or --tc-file, or explicitly disable it with '
+                    '--no-terrain-correction/--no-tc for station-only experimental runs.'
+                )
+            return
+
+        if self.residual_method == 'gridded':
+            raise ValueError(
+                'The gridded residual method requires terrain correction. '
+                'Remove --no-terrain-correction/--no-tc or switch to residual_method="station".'
+            )
+
+        warnings.warn(
+            'Terrain correction has been disabled for the station residual method. '
+            'This is a non-standard quick-look workflow and not the default Stokes-Helmert RCR configuration.',
+            UserWarning,
+        )
 
     def _load_marine_data(self) -> pd.DataFrame:
         '''Load and process marine gravity data'''
@@ -430,12 +459,13 @@ class ResidualAnomalyComputation:
             (Dg_res, output_file) where Dg_res is an xarray Dataset
             containing the gridded residual anomalies and output_file is the path to the saved file
         '''
-        # 1. Compute Helmert anomalies with corrections if requested
-        print('Computing Helmert anomalies...')
-        surface_df = self._compute_gravity_anomalies('helmert')
+        # 1. Compute the pointwise anomaly field used for station residuals.
+        anomaly_type = 'helmert' if self.apply_terrain_correction else 'free_air'
+        print(f'Computing {anomaly_type.replace("_", " ")} anomalies...')
+        surface_df = self._compute_gravity_anomalies(anomaly_type)
         
         # Verify we have all required columns
-        required_cols = ['lon', 'lat', 'height', 'helmert']
+        required_cols = ['lon', 'lat', 'height', anomaly_type]
         if not all(col in surface_df.columns for col in required_cols):
             missing = [col for col in required_cols if col not in surface_df.columns]
             raise ValueError(f'Missing required columns in surface data: {missing}')
@@ -511,7 +541,7 @@ class ResidualAnomalyComputation:
             marine_df['Dg_ggm'] = pd.read_csv(ggm_marine.output_dir / 'Dg_ggm.csv')['Dg_ggm']
         
         # 4. Compute residuals at observation points
-        surface_df['Dg_res'] = surface_df['helmert'] - surface_df['Dg_ggm']
+        surface_df['Dg_res'] = surface_df[anomaly_type] - surface_df['Dg_ggm']
         if marine_df is not None:
             if self.marine_data_type != 'free_air_anomaly':
                 raise ValueError(f'Unsupported marine_data_type={self.marine_data_type!r}')
@@ -665,9 +695,11 @@ class ResidualAnomalyComputation:
         # Convert grid size to degrees for comparison
         target_grid_size_deg = self._get_grid_size_in_degrees(self.grid_size, self.grid_unit)
         
-        # 1. Compute Bouguer anomalies
-        print('Computing Bouguer anomalies...')
-        bouguer_df = self._compute_gravity_anomalies('bouguer', include_corrections=False)
+        # 1. Compute pointwise Bouguer anomalies with any requested additive corrections.
+        # If terrain correction is available, the reduction workflow also returns the
+        # pointwise complete Bouguer field as `bouguer_tc`.
+        print('Computing pointwise Bouguer anomalies...')
+        bouguer_df = self._compute_gravity_anomalies('bouguer', include_corrections=True)
         
         # 2. Load and process marine data if available
         marine_df = self._load_marine_data()
@@ -677,13 +709,20 @@ class ResidualAnomalyComputation:
                 'Use residual_method="station" for marine free-air anomalies.'
             )
 
-        # 3. Grid Bouguer anomalies and mean elevations over the extended extent
-        bouguer_grid_df = bouguer_df[['lon', 'lat', 'bouguer']].drop_duplicates(subset=['lon', 'lat'])
+        # 3. Grid the complete Bouguer field first, then restore the Bouguer slab from
+        # gridded heights to obtain a Helmert-compatible field on the grid.
+        anomaly_column = 'bouguer_tc' if 'bouguer_tc' in bouguer_df.columns else 'bouguer'
+        if anomaly_column != 'bouguer_tc':
+            raise ValueError(
+                'The gridded residual method requires complete Bouguer anomalies, but bouguer_tc was not produced. '
+                'Ensure terrain correction is available through --topo or --tc-file.'
+            )
+        bouguer_grid_df = bouguer_df[['lon', 'lat', anomaly_column]].drop_duplicates(subset=['lon', 'lat'])
         height_grid_df = bouguer_df[['lon', 'lat', 'height']].drop_duplicates(subset=['lon', 'lat'])
 
         lon, lat, gridded_values = self._grid_dataframe(
             dataframe=bouguer_grid_df,
-            data_key='bouguer',
+            data_key=anomaly_column,
             grid_extent=grid_extent,
             target_grid_size_deg=target_grid_size_deg
         )
@@ -694,16 +733,16 @@ class ResidualAnomalyComputation:
             target_grid_size_deg=target_grid_size_deg
         )
 
-        # Create initial dataset with gridded simple Bouguer anomalies and mean elevations
+        # Create initial dataset with gridded complete/simple Bouguer anomalies and mean elevations
         gridded_ds = xr.Dataset(
             data_vars={
-                'bouguer': xr.DataArray(
+                anomaly_column: xr.DataArray(
                     data=gridded_values,
                     dims=['lat', 'lon'],
                     attrs={
                         'units': 'mGal',
-                        'long_name': 'Bouguer Gravity Anomaly',
-                        'description': 'Gridded Bouguer gravity anomaly'
+                        'long_name': 'Complete Bouguer Gravity Anomaly' if anomaly_column == 'bouguer_tc' else 'Bouguer Gravity Anomaly',
+                        'description': 'Gridded terrain-corrected Bouguer gravity anomaly' if anomaly_column == 'bouguer_tc' else 'Gridded Bouguer gravity anomaly'
                     }
                 ),
                 'height': xr.DataArray(
@@ -721,102 +760,8 @@ class ResidualAnomalyComputation:
                 'lon': lon[0, :]
             }
         )
-        
-        # Initialize topographic workflow for corrections
-        # For gridded approach, we need DEM for bbox + bbox_offset + 1
-        dem_extent = (
-            grid_extent[0] - 1,  # West
-            grid_extent[1] + 1,  # East
-            grid_extent[2] - 1,  # South
-            grid_extent[3] + 1   # North
-        )
-        
-        topo_workflow = TopographicQuantities(
-            topo=self.topo,
-            dtm_model=self.dtm_model,
-            model_dir=self.model_dir,
-            output_dir=self.output_dir,
-            ellipsoid=self.ellipsoid,
-            ellipsoid_name=self.ellipsoid_name,
-            chunk_size=self.chunk_size,
-            radius=self.radius,
-            proj_name=self.proj_name,
-            bbox=dem_extent,  # Use extended DEM extent
-            bbox_offset=0,    # No additional offset needed
-            grid_size=self.grid_size,  # Use target resolution directly
-            grid_unit=self.grid_unit,
-            window_mode=self.window_mode,
-            parallel=self.parallel,
-            interp_method=self.interp_method,
-            constant_density=self.constant_density,
-            density_model=self.density_model,
-            density_resolution=self.density_resolution,
-            density_resolution_unit=self.density_resolution_unit,
-            density_file=self.density_file,
-            density_interp_method=self.density_interp_method,
-            density_unit=self.density_unit,
-            density_save=self.density_save,
-        )
-        
-        # 5. Handle terrain correction and other corrections
-        if self.topo or self.tc_file:
-            gridded_ds['tc'] = self._load_or_compute_correction('terrain-correction', topo_workflow, target_grid_size_deg, grid_extent)
-            gridded_ds['bouguer_complete'] = gridded_ds['bouguer'] + gridded_ds['tc']
-        else:
-            gridded_ds['bouguer_complete'] = gridded_ds['bouguer']
 
-        # Handle other corrections if requested
-        if self.site:
-            gridded_ds['site'] = self._load_or_compute_correction('site', topo_workflow, target_grid_size_deg, grid_extent)
-        
-        if self.ellipsoidal_correction:
-            ggm = GGMSynthesis(
-                model=self.model,
-                max_deg=self.max_deg,
-                model_dir=self.model_dir,
-                output_dir=self.output_dir,
-                ellipsoid=self.ellipsoid,
-                ellipsoid_name=self.ellipsoid_name,
-                chunk_size=self.chunk_size,
-                parallel=self.parallel,
-                tide_system=self.gravity_tide,
-                converted=True,
-                bbox=grid_extent,  # Use extended grid extent
-                bbox_offset=0,     # No additional offset needed
-                grid_size=self.grid_size,
-                grid_unit=self.grid_unit,
-                proj_name=self.proj_name,
-                constant_density=self.constant_density,
-                density_model=self.density_model,
-                density_resolution=self.density_resolution,
-                density_resolution_unit=self.density_resolution_unit,
-                density_file=self.density_file,
-                density_interp_method=self.density_interp_method,
-                density_unit=self.density_unit,
-                density_save=self.density_save,
-            )
-            ec_file = self.output_dir / 'Dg_ELL.nc'
-            if ec_file.exists() and not self._should_recompute_grid(ec_file, target_grid_size_deg):
-                print('Loading existing ellipsoidal correction grid...')
-                ec_grid = xr.open_dataset(ec_file)
-                if np.abs(np.diff(ec_grid.lat.values)[0]) != target_grid_size_deg:
-                    print('Resampling ellipsoidal correction to target grid...')
-                    ec_grid = ec_grid.interp(
-                        lat=np.arange(grid_extent[2], grid_extent[3] + target_grid_size_deg, target_grid_size_deg),
-                        lon=np.arange(grid_extent[0], grid_extent[1] + target_grid_size_deg, target_grid_size_deg),
-                        method='linear'
-                    )
-                gridded_ds['ellipsoidal_correction'] = ec_grid['Dg_ELL']
-            else:
-                print('Computing new ellipsoidal correction grid...')
-                result = ggm.compute_ellipsoidal_correction()
-                ec_grid = xr.open_dataset(result['output_file'])
-                gridded_ds['ellipsoidal_correction'] = ec_grid['Dg_ELL']
-        
-        if self.atm:
-            gridded_ds['atm_correction'] = self._load_or_compute_correction('atm-corr', topo_workflow, target_grid_size_deg, grid_extent)
-        
-        # 6. Compute GGM anomalies on the same grid
+        # 4. Compute GGM anomalies on the same grid
         print('Computing GGM anomalies on the same grid...')
         ggm = GGMSynthesis(
             model=self.model,
@@ -847,15 +792,10 @@ class ResidualAnomalyComputation:
         ggm_grid = xr.open_dataset(ggm_result['output_files'][0])
         gridded_ds['Dg_ggm'] = ggm_grid['Dg']
         
-        # 7. Reconstruct a Helmert-compatible anomaly grid before removing the GGM
-        # complete Bouguer + Bouguer slab = free-air + terrain correction
+        # 5. Restore the Bouguer slab from the gridded heights to obtain a
+        # Helmert-compatible field before removing the GGM anomaly.
         gridded_ds['bouguer_slab'] = 0.1119 * gridded_ds['height']
-        residual = gridded_ds['bouguer_complete'] + gridded_ds['bouguer_slab']
-
-        # Add other corrections if computed
-        for correction in ['site', 'ellipsoidal_correction', 'atm_correction']:
-            if correction in gridded_ds:
-                residual = residual + gridded_ds[correction]
+        residual = gridded_ds[anomaly_column] + gridded_ds['bouguer_slab']
         
         # Subtract GGM anomalies
         residual = residual - gridded_ds['Dg_ggm']
@@ -869,7 +809,7 @@ class ResidualAnomalyComputation:
                     attrs={
                         'units': 'mGal',
                         'long_name': 'Residual Gravity Anomaly',
-                        'description': 'Residual gravity anomaly computed from gridded Bouguer anomalies'
+                        'description': 'Residual gravity anomaly computed from gridded complete Bouguer anomalies with slab restoration'
                     }
                 )
             },
@@ -969,7 +909,9 @@ def main(args=None) -> None:
         density_interp_method=args.density_interp_method,
         density_unit=args.density_unit,
         density_save=args.density_save,
+        apply_terrain_correction=args.apply_terrain_correction,
     )
+    residual_computation._validate_terrain_correction_configuration()
     
     # Compute residual anomalies using the chosen method
     if args.residual_method == 'station':
