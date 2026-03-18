@@ -27,6 +27,22 @@ warnings.simplefilter('ignore')
 VALID_INTERP_METHODS = {'linear', 'nearest', 'slinear', 'cubic', 'quintic'}
 
 
+def _normalize_remote_dem_url(url: str) -> str:
+    """Normalize common hosting URLs into direct-download URLs when possible."""
+    parsed = urlparse(url)
+
+    if parsed.netloc == 'github.com' and '/blob/' in parsed.path:
+        path_parts = parsed.path.strip('/').split('/')
+        blob_index = path_parts.index('blob')
+        owner = path_parts[0]
+        repo = path_parts[1]
+        branch = path_parts[blob_index + 1]
+        remainder = '/'.join(path_parts[blob_index + 2:])
+        return f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{remainder}'
+
+    return url
+
+
 def standardize_dem_dataset(
     ds: xr.Dataset,
     lon_name: str = 'x',
@@ -315,9 +331,133 @@ def fetch_url(bbox) -> list[str]:
 
     return urls
 
+
+def _download_custom_dem_to_cache(
+    url,
+    downloads_dir=None,
+    filename=None,
+    overwrite=False,
+) -> Path:
+    '''
+    Download a custom remote DEM file to the local downloads cache.
+
+    Parameters
+    ----------
+    url           : URL of the remote DEM file
+    downloads_dir : Directory to download the file to
+    filename      : Optional local filename override
+    overwrite     : If True, force redownload even when a readable local copy exists
+
+    Returns
+    -------
+    filepath      : Local path to the downloaded DEM file
+    '''
+    if not url:
+        raise ValueError('A remote DEM url must be provided.')
+    url = _normalize_remote_dem_url(url)
+
+    if downloads_dir:
+        downloads_dir = Path(downloads_dir).resolve()
+    else:
+        downloads_dir = Path.cwd() / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    if filename is None:
+        parsed = urlparse(url)
+        candidate = Path(parsed.path).name
+        filename = candidate if candidate else 'custom_dem'
+
+    filepath = downloads_dir / filename
+
+    if filepath.exists() and not overwrite:
+        try:
+            _ = xr.open_dataset(filepath)
+            print(f'{filepath.name} exists, is readable, and will be reused.\n')
+            return filepath
+        except Exception:
+            try:
+                _ = rxr.open_rasterio(filepath)
+                print(f'{filepath.name} exists, is readable, and will be reused.\n')
+                return filepath
+            except Exception:
+                print(f'{filepath.name} exists but is unreadable. Redownloading ...\n')
+                filepath.unlink(missing_ok=True)
+
+    print(f'Downloading custom DEM from {url} to:\n\t{filepath} ...')
+    response = requests.get(url, verify=certifi.where(), stream=True, timeout=(30, 120))
+    response.raise_for_status()
+    total_size = int(response.headers.get('content-length', 0))
+    content_type = response.headers.get('content-type', '')
+
+    with tqdm(total=total_size, unit='iB', unit_scale=True, dynamic_ncols=True) as pbar:
+        with open(filepath, 'wb') as handle:
+            for data in response.iter_content(chunk_size=1024 * 1024):
+                if not data:
+                    continue
+                handle.write(data)
+                pbar.update(len(data))
+                pbar.refresh()
+                handle.flush()
+                sys.stdout.flush()
+    print('\n')
+
+    if 'text/html' in content_type.lower():
+        filepath.unlink(missing_ok=True)
+        raise RuntimeError(
+            'Downloaded content is HTML, not a DEM file. '
+            'If you supplied a web page URL, provide the raw file URL instead.'
+        )
+
+    # Verify readability with xarray or rasterio-backed access.
+    try:
+        _ = xr.open_dataset(filepath)
+    except Exception:
+        try:
+            _ = rxr.open_rasterio(filepath)
+        except Exception as exc:
+            filepath.unlink(missing_ok=True)
+            raise RuntimeError(f'Downloaded DEM is unreadable: {filepath}') from exc
+
+    return filepath
+
+
+def download_custom_dem(
+    url,
+    downloads_dir=None,
+    filename=None,
+    overwrite=False,
+) -> xr.Dataset:
+    '''
+    Download a custom remote DEM file and return it as an xarray dataset.
+
+    Parameters
+    ----------
+    url           : URL of the remote DEM file
+    downloads_dir : Directory to download the file to
+    filename      : Optional local filename override
+    overwrite     : If True, force redownload even when a readable local copy exists
+
+    Returns
+    -------
+    dem           : xarray dataset of the downloaded DEM
+    '''
+    filepath = _download_custom_dem_to_cache(
+        url=url,
+        downloads_dir=downloads_dir,
+        filename=filename,
+        overwrite=overwrite,
+    )
+
+    try:
+        return xr.open_dataset(filepath)
+    except Exception:
+        return rxr.open_rasterio(filepath)
+
 def dem4geoid(
     bbox, 
     ncfile=None, 
+    url=None,
+    cog_url=None,
     bbox_off=1, 
     downloads_dir=None,
     resolution=30,
@@ -337,6 +477,8 @@ def dem4geoid(
                     [left, right, bottom, top]
                     [W, E, S, N]
     ncfile        : path to DEM netCDF file
+    url           : URL to a custom remote DEM file that should be downloaded locally first
+    cog_url       : URL to a cloud-optimized or GDAL-readable remote DEM
     bbox_off      : offset for bounding box (in degrees)
     downloads_dir : directory to download the file to
     resolution    : Resolution to resample the DEM
@@ -407,6 +549,30 @@ def dem4geoid(
         downloads_dir = Path.cwd() / 'downloads'
     downloads_dir.mkdir(parents=True, exist_ok=True)
     
+    if not ncfile and url:
+        local_custom_dem = _download_custom_dem_to_cache(url=url, downloads_dir=downloads_dir)
+        ncfile = local_custom_dem.name
+
+    if not ncfile and cog_url:
+        dem = download_dem_cog(
+            bbox=bbox,
+            model=None,
+            cog_url=cog_url,
+            bbox_off=bbox_off,
+            resolution=resolution,
+            downloads_dir=downloads_dir,
+            interp_method=interp_method
+        )
+        local_tz = get_localzone()
+        date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+        dem.attrs.update({
+            'date_created': f'{date_created} {local_tz}',
+            'created_by'  : 'GeoidLab',
+            'website'     : 'https://github.com/cikelly/geoidlab',
+            'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
+        })
+        return dem
+
     if not ncfile:
         # Check if a DEM file already exists
         if model == 'srtm30plus':
@@ -593,13 +759,35 @@ def download_dem_cog(
         dataset_name = model_key
         source_label = model_key.upper()
 
-    # Check if DEM exists and contains bounding box
+    bbox_subset = [
+        bbox[0] - bbox_off,
+        bbox[1] + bbox_off,
+        bbox[2] - bbox_off,
+        bbox[3] + bbox_off
+    ]
+
+    # Check if DEM exists and contains the buffered bounding box actually used for clipping
     ncfile = downloads_dir / f'{dataset_name}_dem.nc'
 
     if ncfile.exists():
-        if check_bbox_contains(ncfile, bbox):
-            print(f'{ncfile} already exists and contains bounding box. Skipping download')
-            return xr.open_dataset(ncfile)
+        try:
+            cached_bounds = get_dem_bounds(ncfile)
+            if check_bbox_contains(ncfile, bbox_subset):
+                print(
+                    f'{ncfile} already exists and contains the requested buffered extent.\n'
+                    f'Cached DEM bounds: {cached_bounds}\n'
+                    f'Requested buffered bbox: {tuple(bbox_subset)}\n'
+                    'Skipping download.'
+                )
+                return xr.open_dataset(ncfile)
+            print(
+                f'{ncfile} exists but does not fully contain the requested buffered extent.\n'
+                f'Cached DEM bounds: {cached_bounds}\n'
+                f'Requested buffered bbox: {tuple(bbox_subset)}\n'
+                'Redownloading ...'
+            )
+        except Exception as exc:
+            print(f'Existing DEM cache could not be validated ({exc}). Redownloading ...')
     
     print(f'Downloading {source_label} DEM to {downloads_dir} ...')  
     
@@ -623,13 +811,6 @@ def download_dem_cog(
             else:
                 raise RuntimeError(f'Failed to access COG for {dataset_name}: {e}.')
     print(f'COG access completed in {time.time() - start_time:.2f} seconds.')
-    
-    bbox_subset = [
-        bbox[0] - bbox_off,
-        bbox[1] + bbox_off,
-        bbox[2] - bbox_off,
-        bbox[3] + bbox_off
-    ]
     
     print(f'Creating DEM from {source_label} COG...')
     start_time = time.time()
@@ -719,10 +900,17 @@ def check_bbox_contains(netcdf_file, bbox) -> bool:
         raise ValueError(f'NetCDF file {netcdf_file} does not contain x and y coordinates')
     
     # Extract the bounding box coordinates from the NetCDF file
+    x_vals = ds['x'].values
+    y_vals = ds['y'].values
     x_min = ds['x'].min().item()
     x_max = ds['x'].max().item()
     y_min = ds['y'].min().item()
     y_max = ds['y'].max().item()
+
+    # Allow for coordinate quantization / floating-point edge effects by using
+    # half a grid cell (or a tiny absolute floor) as containment tolerance.
+    x_tol = max(abs(np.diff(x_vals)).min() / 2, 1e-9) if len(x_vals) > 1 else 1e-9
+    y_tol = max(abs(np.diff(y_vals)).min() / 2, 1e-9) if len(y_vals) > 1 else 1e-9
     
     # Given bounding box coordinates (WSEN)
     bbox_w, bbox_e, bbox_s, bbox_n = bbox
@@ -731,9 +919,39 @@ def check_bbox_contains(netcdf_file, bbox) -> bool:
     # intersects = not (bbox_e < x_min or bbox_w > x_max or bbox_n < y_min or bbox_s > y_max)
     
     # Check for containment
-    contains = (bbox_w >= x_min and bbox_e <= x_max and bbox_s >= y_min and bbox_n <= y_max)
+    contains = (
+        bbox_w >= (x_min - x_tol) and
+        bbox_e <= (x_max + x_tol) and
+        bbox_s >= (y_min - y_tol) and
+        bbox_n <= (y_max + y_tol)
+    )
     
     return contains
+
+
+def get_dem_bounds(netcdf_file) -> tuple[float, float, float, float]:
+    '''
+    Return DEM bounds from a NetCDF file using canonical x/y coordinates.
+
+    Returns
+    -------
+    bounds : tuple
+        (x_min, x_max, y_min, y_max)
+    '''
+    try:
+        ds = xr.open_dataset(netcdf_file)
+    except Exception as e:
+        raise RuntimeError(f'Failed to open {netcdf_file}: {e}')
+
+    if 'x' not in ds.coords or 'y' not in ds.coords:
+        raise ValueError(f'NetCDF file {netcdf_file} does not contain x and y coordinates')
+
+    return (
+        ds['x'].min().item(),
+        ds['x'].max().item(),
+        ds['y'].min().item(),
+        ds['y'].max().item(),
+    )
 
 
 
