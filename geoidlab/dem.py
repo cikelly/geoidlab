@@ -516,7 +516,11 @@ def dem4geoid(
     if min_lon > max_lon or min_lat > max_lat:
         raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
     
-    if model not in VALID_MODELS:
+    dem_sources = [ncfile is not None, url is not None, cog_url is not None, model is not None]
+    if sum(dem_sources) != 1:
+        raise ValueError('Specify exactly one DEM source: ncfile, url, cog_url, or model.')
+
+    if model is not None and model not in VALID_MODELS:
         raise ValueError(f'Invalid DEM model: {model}. Must be one of:\n{VALID_MODELS}.')
     
     if resolution <=0:

@@ -61,7 +61,13 @@ class TopographicQuantities:
     
     def __init__(
         self,
-        topo: str,
+        topo: str = None,
+        topo_file: str | Path = None,
+        topo_url: str = None,
+        topo_cog_url: str = None,
+        topo_lon_name: str = 'x',
+        topo_lat_name: str = 'y',
+        topo_height_name: str = 'z',
         ref_topo: str = None,
         dtm_model: str | Path = None,
         dtm_nmax: int = 360,
@@ -128,6 +134,12 @@ class TopographicQuantities:
         None
         '''
         self.topo = topo
+        self.topo_file = Path(topo_file) if topo_file is not None else None
+        self.topo_url = topo_url
+        self.topo_cog_url = topo_cog_url
+        self.topo_lon_name = topo_lon_name
+        self.topo_lat_name = topo_lat_name
+        self.topo_height_name = topo_height_name
         self.ref_topo = ref_topo
         self.dtm_model = Path(dtm_model) if dtm_model is not None else None
         self.dtm_nmax = dtm_nmax
@@ -186,7 +198,12 @@ class TopographicQuantities:
         if self.window_mode not in ['radius', 'fixed']:
             print('Warning: Unidentified window_mode specified. Defaulting to "radius"')
             self.window_mode = 'radius'
-        if self.topo not in ['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco']:
+        topo_sources = [self.topo is not None, self.topo_file is not None, self.topo_url is not None, self.topo_cog_url is not None]
+        if sum(topo_sources) != 1:
+            raise ValueError(
+                'Specify exactly one DEM source: --topo, --topo-file, --topo-url, or --topo-cog-url.'
+            )
+        if self.topo is not None and self.topo not in ['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco']:
             raise ValueError('topo must be one of: srtm30plus, srtm, cop, nasadem, gebco')
         if self.interp_method not in ['linear', 'slinear', 'cubic', 'quintic']:
             raise ValueError('--interpolation-method must be one of: linear, slinear, cubic, quintic')
@@ -198,11 +215,17 @@ class TopographicQuantities:
         '''Download DEM'''
         dem = dem4geoid(
             bbox=self.bbox,
+            ncfile=self.topo_file,
+            url=self.topo_url,
+            cog_url=self.topo_cog_url,
             downloads_dir=self.model_dir,
             resolution=self.grid_size,
             model=self.topo,
             bbox_off=self.bbox_offset,
-            interp_method=self.interp_method
+            interp_method=self.interp_method,
+            lon_name=self.topo_lon_name,
+            lat_name=self.topo_lat_name,
+            height_name=self.topo_height_name,
         )
         return dem
     
@@ -418,8 +441,20 @@ class TopographicQuantities:
         return {'status': 'success', 'output_files': output_files}
 
 def add_topo_arguments(parser) -> None:
-    parser.add_argument('--topo', type=str, required=True, 
-                        help='DEM model. Options: srtm30plus, srtm, cop, nasadem, gebco')
+    parser.add_argument('--topo', type=str,
+                        help='Built-in DEM model. Options: srtm30plus, srtm, cop, nasadem, gebco')
+    parser.add_argument('--topo-file', type=str,
+                        help='Path to a local DEM file to use instead of a built-in model.')
+    parser.add_argument('--topo-url', type=str,
+                        help='URL to a custom remote DEM file that should be downloaded before ingestion.')
+    parser.add_argument('--topo-cog-url', type=str,
+                        help='URL to a cloud-optimized or GDAL-readable remote DEM source.')
+    parser.add_argument('--topo-lon-name', type=str, default='x',
+                        help='Longitude coordinate name for a user-supplied DEM file. Default: x')
+    parser.add_argument('--topo-lat-name', type=str, default='y',
+                        help='Latitude coordinate name for a user-supplied DEM file. Default: y')
+    parser.add_argument('--topo-height-name', type=str, default='z',
+                        help='Height/elevation variable name for a user-supplied DEM file. Default: z')
     parser.add_argument('-b', '--bbox', type=float, nargs=4, required=True, 
                         help='Bounding box [W, E, S, N] in degrees')
     parser.add_argument('--ref-topo', type=str, 
@@ -515,6 +550,12 @@ def main(args=None) -> int:
     # Initialize and run workflow
     topo_workflow = TopographicQuantities(
         topo=args.topo,
+        topo_file=args.topo_file,
+        topo_url=args.topo_url,
+        topo_cog_url=args.topo_cog_url,
+        topo_lon_name=args.topo_lon_name,
+        topo_lat_name=args.topo_lat_name,
+        topo_height_name=args.topo_height_name,
         ref_topo=args.ref_topo,
         dtm_model=args.dtm_model,
         dtm_nmax=args.dtm_nmax,

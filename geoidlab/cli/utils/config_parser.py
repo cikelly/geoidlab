@@ -101,6 +101,12 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'grid_method'           : ('grid_method', None),
         # topography
         'topo'                  : ('topo', None),
+        'topo_file'             : ('topo_file', None),
+        'topo_url'              : ('topo_url', None),
+        'topo_cog_url'          : ('topo_cog_url', None),
+        'topo_lon_name'         : ('topo_lon_name', 'x'),
+        'topo_lat_name'         : ('topo_lat_name', 'y'),
+        'topo_height_name'      : ('topo_height_name', 'z'),
         'ref_topo'              : ('ref_topo', None),
         'dtm_nmax'              : ('dtm_nmax', None),
         'dtm_chunk_size'        : ('dtm_chunk_size', None),
@@ -178,7 +184,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
             return [float(x) for x in value.split()]
         if key == 'variable':
             return [x.strip() for x in value.split(',')]
-        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir', 'density_file'}:
+        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir', 'density_file', 'topo_file'}:
             # Resolve relative paths relative to config file directory
             path = Path(value)
             if not path.is_absolute():
