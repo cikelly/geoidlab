@@ -11,6 +11,7 @@ import netCDF4
 import re
 import certifi
 import time
+from urllib.parse import urlparse
 from datetime import datetime
 from tzlocal import get_localzone
 
@@ -24,6 +25,39 @@ from rasterio.errors import RasterioIOError
 warnings.simplefilter('ignore')
 
 VALID_INTERP_METHODS = {'linear', 'nearest', 'slinear', 'cubic', 'quintic'}
+
+
+def standardize_dem_dataset(
+    ds: xr.Dataset,
+    lon_name: str = 'x',
+    lat_name: str = 'y',
+    height_name: str = 'z',
+) -> xr.Dataset:
+    """Rename user-provided DEM coordinate/data names to GeoidLab's canonical x/y/z schema."""
+    if not isinstance(ds, xr.Dataset):
+        raise TypeError('DEM input must be an xarray.Dataset')
+
+    rename_map = {}
+    if lon_name != 'x':
+        rename_map[lon_name] = 'x'
+    if lat_name != 'y':
+        rename_map[lat_name] = 'y'
+    if height_name != 'z':
+        rename_map[height_name] = 'z'
+
+    missing = [name for name in (lon_name, lat_name, height_name) if name not in ds.variables and name not in ds.coords]
+    if missing:
+        raise ValueError(
+            f'DEM dataset is missing the specified variables/coordinates: {missing}. '
+            'Provide the correct lon_name, lat_name, and height_name.'
+        )
+
+    ds = ds.rename(rename_map)
+    if 'z' not in ds.data_vars:
+        raise ValueError('DEM dataset must contain a height/elevation variable that can be standardized to "z".')
+    if 'x' not in ds.coords or 'y' not in ds.coords:
+        raise ValueError('DEM dataset must contain longitude and latitude coordinates that can be standardized to "x" and "y".')
+    return ds
 
 def get_readme_path() -> Path:
     '''
@@ -288,7 +322,10 @@ def dem4geoid(
     downloads_dir=None,
     resolution=30,
     model='srtm30plus',
-    interp_method='slinear'
+    interp_method='slinear',
+    lon_name='x',
+    lat_name='y',
+    height_name='z',
 ) -> xr.Dataset:
     '''
     Prepare a DEM for geoid calculation.
@@ -310,6 +347,9 @@ def dem4geoid(
                      - nasadem
                      - gebco   
     interp_method : interpolation method
+    lon_name      : longitude coordinate name in a user-supplied DEM. Default: x
+    lat_name      : latitude coordinate name in a user-supplied DEM. Default: y
+    height_name   : height/elevation variable name in a user-supplied DEM. Default: z
      
     Returns
     -------
@@ -419,11 +459,19 @@ def dem4geoid(
     
     print(f'Creating xarray dataset of DEM with buffer of {bbox_off} degree(s)\n')    
     
-    nc = netCDF4.Dataset(filepath)
-    fill_value = nc.variables['z']._FillValue
-    
     ds = xr.open_dataset(filepath)
-    ds['z']  = ds['z'].where(ds['z'] != fill_value, np.nan)
+    ds = standardize_dem_dataset(ds, lon_name=lon_name, lat_name=lat_name, height_name=height_name)
+
+    fill_value = None
+    try:
+        nc = netCDF4.Dataset(filepath)
+        fill_value = nc.variables[height_name]._FillValue if height_name in nc.variables else nc.variables['z']._FillValue
+        nc.close()
+    except Exception:
+        fill_value = ds['z'].attrs.get('_FillValue')
+
+    if fill_value is not None:
+        ds['z'] = ds['z'].where(ds['z'] != fill_value, np.nan)
     
     bbox_subset = [
         bbox[0] - bbox_off,
@@ -456,7 +504,7 @@ def dem4geoid(
 
 def download_dem_cog(
     bbox, 
-    model='None', 
+    model=None, 
     cog_url=None,
     bbox_off=2, 
     resolution=30,
@@ -498,18 +546,22 @@ def download_dem_cog(
     min_lon, max_lon, min_lat, max_lat = bbox
     if min_lon > max_lon or min_lat > max_lat:
         raise ValueError('Invalid bbox. Must be [min_lon, max_lon, min_lat, max_lat]: [W, E, S, N]')
-    
-    # Define base URLs for each model and resolution
-    if model.lower() == 'srtm':
+
+    model_key = model.lower() if isinstance(model, str) else None
+
+    # Define base URLs for each built-in model and resolution.
+    srtm_url = 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt'
+    cop_url = 'https://opentopography.s3.sdsc.edu/raster/COP90/COP90_hh.vrt'
+    if model_key == 'srtm':
         res = 1 if resolution < 3 else 3
         srtm_url = f'https://opentopography.s3.sdsc.edu/raster/SRTM_GL{res}/SRTM_GL{res}_srtm.vrt'
-    elif model.lower() == 'cop':
+    elif model_key == 'cop':
         res = 30 if resolution < 3 else 90
         cop_url = f'https://opentopography.s3.sdsc.edu/raster/COP{res}/COP{res}_hh.vrt'
     
     model_urls = {
-        'srtm'   : srtm_url if model.lower() == 'srtm' else 'https://opentopography.s3.sdsc.edu/raster/SRTM_GL3/SRTM_GL3_srtm.vrt',
-        'cop'    : cop_url if model.lower() == 'cop' else 'https://opentopography.s3.sdsc.edu/raster/COP90/COP90_hh.vrt',
+        'srtm'   : srtm_url,
+        'cop'    : cop_url,
         'nasadem': 'https://opentopography.s3.sdsc.edu/raster/NASADEM/NASADEM_be.vrt',
         'gebco'  : 'https://opentopography.s3.sdsc.edu/raster/GEBCOIceTopo/GEBCOIceTopo.vrt'
     }
@@ -523,27 +575,38 @@ def download_dem_cog(
         downloads_dir = Path.cwd() / 'downloads'
     downloads_dir.mkdir(parents=True, exist_ok=True)
 
+    if cog_url is None:
+        if model_key is None:
+            raise ValueError('Either model or cog_url must be provided.')
+        try:
+            cog_url = model_urls[model_key]
+        except KeyError:
+            print('Supported models are:\nsrtm\ncop\nnasadem\ngebco.')
+            raise ValueError(f'Unsupported model: {model}')
+
+    if model_key is None:
+        parsed = urlparse(cog_url)
+        path_name = Path(parsed.path).name
+        dataset_name = Path(path_name).stem.replace('.', '_') if path_name else 'custom_dem'
+        source_label = 'CUSTOM'
+    else:
+        dataset_name = model_key
+        source_label = model_key.upper()
+
     # Check if DEM exists and contains bounding box
-    ncfile = downloads_dir / f'{model}_dem.nc'
+    ncfile = downloads_dir / f'{dataset_name}_dem.nc'
 
     if ncfile.exists():
         if check_bbox_contains(ncfile, bbox):
             print(f'{ncfile} already exists and contains bounding box. Skipping download')
             return xr.open_dataset(ncfile)
     
-    print(f'Downloading {model} DEM to {downloads_dir} ...')  
+    print(f'Downloading {source_label} DEM to {downloads_dir} ...')  
     
     resolution = resolution / 3600 # convert seconds to degrees
     
-    if model is not None and cog_url is None:
-        try:
-            cog_url = model_urls[model.lower()]
-        except KeyError:
-            print('Supported models are:\nsrtm\ncop\nnasadem\ngebco.')
-            raise ValueError(f'Unsupported model: {model}')
-    
     # Read the COG
-    print(f'Accessing {model.upper()} COG at {model_urls[model.lower()]}\n')
+    print(f'Accessing {source_label} COG at {cog_url}\n')
     
     # print('We are now accessing the COG. This may take a few seconds...')
     start_time = time.time()
@@ -558,7 +621,7 @@ def download_dem_cog(
                 print(f'Retrying in 5 seconds...')
                 time.sleep(5)
             else:
-                raise RuntimeError(f'Failed to access COG for {model}: {e}.')
+                raise RuntimeError(f'Failed to access COG for {dataset_name}: {e}.')
     print(f'COG access completed in {time.time() - start_time:.2f} seconds.')
     
     bbox_subset = [
@@ -568,7 +631,7 @@ def download_dem_cog(
         bbox[3] + bbox_off
     ]
     
-    print(f'Creating DEM from {model} COG...')
+    print(f'Creating DEM from {source_label} COG...')
     start_time = time.time()
     dem = ds.rio.clip_box(
         minx=bbox_subset[0],
