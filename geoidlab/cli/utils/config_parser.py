@@ -91,6 +91,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'max_deg'               : ('max_deg', None),
         'icgem'                 : ('icgem', False),
         'dtm_model'             : ('dtm_model', None),
+        'earth2014_model'       : ('earth2014_model', None),
+        'earth2014_resolution'  : ('earth2014_resolution', '5min'),
         'gravity_tide'          : ('gravity_tide', 'mean_tide'),
         'converted'             : ('converted', False),
         # grid

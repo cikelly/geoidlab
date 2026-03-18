@@ -16,6 +16,7 @@ from tzlocal import get_localzone
 
 from geoidlab.cli.commands.utils.common import directory_setup, to_seconds
 from geoidlab import terrain
+from geoidlab import curtin
 from geoidlab.dem import dem4geoid
 from geoidlab import constants
 from geoidlab.utils.io import apply_ellipsoid_attrs
@@ -70,6 +71,8 @@ class TopographicQuantities:
         topo_height_name: str = 'z',
         ref_topo: str = None,
         dtm_model: str | Path = None,
+        earth2014_model: str | None = None,
+        earth2014_resolution: str = '5min',
         dtm_nmax: int = 360,
         dtm_chunk_size: int = 200,
         model_dir: str | Path = None,
@@ -142,6 +145,8 @@ class TopographicQuantities:
         self.topo_height_name = topo_height_name
         self.ref_topo = ref_topo
         self.dtm_model = Path(dtm_model) if dtm_model is not None else None
+        self.earth2014_model = earth2014_model
+        self.earth2014_resolution = earth2014_resolution
         self.dtm_nmax = dtm_nmax
         self.dtm_chunk_size = dtm_chunk_size
         self.model_dir = Path(model_dir) if model_dir else Path(proj_name) / 'downloads'
@@ -205,6 +210,8 @@ class TopographicQuantities:
             )
         if self.topo is not None and self.topo not in ['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco']:
             raise ValueError('topo must be one of: srtm30plus, srtm, cop, nasadem, gebco')
+        if self.dtm_model is not None and self.earth2014_model is not None:
+            raise ValueError('Specify at most one reference-topography source: --dtm-model or --earth2014-model.')
         if self.interp_method not in ['linear', 'slinear', 'cubic', 'quintic']:
             raise ValueError('--interpolation-method must be one of: linear, slinear, cubic, quintic')
         if self.grid_unit not in ['degrees', 'minutes', 'seconds']:
@@ -233,7 +240,19 @@ class TopographicQuantities:
         '''Generate reference topography from DTM2006.0 if not provided'''
         if self.ref_topo is None:
             from geoidlab.dtm import DigitalTerrainModel
-            print(f'Generating reference topography from DTM2006.0 up to degree {self.dtm_nmax}...')
+            dtm_model_path = self.dtm_model
+            model_desc = 'DTM2006.0'
+            if dtm_model_path is None and self.earth2014_model is not None:
+                dtm_model_path = curtin.download_shc_model(
+                    model=self.earth2014_model,
+                    resolution=self.earth2014_resolution,
+                    output_dir=self.model_dir,
+                )
+                model_desc = dtm_model_path.name
+            elif dtm_model_path is not None:
+                model_desc = dtm_model_path.name
+
+            print(f'Generating reference topography from {model_desc} up to degree {self.dtm_nmax}...')
             
             # Create coordinates matching original topography
             ori_x = self.ori_topo['x'].values
@@ -242,7 +261,7 @@ class TopographicQuantities:
             
             # Initialize DTM object and compute heights
             dtm = DigitalTerrainModel(
-                model_name=self.dtm_model,
+                model_name=dtm_model_path,
                 nmax=self.dtm_nmax,
                 ellipsoid=self.ellipsoid
             )
@@ -257,7 +276,6 @@ class TopographicQuantities:
                     'y': (('y',), ori_y)
                 }
             )
-            model_desc = self.dtm_model.name if self.dtm_model is not None else 'DTM2006.0'
             ref_topo.attrs['description'] = f'Reference topography from {model_desc} up to degree {self.dtm_nmax}'
             
             # Add standard attributes
@@ -272,7 +290,8 @@ class TopographicQuantities:
             apply_ellipsoid_attrs(ref_topo, ellipsoid=self.ellipsoid, ellipsoid_name=self.ellipsoid_name)
             
             # Save for future use
-            out_file = Path(self.proj_name) / 'downloads' / f'DTM2006.0_nmax{self.dtm_nmax}.nc'
+            model_stem = Path(model_desc).stem.replace('.', '_')
+            out_file = Path(self.proj_name) / 'downloads' / f'{model_stem}_nmax{self.dtm_nmax}.nc'
             ref_topo.to_netcdf(out_file)
             print(f'Saved reference topography to {out_file}')
             
@@ -462,7 +481,11 @@ def add_topo_arguments(parser) -> None:
     parser.add_argument('--dtm-nmax', type=int, default=360,
                         help='Maximum degree for DTM2006.0 when computing reference topography. Default: 360')
     parser.add_argument('--dtm-model', type=str, default=None,
-                        help='Optional path to custom potential model file used for reference topography synthesis (.xz text or .bshc).')
+                        help='Optional path to custom terrain SHC model file used for reference topography synthesis (.xz text or Earth2014 .bshc).')
+    parser.add_argument('--earth2014-model', type=str, default=None, choices=['sur', 'bed', 'tbi', 'ret', 'ice'],
+                        help='Optional Earth2014 relief model to download and use for reference topography synthesis. Choices: sur, bed, tbi, ret, ice.')
+    parser.add_argument('--earth2014-resolution', type=str, default='5min', choices=['5min', '1min'],
+                        help='Earth2014 SHC family used with --earth2014-model. 5min=degree2160, 1min=degree10800. Default: 5min')
     parser.add_argument('--dtm-chunk-size', type=int, default=200,
                         help='Chunk size for DTM2006.0 spherical harmonic synthesis. Use smaller chunks for larger grids or large dtm-nmax. Default: 200')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
@@ -558,6 +581,8 @@ def main(args=None) -> int:
         topo_height_name=args.topo_height_name,
         ref_topo=args.ref_topo,
         dtm_model=args.dtm_model,
+        earth2014_model=args.earth2014_model,
+        earth2014_resolution=args.earth2014_resolution,
         dtm_nmax=args.dtm_nmax,
         dtm_chunk_size=args.dtm_chunk_size,
         model_dir=args.model_dir,

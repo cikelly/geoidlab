@@ -141,9 +141,19 @@ class DigitalTerrainModel:
             return
 
         if self.model_format == 'bshc':
+            if curtin.is_potential_model_filename(self.name):
+                raise ValueError(
+                    f'{self.name.name} is a Curtin dV_* potential model, not a relief-height SHC model. '
+                    'Use Earth2014 SHC files such as SUR2014, BED2014, ICE2014, RET2014, or TBI2014 '
+                    'when synthesizing topography or bathymetry with DigitalTerrainModel.'
+                )
             coeffs = curtin.read_bshc_coefficients(self.name, nmax=self.nmax)
             self.HCnm = coeffs['HCnm']
             self.HSnm = coeffs['HSnm']
+            if not np.isfinite(self.HCnm).all() or not np.isfinite(self.HSnm).all():
+                raise ValueError(
+                    f'Loaded non-finite spherical harmonic coefficients from {self.name}.'
+                )
             return
 
         raise ValueError(
@@ -194,6 +204,22 @@ class DigitalTerrainModel:
         H = np.sum((self.HCnm * Pnm) @ cosm + (self.HSnm * Pnm) @ sinm)
         
         return float(H)
+
+    def synthesize_height_point(
+        self,
+        lon: float,
+        lat: float,
+        height=None
+    ) -> float:
+        '''
+        Compute height for a single point using the configured spherical harmonic terrain model.
+
+        Notes
+        -----
+        This is a model-agnostic alias for `dtm2006_height_point`, so the same API can be used
+        with DTM2006 text models and Curtin Earth2014 `.bshc` models.
+        '''
+        return self.dtm2006_height_point(lon=lon, lat=lat, height=height)
     
     def dtm2006_height(
         self,
@@ -299,6 +325,34 @@ class DigitalTerrainModel:
             DigitalTerrainModel.save_dtm2006_height(lon, lat, H, self.nmax)
             
         return H
+
+    def synthesize_height(
+        self,
+        lon: np.ndarray,
+        lat: np.ndarray,
+        chunk_size: int = 800,
+        leg_progress: bool = False,
+        height: np.ndarray = None,
+        n_workers: int = None,
+        save: bool = True
+    ) -> np.ndarray:
+        '''
+        Compute heights using the configured spherical harmonic terrain model.
+
+        Notes
+        -----
+        This is a model-agnostic alias for `dtm2006_height`, so the same API can be used
+        with DTM2006 text models and Curtin Earth2014 `.bshc` models.
+        '''
+        return self.dtm2006_height(
+            lon=lon,
+            lat=lat,
+            chunk_size=chunk_size,
+            leg_progress=leg_progress,
+            height=height,
+            n_workers=n_workers,
+            save=save
+        )
     
     # Create a static method that saves writes H as a netcdf files if H is a 2D array
     @staticmethod
