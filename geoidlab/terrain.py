@@ -42,7 +42,7 @@ class TerrainQuantities:
         self, 
         ori_topo: xr.Dataset, 
         ref_topo: xr.Dataset = None, 
-        radius: float = 110.,
+        radius: float = 167.,
         ellipsoid: str = 'wgs84',
         bbox_off: float = 1.,
         sub_grid: tuple[float, float, float, float] = None,

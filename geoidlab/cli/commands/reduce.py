@@ -105,7 +105,7 @@ class GravityReduction:
         proj_name: str = 'GeoidProject',
         topo: str = None,
         tc_file: str = None,
-        radius: float = 110.0,
+        radius: float = 167.0,
         interp_method: str = 'slinear',
         parallel: bool = False,
         chunk_size: int = 500,
@@ -933,7 +933,7 @@ def add_reduce_arguments(parser) -> None:
                         help='DEM model for terrain correction (required for helmert unless --tc-file is provided)')
     parser.add_argument('--tc-file', type=str,
                         help='Path to precomputed terrain correction NetCDF file')
-    parser.add_argument('--radius', type=float, default=110.0,
+    parser.add_argument('--radius', type=float, default=167.0,
                         help='Search radius in kilometers for terrain correction')
     parser.add_argument('--interp-method', type=str, default='slinear',
                         choices=['linear', 'slinear', 'cubic', 'quintic'],

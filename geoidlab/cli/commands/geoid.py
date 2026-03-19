@@ -188,7 +188,7 @@ class ResidualAnomalyComputation:
         proj_name: str = 'GeoidProject',
         topo: str = None,
         tc_file: str = None,
-        radius: float = 110.0,
+        radius: float = 167.0,
         interp_method: str = 'slinear',
         parallel: bool = False,
         chunk_size: int = 500,

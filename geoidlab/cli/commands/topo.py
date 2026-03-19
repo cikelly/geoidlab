@@ -80,7 +80,7 @@ class TopographicQuantities:
         ellipsoid: str = 'wgs84',
         ellipsoid_name: str | None = None,
         chunk_size: int = 500,
-        radius: float = 110.,
+        radius: float = 167.,
         proj_name: str = 'GeoidProject',
         bbox: list[float] = None,
         bbox_offset: float = 1.0,
@@ -490,8 +490,8 @@ def add_topo_arguments(parser) -> None:
                         help='Chunk size for DTM2006.0 spherical harmonic synthesis. Use smaller chunks for larger grids or large dtm-nmax. Default: 200')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for DEM files')
-    parser.add_argument('--radius', type=float, default=110.0, 
-                        help='Search radius in kilometers. Default: 110 km')
+    parser.add_argument('--radius', type=float, default=167.0, 
+                        help='Search radius in kilometers. Default: 167 km')
     parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84', 
                         help='Reference ellipsoid: wgs84, grs80, or JSON object string')
     parser.add_argument('--ellipsoid-name', type=str, default=None,
