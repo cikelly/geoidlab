@@ -100,6 +100,11 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--global-cbar-orientation', type=str, default='horizontal', choices=['horizontal', 'vertical'], help='Colorbar orientation to use when global plot is enabled.')
     parser.add_argument('--global-cbar-shrink', type=float, default=0.6, help='Shrink factor for colorbar when global plot is enabled.')
     parser.add_argument('--global-cbar-pad', type=float, default=0.05, help='Padding between axes and colorbar when global plot is enabled.')
+    parser.add_argument('--share-cbar', action='store_true', help='Use one shared colorbar for all visible subplots instead of one colorbar per subplot.')
+    parser.add_argument('--shared-cbar-orientation', type=str, default='vertical', choices=['horizontal', 'vertical'], help='Orientation for a shared colorbar.')
+    parser.add_argument('--shared-cbar-shrink', type=float, default=0.5, help='Shrink factor for a shared colorbar.')
+    parser.add_argument('--shared-cbar-pad', type=float, default=0.02, help='Padding between subplot group and shared colorbar.')
+    parser.add_argument('--shared-cbar-font-size', type=int, default=12, help='Font size for shared colorbar label and tick labels.')
 
 def main(args=None) -> None:
     if args is None:
@@ -273,10 +278,36 @@ def main(args=None) -> None:
     fig.set_size_inches(fig_width, fig_height)
     axes = np.atleast_2d(axes)
     
+    shared_vmin = args.vmin
+    shared_vmax = args.vmax
+    if args.share_cbar and total_panels > 0:
+        if shared_vmin is None or shared_vmax is None:
+            panel_mins = []
+            panel_maxs = []
+            for _, var in file_variables:
+                panel_data = var.values
+                if args.unit is not None and args.unit != 'm':
+                    units = var.attrs.get('units', '')
+                    if units == 'meters' or units == 'm':
+                        panel_data = panel_data * UNIT_CONVERSIONS[args.unit]
+                finite_vals = panel_data[np.isfinite(panel_data)]
+                if finite_vals.size:
+                    panel_mins.append(float(np.nanmin(finite_vals)))
+                    panel_maxs.append(float(np.nanmax(finite_vals)))
+            if shared_vmin is None and panel_mins:
+                shared_vmin = min(panel_mins)
+            if shared_vmax is None and panel_maxs:
+                shared_vmax = max(panel_maxs)
+
+    shared_colorbar_label = None
+    shared_cmap_name = args.cmap[0] if args.cmap else None
     skip_scalebar_warning = False
+    visible_axes = []
+    last_pcm = None
     for i, (ds, var) in enumerate(file_variables):
         row, col = divmod(i, ncols)
         ax = axes[row, col]
+        visible_axes.append(ax)
         try:
             lon, lat = var.coords['lon'].values, var.coords['lat'].values
         except KeyError:
@@ -306,12 +337,21 @@ def main(args=None) -> None:
                 data,
                 cmap=cmap,
                 shading='auto',
-                vmin=args.vmin,
-                vmax=args.vmax,
+                vmin=shared_vmin if args.share_cbar else args.vmin,
+                vmax=shared_vmax if args.share_cbar else args.vmax,
                 transform=data_crs,
             )
         else:
-            pcm = ax.pcolormesh(lon, lat, data, cmap=cmap, shading='auto', vmin=args.vmin, vmax=args.vmax)
+            pcm = ax.pcolormesh(
+                lon,
+                lat,
+                data,
+                cmap=cmap,
+                shading='auto',
+                vmin=shared_vmin if args.share_cbar else args.vmin,
+                vmax=shared_vmax if args.share_cbar else args.vmax,
+            )
+        last_pcm = pcm
 
         # Set format_coord for status bar to show z value
         def make_format_coord(lon, lat, data) -> Callable:
@@ -386,8 +426,18 @@ def main(args=None) -> None:
         else:
             colorbar_label = f'{long_name} [{units}]' if units else long_name
 
-        cbar = fig.colorbar(pcm, ax=ax, **colorbar_kwargs)
-        cbar.set_label(colorbar_label)
+        if args.share_cbar:
+            if shared_colorbar_label is None:
+                shared_colorbar_label = colorbar_label
+            elif shared_colorbar_label != colorbar_label and args.cbar_title is None:
+                shared_colorbar_label = 'Value'
+            if len(args.cmap) > 1:
+                cmap_name = args.cmap[i % len(args.cmap)]
+                if cmap_name != shared_cmap_name:
+                    shared_cmap_name = None
+        else:
+            cbar = fig.colorbar(pcm, ax=ax, **colorbar_kwargs)
+            cbar.set_label(colorbar_label)
 
         # Add scalebar
         if args.scalebar:
@@ -471,8 +521,26 @@ def main(args=None) -> None:
         row, col = divmod(i, ncols)
         ax = axes[row, col]
         ax.set_visible(False)
+
+    if args.share_cbar and last_pcm is not None and visible_axes:
+        if len(args.cmap) > 1 and shared_cmap_name is None:
+            print('Warning: Multiple colormaps were supplied with --share-cbar. Using the last subplot colormap for the shared colorbar.')
+
+        shared_colorbar_kwargs = {
+            'orientation': args.shared_cbar_orientation,
+            'shrink': args.shared_cbar_shrink,
+            'pad': args.shared_cbar_pad,
+        }
+        cbar = fig.colorbar(last_pcm, ax=visible_axes, **shared_colorbar_kwargs)
+        if shared_colorbar_label is not None:
+            cbar.set_label(shared_colorbar_label, fontsize=args.shared_cbar_font_size)
+        for tick in cbar.ax.get_yticklabels():
+            tick.set_fontsize(args.shared_cbar_font_size)
+        for tick in cbar.ax.get_xticklabels():
+            tick.set_fontsize(args.shared_cbar_font_size)
     
-    plt.tight_layout()
+    if not args.share_cbar:
+        plt.tight_layout()
     
     if args.save:
         figures_dir = Path(f'{args.proj_name}/results/figures')
