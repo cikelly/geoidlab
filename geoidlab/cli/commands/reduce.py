@@ -101,7 +101,7 @@ class GravityReduction:
         grid_unit: str = 'seconds',
         grid_method: str = 'linear',
         bbox: list = [None, None, None, None],
-        bbox_offset: float = 1.0,
+        bbox_offset: float = 2.0,
         proj_name: str = 'GeoidProject',
         topo: str = None,
         tc_file: str = None,
@@ -919,7 +919,7 @@ def add_reduce_arguments(parser) -> None:
                         help='Interpolation method for gridding anomalies (default: kriging)')
     parser.add_argument('-b', '--bbox', type=float, nargs=4,
                         help='Bounding box [W, E, S, N] in degrees. Required if --grid')
-    parser.add_argument('-bo', '--bbox-offset', type=float, default=1.0,
+    parser.add_argument('-bo', '--bbox-offset', type=float, default=2.0,
                         help='Offset around the bounding box in degrees')
     parser.add_argument('-ell', '--ellipsoid', type=str, default='wgs84',
                         help='Reference ellipsoid: wgs84, grs80, or JSON object string')

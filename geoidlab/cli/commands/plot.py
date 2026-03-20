@@ -105,6 +105,36 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--shared-cbar-shrink', type=float, default=0.5, help='Shrink factor for a shared colorbar.')
     parser.add_argument('--shared-cbar-pad', type=float, default=0.02, help='Padding between subplot group and shared colorbar.')
     parser.add_argument('--shared-cbar-font-size', type=int, default=12, help='Font size for shared colorbar label and tick labels.')
+    parser.add_argument('--contour', action='store_true', help='Overlay contours on the plotted field.')
+    parser.add_argument('--contour-color', type=str, default='black', help='Contour line color.')
+    parser.add_argument('--contour-linewidth', type=float, default=0.25, help='Contour line width.')
+    parser.add_argument('--contour-alpha', type=float, default=0.8, help='Contour transparency.')
+    parser.add_argument('--contour-levels', type=str, default=None, help='Contour levels as an integer count or a comma-separated list of explicit values.')
+
+def parse_contour_levels(levels: str | None):
+    '''Parse contour levels from CLI/config input.'''
+    if levels is None:
+        return None
+
+    levels = str(levels).strip()
+    if not levels:
+        return None
+
+    if ',' in levels:
+        parsed_levels = []
+        for level in levels.split(','):
+            level = level.strip()
+            if not level:
+                continue
+            parsed_levels.append(float(level))
+        if not parsed_levels:
+            raise ValueError('Contour levels list is empty.')
+        return parsed_levels
+
+    try:
+        return int(levels)
+    except ValueError:
+        return [float(levels)]
 
 def main(args=None) -> None:
     if args is None:
@@ -115,6 +145,8 @@ def main(args=None) -> None:
     if getattr(args, 'list_cmaps', False):
         list_colormaps()
         return 0
+
+    contour_levels = parse_contour_levels(getattr(args, 'contour_levels', None))
     
     # Ensure we have a filename
     if not args.filename:
@@ -352,6 +384,24 @@ def main(args=None) -> None:
                 vmax=shared_vmax if args.share_cbar else args.vmax,
             )
         last_pcm = pcm
+
+        if args.contour:
+            contour_kwargs = {
+                'colors': args.contour_color,
+                'linewidths': args.contour_linewidth,
+                'levels': contour_levels if contour_levels is not None else 50,
+                'alpha': args.contour_alpha,
+            }
+            if use_cartopy:
+                ax.contour(
+                    lon,
+                    lat,
+                    data,
+                    transform=data_crs,
+                    **contour_kwargs,
+                )
+            else:
+                ax.contour(lon, lat, data, **contour_kwargs)
 
         # Set format_coord for status bar to show z value
         def make_format_coord(lon, lat, data) -> Callable:

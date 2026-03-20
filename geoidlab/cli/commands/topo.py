@@ -83,7 +83,7 @@ class TopographicQuantities:
         radius: float = 167.,
         proj_name: str = 'GeoidProject',
         bbox: list[float] = None,
-        bbox_offset: float = 1.0,
+        bbox_offset: float = 2.0,
         grid_size: float = None,
         grid_unit: str = 'seconds',
         window_mode: str = 'radius',
@@ -504,7 +504,7 @@ def add_topo_arguments(parser) -> None:
                         help='End processing at this step')
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', 
                         help='Name of the project directory')
-    parser.add_argument('-bo', '--bbox-offset', type=float, default=1.0, 
+    parser.add_argument('-bo', '--bbox-offset', type=float, default=2.0, 
                         help='Offset around bounding box in degrees')
     parser.add_argument('-gs', '--grid-size', type=float, default=30, 
                         help='Grid size (resolution) in degrees, minutes, or seconds. (Default: 30 seconds)')

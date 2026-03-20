@@ -184,7 +184,7 @@ class ResidualAnomalyComputation:
         grid_unit: str = 'seconds',
         grid_method: str = 'linear',
         bbox: list = [None, None, None, None],
-        bbox_offset: float = 1.0,
+        bbox_offset: float = 2.0,
         proj_name: str = 'GeoidProject',
         topo: str = None,
         tc_file: str = None,
