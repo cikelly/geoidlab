@@ -1,6 +1,6 @@
 # GeoidLab
 
-[![Language](https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square)](https://www.python.org/)
+[![Language](https://img.shields.io/badge/python-3.10--3.12-blue.svg?style=flat-square)](https://www.python.org/)
 [![PyPI version](https://img.shields.io/pypi/v/geoidlab.svg?style=flat-square)](https://pypi.org/project/geoidlab/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/cikelly/geoidlab/tests.yml?style=flat-square&label=tests)](https://github.com/cikelly/geoidlab/actions)
@@ -16,14 +16,13 @@
 
 **`GeoidLab`: A Modular and Automated Python Package for Geoid Computation.**
 
-
-
 ## Table of Contents
 - [Introduction](#introduction)
 - [Features](#features)
 - [Installation](#installation)
 - [Command-Line Interface](#command-line-interface)
-- [Tutorials](#tutorials)
+- [Workflows](#workflows)
+- [Documentation and Examples](#documentation-and-examples)
 - [Contributing](#contributing)
 - [License](#license)
 - [References](#references)
@@ -31,189 +30,186 @@
 ---
 
 ## Introduction
-`GeoidLab` is a Python package that implements the remove-compute-restore (RCR) method for geoid determination. It provides a comprehensive command-line interface for automated geoid computation, handling everything from data preparation to final geoid model generation. Its design also allows for teaching and learning.
+`GeoidLab` is a Python package for gravity-field analysis and geoid determination, centered on the remove-compute-restore (RCR) workflow. It includes command-line tools for preparing observation tables, synthesizing gravity-field quantities from global geopotential models, computing terrain quantities and gravity reductions, estimating geoid models, and visualizing NetCDF outputs.
 
 ## Features
 
 ### Core Functionality
-- **Complete RCR Implementation**: Handles all steps of the remove-compute-restore method:
-  - Gravity reduction (free-air anomalies)
-  - Terrain correction
-  - Synthesis of functionals from a global geopotential model (GGM)
-  - Residual gravity anomaly computation and gridding
-  - Geoid computation with multiple kernel options
-  - Final model restoration
+- **End-to-end RCR workflow**
+  - Gravity reduction
+  - Terrain correction and indirect effects
+  - Synthesis of gravity field functionals from global geopotential models
+  - Residual anomaly computation
+  - Geoid estimation with multiple modified Stokes kernels
+  - Restoration of reference and terrain-related terms
 
-- **Modeling Topographic Quantities**
-  - Supports automatic download of DEMs: SRTM30PLUS, SRTM, COP, GEBCO, NASADEM
-  - Terrain correction (Direct Topographic Effect)
-  - Indirect effect (Primary Indirect Topographic Effect)
-  - Secondary indirect effect (Secondary Indirect Topographic Effect)
-  - Residual Terrain Modeling (RTM)
-  - RTM Height Anomaly
- 
-- **Support methods for solving stokes' integral**
-  - Heck & Gruninger (hg)
-  - Wong & Gore (wg)
-  - Original Stokes' (og)
-  - Meissl (ml)
+- **Observation preprocessing**
+  - Normalize terrestrial, airborne, and marine survey tables into GeoidLab-ready schemas
+  - Accept CSV, Excel, and tab-delimited text inputs
+  - Preserve tide-system metadata for downstream processing
 
-- **Global Geopotential Model**
-  - Automatic download of GGMs from ICGEM: [static models](https://icgem.gfz-potsdam.de/tom_longtime)
-  - Synthesis of gravity field functionals:
-     - Gravity anomalies
-     - Gravity disturbance
-     - Disturbing potential
-     - Second radial derivative of gravity (vertical gradient)
-     - Height anomalies
-     - Geoid (with optional zero degree term correction)
-     - Geoid-quaisi geoid separation
-     - First derivative of disturbing potential
-     - Ellipsoidal correction (needed for geoid computation)
+- **Topographic modelling**
+  - Built-in DEM support for `srtm30plus`, `srtm`, `cop`, `nasadem`, and `gebco`
+  - Support for local DEM files, remote GDAL-readable DEM URLs, and cloud-optimized GeoTIFF sources
+  - Terrain correction, indirect effect, secondary indirect effect, RTM anomaly, and RTM height anomaly
+  - Reference topography synthesis from DTM2006.0 or Earth2014 SHC models
+  - Optional variable-density workflows
 
-- **Tide System Conversion**
-  - Support for tide system conversion for gravity and geoid. Supported systems:
-     - mean tide
-     - tide free
-     - zero tide
-  - Automated tide system conversion in geoid workflow
+- **Global geopotential model synthesis**
+  - Automatic download of GGMs from ICGEM
+  - Gravity anomaly
+  - Gravity disturbance
+  - Disturbing potential
+  - Disturbing-potential derivative
+  - Second radial derivative
+  - Reference geoid
+  - Height anomaly
+  - Geoid-quasigeoid separation
+  - Zero-degree term correction
+  - Ellipsoidal correction
 
-- **Legendre Functions and Polynomials**
-  - Legendre polynomials
-  - Fully normalized associated Legendre Functions (ALFs)
-  - Derivative of ALFs with respect to co-latitude
+- **Geoid computation**
+  - Modified Stokes kernels: `hg`, `wg`, `ml`, `og`
+  - Station-based or gridded residual workflows
+  - Tide-system handling for gravity, marine anomalies, and final geoid outputs
 
-- **Plotting Utilities**
-  - Publication-ready plotting of gridded data
-  - Support for all `matplotlib` colormaps and `.cpt` (GMT) colormaps
-  - Options for scalebar
-
-### Additional Computational Features
-- **Advanced Gridding Options**:
-  - Multiple interpolation methods (linear, spline, kriging, lsc, etc.)
-  - Flexible grid size and unit specifications
-  - Customizable computation windows for residual geoid and terrain quantity computations
+- **Visualization**
+  - Publication-ready plotting of gridded NetCDF results
+  - Support for `matplotlib` colormaps and GMT `.cpt` colormaps
+  - Scalebar and contour options
+  - Automatic plot generation for saved `geoid` outputs
 
 ### Reference Systems
-- Supports both WGS84 and GRS80 reference ellipsoids
-- Handles various coordinate transformations and corrections
+- Built-in support for `wgs84` and `grs80`
+- Optional custom ellipsoid definitions through CLI/config inputs
 
 ## Installation
-`GeoidLab` can be installed using `pip`. `conda`/`mamba` installation planned for future
+GeoidLab currently targets Python `>=3.10,<3.13`.
 
-### Recommended
-Install the development version. Navigate to your directory of choice (where `geoidlab` will be downloaded to). Example:
-
-- Create conda environment (optional but recommended to avoid dependency conflicts
+### Install from PyPI
 ```bash
-conda create -n geoid_env
-conda activate geoid_env
+pip install geoidlab
 ```
 
-- Create directory to download geoidlab to and install package
+### Install from source
 ```bash
-cd ~ && mkdir tools && cd tools
 git clone https://github.com/cikelly/geoidlab.git
 cd geoidlab
 pip install -e .
 ```
 
-### Using Pip
+### Development install
 ```bash
-pip install geoidlab
+git clone https://github.com/cikelly/geoidlab.git
+cd geoidlab
+pip install -e .[dev]
 ```
 
 ## Command-Line Interface
-`GeoidLab` provides a comprehensive CLI with subcommands for all of the major components of `geoidlab`. One of the major advantages of `geoidlab` is that users may choose to interact with `geoidlab` via a configuration file, thus eliminating the need for expertise in Python programming. The available CLI commands are:
-- ggm     (synthesizing gravity field functionals from a GGM)
-- topo    (modeling topographic quantities)
-- reduce  (gravity reduction)
-- viz     (plotting)
-- geoid   (entire RCR workflow)
-- ncinfo  (print information about a NetCDF file)
+GeoidLab exposes a single CLI entry point:
 
 ```bash
-# Basic command structure
-geoidlab <command> [options]
-
-# Available commands
-geoidlab geoid    # Complete geoid computation using RCR method
-geoidlab reduce   # Perform gravity reductions
-geoidlab topo     # Compute topographic quantities
-geoidlab viz      # Visualize results
-
-# Use the -h or --help flag to print useful information about the commands
-geoidlab -h         # Print help message for geoidlab
-geoidlab geoid -h   # Print help message for geoid command
-geoidlab viz --help # Print help message for (viz) visualization command
+geoidlab <subcommand> [options]
 ```
 
-### Geoid Computation Workflow
-The simplest way to use `GeoidLab` for geoid computation is via the CLI tools and the configuration file. Follow these steps to use CLI + configuration file for geoid computation:
-1. **Directory Setup**: Create a directory (e.g., `Brazil`) where you will store the surface gravity data (and marine gravity anomalies if available).
-   ```bash
-   mkdir Brazil && cd Brazil
-   # Ensure you copy your surface gravity data (and marine anomalies) to Brazil
-   ```
-   
-2. **Copy default configuration file to `Brazil`**
-   ```bash
-   # Use geoidlab -c or geoidlab --config to create a copy of geoidlab.cfg in CWD
-   geoidlab -c
-   ```
-   
-3. Open `geoidlab.cfg` in a text editor and edit to your satisfaction. For geoid computation, `command` must be set to `geoid`.
-   
-5. **Execute CLI and wait for `geoidlab` to do its thing
-   ```bash
-   geoidlab -c geoidlab.cfg
-   ```
+Current subcommands:
+- `prep`   Normalize input survey tables into GeoidLab-ready CSV files
+- `ggm`    Synthesize gravity field functionals from a global geopotential model
+- `topo`   Compute topographic quantities from a DEM
+- `reduce` Compute gravity reductions
+- `geoid`  Run the full RCR geoid workflow
+- `viz`    Visualize NetCDF outputs
+- `ncinfo` Inspect a NetCDF file
 
-By default, `geoidlab` will create a project directory, `GeoidProject`, in `cwd`. If you didn't change this, you can find results and downloads in `Brazil/GeoidProject/results` and `Brazil/GeoidProject/downloads`. 
+Examples:
 
-**PS**: For computationally intensive/expensive steps, `geoidlab` will skip reprocessing if NetCDF files are found in `<proj-name/results>`. If you have made changes and want to recompute them, either delete them, move them, or set `<proj-name>` to a new value.
+```bash
+geoidlab -h
+geoidlab prep -h
+geoidlab ggm -h
+geoidlab geoid -h
+geoidlab viz --help
+```
 
+## Workflows
 
-### Key Parameters
-- `--method`: Kernel modification ['hg', 'wg', 'ml', 'og']
-- `--grid-method`: Interpolation method ['linear', 'spline', 'kriging', 'rbf', 'idw']
-- `--tide-system`: Tide system ['mean_tide', 'zero_tide', 'tide_free']
-- `--ellipsoid`: Reference ellipsoid ['wgs84', 'grs80', custom]
+### 1. Prepare observation tables
+Use `prep` when raw field tables need to be normalized into the column schemas expected by GeoidLab.
 
-## Tutorials
-If you are interested in more detailed usage examples, please visit the [tutorial repository](https://github.com/cikelly/geoidlab-tutorial). Examples include:
-- Complete workflow demonstrations
-- Different kernel modification comparisons
-- Data preparation guides
-- Visualization examples
-- Gridding
+```bash
+geoidlab prep \
+  --input-file raw_gravity.xlsx \
+  --output-file surface_gravity.csv \
+  --platform terrestrial \
+  --data-type gravity \
+  --tide-system mean_tide
+```
 
-The package includes example Jupyter notebooks in the `Notebooks/` directory that demonstrate various aspects of geoid computation.
+Supported platform and data-type combinations currently include:
+- terrestrial gravity
+- airborne gravity
+- marine free-air anomaly
+
+### 2. Run geoid computation with a config file
+The simplest way to run a full workflow is through a configuration file.
+
+1. Create a working directory and place your observation files there.
+2. Copy the default template config:
+
+```bash
+mkdir Brazil && cd Brazil
+geoidlab -c
+```
+
+3. Edit `geoidlab.cfg`. In the `[subcommand]` section, set:
+
+```ini
+[subcommand]
+command = geoid
+```
+
+4. Run the workflow:
+
+```bash
+geoidlab --config geoidlab.cfg
+```
+
+By default, results are written beneath `GeoidProject/`, with downloads in `GeoidProject/downloads` and outputs in `GeoidProject/results`.
+
+### 3. Useful CLI parameters
+Common options vary by subcommand, but these are among the most important:
+
+- `--method`: Stokes kernel modification for `geoid` (`hg`, `wg`, `ml`, `og`)
+- `--grid-method`: Gridding method for reductions (`linear`, `spline`, `kriging`, `rbf`, `idw`, `biharmonic`, `gpr`, `lsc`)
+- `--gravity-tide`: Tide system of gravity observations
+- `--marine-tide-system`: Tide system of marine anomaly observations
+- `--target-tide-system`: Output tide system for geoid results
+- `--ellipsoid`: `wgs84`, `grs80`, or a custom ellipsoid JSON string
+- `--variable-density`: Enable variable-density workflows where supported
+
+## Documentation and Examples
+- Documentation source lives in [`docs/`](docs/)
+- Usage and examples are in [`docs/usage/`](docs/usage/) and [`docs/examples/`](docs/examples/)
+- The default configuration template is [`docs/geoidlab.cfg`](docs/geoidlab.cfg)
+- Additional walkthrough material is available in the [tutorial repository](https://github.com/cikelly/geoidlab-tutorial)
+
+The `Notebooks/` directory currently contains sample inputs, figures, and generated outputs used in examples and development work.
 
 ## Contributing
-We welcome contributions! To contribute:
+Contributions are welcome.
+
 1. Fork the repository.
-2. Clone your fork and set up a development environment:
-   ```bash
-   git clone https://github.com/your-username/geoidlab.git
-   cd geoidlab
-   pip install -e .
-   ```
-3. Create a new branch for your feature or bug fix.
-4. Submit a pull request.
-5. You may also contribute by helping improve the documentation.
+2. Clone your fork and install the package in editable mode.
+3. Create a branch for your change.
+4. Add or update tests where appropriate.
+5. Submit a pull request.
 
 ## License
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
 
-
-See the [tutorial repo](https://github.com/cikelly/geoidlab-tutorial) for detailed examples of using `GeoidLab`.
-
-
 ## References
 - Kelly, C.I., V.G. Ferreira, D. Yang, S.A. Andam-Akorful, D. Yan1, S. Osah, C.M. Hancock, G. Jing, A.T. Kabo-bah, (2026): GeoidLab: An Automated Open-Source Python Toolbox for Gravity-Field Analysis and Vertical Datum Unification (Under review)
-  
-- Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential
-Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
 
-- C. I. Kelly, S. A. Andam-Akorful, C. M. Hancock, P. B. Laari & J. Ayer (2021): [Global gravity models and the Ghanaian vertical datum: challenges of a proper definition, Survey Review, 53(376), 44–54](https://doi.org/10.1080/00396265.2019.1684006)
+- Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
+
+- C. I. Kelly, S. A. Andam-Akorful, C. M. Hancock, P. B. Laari & J. Ayer (2021): [Global gravity models and the Ghanaian vertical datum: challenges of a proper definition, Survey Review, 53(376), 44-54](https://doi.org/10.1080/00396265.2019.1684006)
