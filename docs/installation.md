@@ -1,6 +1,6 @@
 # Installation
 
-GeoidLab can be installed using pip, conda, or from source.
+GeoidLab currently targets Python `>=3.10,<3.13`.
 
 ## Using pip
 
@@ -8,15 +8,7 @@ GeoidLab can be installed using pip, conda, or from source.
 pip install geoidlab
 ```
 
-## Using conda
-
-```bash
-conda install -c conda-forge geoidlab
-```
-
-## From Source
-
-To install GeoidLab from source:
+## From source
 
 ```bash
 git clone https://github.com/cikelly/geoidlab.git
@@ -24,9 +16,17 @@ cd geoidlab
 pip install -e .
 ```
 
+## Development install
+
+```bash
+git clone https://github.com/cikelly/geoidlab.git
+cd geoidlab
+pip install -e .[dev]
+```
+
 ## Dependencies
 
-GeoidLab requires Python 3.10 or later. The main dependencies are:
+GeoidLab installs its Python dependencies automatically. Core packages include:
 
 - numpy
 - scipy
@@ -36,5 +36,3 @@ GeoidLab requires Python 3.10 or later. The main dependencies are:
 - rasterio
 - scikit-learn
 - pyproj
-
-These will be automatically installed when you install GeoidLab.

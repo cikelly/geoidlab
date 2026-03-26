@@ -1,15 +1,5 @@
 # Usage Guide
 
-```{toctree}
-:maxdepth: 2
-
-cli
-workflow
-kernels
-interpolation
-tide_systems
-```
-
 ## Command Line Interface
 
 GeoidLab provides a comprehensive command-line interface (CLI) for geoid computation. The basic command structure is:
@@ -20,18 +10,21 @@ geoidlab <command> [options]
 
 ## Available Commands
 
+- `prep`: Normalize survey data into GeoidLab-ready tables
+- `ggm`: Synthesize gravity field functionals from a global geopotential model
 - `geoid`: Complete geoid computation using RCR method
 - `reduce`: Perform gravity reductions
 - `topo`: Compute topographic quantities
 - `viz`: Visualize results
-- `prep`: Normalize survey data into GeoidLab-ready tables
+- `ncinfo`: Inspect NetCDF outputs
 
 ## Basic Workflow
 
-1. Data Preparation
+1. Observation preparation
 2. Gravity Reductions
-3. Residual Computation
-4. Geoid Determination
-5. Final Model Generation
+3. Terrain and reference-field modelling
+4. Residual computation
+5. Geoid Determination
+6. Final Model Generation
 
-See the following sections for detailed explanations of each step.
+Most users either run the workflow from the CLI directly or start from the template configuration file in `docs/geoidlab.cfg`.
