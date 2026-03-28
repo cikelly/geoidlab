@@ -62,10 +62,32 @@ def auto_visualize(args) -> None:
     print('\n')
 
 
-class ConfigAction(argparse.Action):
-    '''Custom action to handle --config/-c with or without a value.'''
-    def __call__(self, parser, namespace, values, option_string=None) -> None:
-        setattr(namespace, self.dest, values if values is not None else '__COPY_TEMPLATE__')
+def copy_template_config() -> None:
+    '''Copy the bundled geoidlab.cfg template to the current working directory.'''
+    main_dir = Path(__file__).parent.parent.parent
+    template_path = main_dir / 'docs' / 'geoidlab.cfg'
+    dest_path = Path.cwd() / 'geoidlab.cfg'
+
+    if not template_path.exists():
+        print(
+            f'Error: Template config file {template_path} not found in geoidlab/docs.'
+            'Go to https://github.com/cikelly/geoidlab/tree/main/docs/ to download the template.'
+        )
+        sys.exit(1)
+
+    if dest_path.exists():
+        print(f"Note: '{dest_path}' already exists. Not overwriting.")
+        print('To use the template, edit the existing geoidlab.cfg or specify a different config file with --config <path>.')
+        sys.exit(0)
+
+    try:
+        shutil.copy(template_path, dest_path)
+        print(f"Template configuration file copied to '{dest_path}'.")
+        print('Please edit geoidlab.cfg and run `geoidlab -c geoidlab.cfg` to use it.')
+        sys.exit(0)
+    except (PermissionError, OSError) as e:
+        print(f"Error: Failed to copy template config to '{dest_path}': {str(e)}")
+        sys.exit(1)
 
 def main() -> None:
     # sourcery skip: extract-duplicate-method, extract-method, remove-redundant-exception, simplify-single-exception-tuple
@@ -78,8 +100,14 @@ def main() -> None:
     )
     from geoidlab.__version__ import __version__
     parser.add_argument('-v', '--version', action='version', version=f'geoidlab {__version__}')
-    parser.add_argument('-c', '--config', nargs='?', default=None, action=ConfigAction, 
-                        help='Path to configuration file (e.g., geoidlab.cfg). If not provided, copies from geoidlab/docs/geoidlab.cfg to the current directory.')
+    parser.add_argument(
+        '-c', '--config', nargs='?', const='__COPY_TEMPLATE__', default=None,
+        help='Path to configuration file (e.g., geoidlab.cfg). Passing `-c` without a value also initializes a template config in the current directory.'
+    )
+    parser.add_argument(
+        '--init', action='store_true',
+        help='Copy the default geoidlab.cfg template into the current directory.'
+    )
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)
     
     # GGM subcommand
@@ -120,33 +148,12 @@ def main() -> None:
     args = parser.parse_args()
     
     # Handle config file
+    if args.init:
+        copy_template_config()
+
     if args.config is not None:
         if args.config == '__COPY_TEMPLATE__':
-            main_dir = Path(__file__).parent.parent.parent 
-
-            template_path = main_dir / 'docs' / 'geoidlab.cfg'
-            dest_path = Path.cwd() / 'geoidlab.cfg'
-            
-            if not template_path.exists():
-                print(
-                    f'Error: Template config file {template_path} not found in geoidlab/docs.'
-                    'Go to https://github.com/cikelly/geoidlab/tree/main/docs/ to download the template.'
-                )
-                sys.exit(1)
-                
-            if dest_path.exists():
-                print(f"Note: '{dest_path}' already exists. Not overwriting.")
-                print("To use the template, edit the existing geoidlab.cfg or specify a different config file with --config <path>.")
-                sys.exit(0)
-                
-            try:
-                shutil.copy(template_path, dest_path)
-                print(f"Template configuration file copied to '{dest_path}'.")
-                print("Please edit geoidlab.cfg and run `geoidlab --config geoidlab.cfg` to use it.")
-                sys.exit(0)
-            except (PermissionError, OSError) as e:
-                print(f"Error: Failed to copy template config to '{dest_path}': {str(e)}")
-                sys.exit(1)
+            copy_template_config()
         else:
             # Config file path provided, parse it
             args = parse_config_file(args.config, args)

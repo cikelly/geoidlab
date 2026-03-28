@@ -158,7 +158,7 @@ The simplest way to run a full workflow is through a configuration file.
 
 ```bash
 mkdir Brazil && cd Brazil
-geoidlab -c
+geoidlab --init
 ```
 
 3. Edit `geoidlab.cfg`. In the `[subcommand]` section, set:
@@ -171,8 +171,10 @@ command = geoid
 4. Run the workflow:
 
 ```bash
-geoidlab --config geoidlab.cfg
+geoidlab -c geoidlab.cfg
 ```
+
+`geoidlab --config geoidlab.cfg` does the same thing. For backward compatibility, bare `geoidlab -c` still initializes the template config, but `geoidlab --init` is the clearer form.
 
 By default, results are written beneath `GeoidProject/`, with downloads in `GeoidProject/downloads` and outputs in `GeoidProject/results`.
 
