@@ -114,7 +114,10 @@ class TerrainQuantities:
         self.density_interp_method = density_interp_method
         self.density_unit = density_unit
         self.density_save = density_save
+        self.rho_topo = None
         self.rho_grid = None
+        self.rho_grid_numba = np.empty((1, 1), dtype=np.float64)
+        self.rho_P = None
         
         # Validate window mode
         if self.window_mode not in self.VALID_WINDOW_MODES:
@@ -197,13 +200,9 @@ class TerrainQuantities:
             if 'lon' in rho_da.dims and 'lat' in rho_da.dims:
                 rho_da = rho_da.rename({'lon': 'x', 'lat': 'y'})
             rho_da = rho_da.transpose('y', 'x')
+            self.rho_topo = rho_da
             self.rho_grid = rho_da.values
-            self.rho = float(np.nanmean(self.rho_grid))
-            warnings.warn(
-                "Variable density grid ingested, but terrain kernels currently apply an effective "
-                "mean density in scalar terms. Full per-cell variable-density kernels are not yet enabled.",
-                UserWarning,
-            )
+            self.rho_grid_numba = self.rho_grid
 
         # Set ocean areas to zero
         if self.ref_topo is not None:
@@ -277,6 +276,11 @@ class TerrainQuantities:
         # Extract sub-grid topography
         self.ori_P = self.ori_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3]))
         self.ref_P = self.ref_topo.sel(x=slice(self.sub_grid[0], self.sub_grid[1]), y=slice(self.sub_grid[2], self.sub_grid[3])) if self.ref_topo else None
+        if self.rho_topo is not None:
+            self.rho_P = self.rho_topo.sel(
+                x=slice(self.sub_grid[0], self.sub_grid[1]),
+                y=slice(self.sub_grid[2], self.sub_grid[3])
+            ).values
         
         # Grid size in x and y
         self.dlam = (max(lon) - min(lon)) / (self.ncols - 1)
@@ -284,7 +288,11 @@ class TerrainQuantities:
         dx = TerrainQuantities.deg2km(self.dlam) * 1000 # meters
         dy = TerrainQuantities.deg2km(self.dphi) * 1000 # meters
         
-        # Precompute G_rho_dxdy and 2 * pi * G * rho
+        # Precompute density-independent geometric factors.
+        self.G_dxdy = self.G * dx * dy
+        self.two_pi_G = 2 * np.pi * self.G
+
+        # Keep scalar prefactors for the constant-density fast path.
         self.G_rho_dxdy = self.G * self.rho * dx * dy
         self.two_pi_G_rho = 2 * np.pi * self.G * self.rho
         
@@ -399,6 +407,26 @@ class TerrainQuantities:
         j_start = j_end - self.dn
         return i_start, i_end, j_start, j_end
 
+    def _density_window(self, i_start: int, i_end: int, j_start: int, j_end: int) -> np.ndarray | None:
+        if self.rho_grid is None:
+            return None
+        return self.rho_grid[i_start:i_end, j_start:j_end]
+
+    def _point_density(self, i: int, j: int) -> float:
+        if self.rho_P is None:
+            return self.rho
+        return float(self.rho_P[i, j])
+
+    def _point_density_grid(self) -> np.ndarray:
+        if self.rho_P is None:
+            return np.full(self.ori_P['z'].shape, self.rho, dtype=np.float64)
+        return self.rho_P
+
+    def _window_weighted_sum(self, term: np.ndarray, rho_window: np.ndarray | None) -> float:
+        if rho_window is None:
+            return self.G_rho_dxdy * bn.nansum(term)
+        return self.G_dxdy * bn.nansum(rho_window * term)
+
     def terrain_correction_sequential(self) -> np.ndarray:
         '''
         Compute terrain correction
@@ -422,6 +450,7 @@ class TerrainQuantities:
                     smallX = self.X[n1:n2, m1:m2]
                     smallY = self.Y[n1:n2, m1:m2]
                     smallZ = self.Z[n1:n2, m1:m2]
+                    small_rho = self._density_window(n1, n2, m1, m2)
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
                         self.sinlamp[i, j] * (smallX - self.Xp[i, j])
@@ -438,9 +467,9 @@ class TerrainQuantities:
                     DH2 = (smallH - Hp[i, j]) ** 2 #* (smallH - Hp[i, j])
                     DH4 = DH2 * DH2
                     DH6 = DH4 * DH2
-                    c1  = 0.5 *  self.G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
-                    c2  = -0.375 * self.G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
-                    c3  = 0.3125 * self.G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
+                    c1  = 0.5 * self._window_weighted_sum(DH2 / d3, small_rho)      # 1/2
+                    c2  = -0.375 * self._window_weighted_sum(DH4 / d5, small_rho)    # 3/8
+                    c3  = 0.3125 * self._window_weighted_sum(DH6 / d7, small_rho)    # 5/16
                     tc[i, j] = (c1 + c2 + c3) * 1e5 # [mGal]
                     # moving window
                     m1 += 1
@@ -453,7 +482,9 @@ class TerrainQuantities:
                 # m1 = 0
                 # m2 = dm
                 for j in range(ncols_P):
+                    i_start, i_end, j_start, j_end = self.get_window_indices(i, j)
                     smallH, smallX, smallY, smallZ = self.get_window(i, j)
+                    small_rho = self._density_window(i_start, i_end, j_start, j_end)
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
                         self.sinlamp[i, j] * (smallX - self.Xp[i, j])
@@ -471,9 +502,9 @@ class TerrainQuantities:
                     DH2 = (smallH - Hp[i, j]) ** 2 #* (smallH - Hp[i, j])
                     DH4 = DH2 * DH2
                     DH6 = DH4 * DH2
-                    c1  = 0.5 *  self.G_rho_dxdy * bn.nansum(DH2 / d3)      # 1/2
-                    c2  = -0.375 * self.G_rho_dxdy * bn.nansum(DH4 / d5)    # 3/8
-                    c3  = 0.3125 * self.G_rho_dxdy * bn.nansum(DH6 / d7)    # 5/16
+                    c1  = 0.5 * self._window_weighted_sum(DH2 / d3, small_rho)      # 1/2
+                    c2  = -0.375 * self._window_weighted_sum(DH4 / d5, small_rho)    # 3/8
+                    c3  = 0.3125 * self._window_weighted_sum(DH6 / d7, small_rho)    # 5/16
                     tc[i, j] = (c1 + c2 + c3) * 1e5 # [mGal]
         return tc
 
@@ -531,7 +562,8 @@ class TerrainQuantities:
             delayed(compute_tc_chunk)(
                 row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
                 self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_rho_dxdy, window_indices
+                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                self.rho_grid is not None, window_indices
             ) for row_start, row_end in chunks
         )
 
@@ -639,6 +671,7 @@ class TerrainQuantities:
                     smallX     = self.X[n1:n2, m1:m2]
                     smallY     = self.Y[n1:n2, m1:m2]
                     smallZ     = self.Z[n1:n2, m1:m2]
+                    small_rho  = self._density_window(n1, n2, m1, m2)
 
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
@@ -668,9 +701,9 @@ class TerrainQuantities:
                     DH_ref6 = DH_ref4 * DH_ref2
 
                     # Integrate the RTM terrain correction
-                    c1 = 0.5 * self.G_rho_dxdy * bn.nansum((DH_ref2 - DH2) / d3)      # 1/2
-                    c2 = -0.375 * self.G_rho_dxdy * bn.nansum((DH_ref4 - DH4) / d5)  # 3/8
-                    c3 = 0.3125 * self.G_rho_dxdy * bn.nansum((DH_ref6 - DH6) / d7)  # 5/16
+                    c1 = 0.5 * self._window_weighted_sum((DH_ref2 - DH2) / d3, small_rho)      # 1/2
+                    c2 = -0.375 * self._window_weighted_sum((DH_ref4 - DH4) / d5, small_rho)  # 3/8
+                    c3 = 0.3125 * self._window_weighted_sum((DH_ref6 - DH6) / d7, small_rho)  # 5/16
                     tc_rtm[i, j] = (c1 + c2 + c3) * 1e5  # [mGal]
 
                     # Moving window
@@ -682,7 +715,9 @@ class TerrainQuantities:
             # radius-based window
             for i in tqdm(range(nrows_P), desc='Computing RTM terrain correction'):
                 for j in range(ncols_P):
+                    i_start, i_end, j_start, j_end = self.get_window_indices(i, j)
                     smallH, smallX, smallY, smallZ, smallH_ref = self.get_window(i, j, include_ref=True)
+                    small_rho = self._density_window(i_start, i_end, j_start, j_end)
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
                         self.sinlamp[i, j] * (smallX - self.Xp[i, j])
@@ -710,13 +745,13 @@ class TerrainQuantities:
                     DH_ref6 = DH_ref4 * DH_ref2
 
                     # Integrate the RTM terrain correction
-                    c1 = 0.5 * self.G_rho_dxdy * bn.nansum((DH_ref2 - DH2) / d3)      # 1/2
-                    c2 = -0.375 * self.G_rho_dxdy * bn.nansum((DH_ref4 - DH4) / d5)  # 3/8
-                    c3 = 0.3125 * self.G_rho_dxdy * bn.nansum((DH_ref6 - DH6) / d7)  # 5/16
+                    c1 = 0.5 * self._window_weighted_sum((DH_ref2 - DH2) / d3, small_rho)      # 1/2
+                    c2 = -0.375 * self._window_weighted_sum((DH_ref4 - DH4) / d5, small_rho)  # 3/8
+                    c3 = 0.3125 * self._window_weighted_sum((DH_ref6 - DH6) / d7, small_rho)  # 5/16
                     tc_rtm[i, j] = (c1 + c2 + c3) * 1e5  # [mGal]
         
         # Calculate RTM gravity anomalies
-        dg_RTM = self.two_pi_G_rho * (Hp - Hp_ref) * 1e5 + tc_rtm
+        dg_RTM = self.two_pi_G * self._point_density_grid() * (Hp - Hp_ref) * 1e5 + tc_rtm
         
         return dg_RTM
 
@@ -777,7 +812,8 @@ class TerrainQuantities:
             delayed(compute_rtm_tc_chunk)(
                 row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
                 self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_rho_dxdy, Hp_ref, self.ref_topo['z'].values, window_indices
+                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                self.rho_grid is not None, Hp_ref, self.ref_topo['z'].values, window_indices
             ) for row_start, row_end in chunks
         )
         
@@ -791,7 +827,7 @@ class TerrainQuantities:
             dg_RTM[row_start:row_end, :] = dg_RTM_chunk
         
         # Calculate RTM gravity anomaly
-        dg_RTM += self.two_pi_G_rho * (Hp - Hp_ref) * 1e5
+        dg_RTM += self.two_pi_G * self._point_density_grid() * (Hp - Hp_ref) * 1e5
         
         return dg_RTM
         
@@ -818,7 +854,7 @@ class TerrainQuantities:
         if tc is None:
             tc = self.terrain_correction()
         print('Computing RTM gravity anomalies...')
-        return (self.two_pi_G_rho * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
+        return (self.two_pi_G * self._point_density_grid() * (self.ori_P['z'].values - self.ref_P['z'].values) * 1e5 - tc), tc
 
 
     def rtm_anomaly(
@@ -898,6 +934,7 @@ class TerrainQuantities:
                     smallX = self.X[n1:n2, m1:m2]
                     smallY = self.Y[n1:n2, m1:m2]
                     smallZ = self.Z[n1:n2, m1:m2]
+                    small_rho = self._density_window(n1, n2, m1, m2)
 
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
@@ -916,7 +953,7 @@ class TerrainQuantities:
                     d7 = d5 * d * d
 
                     # Potential change of regular part
-                    dV1 = -np.pi * self.G * self.rho * Hp[i, j] ** 2
+                    dV1 = -np.pi * self.G * self._point_density(i, j) * Hp[i, j] ** 2
                     
                     # Powers of heights
                     Hp3 = Hp[i, j] ** 3
@@ -926,10 +963,9 @@ class TerrainQuantities:
                     H5  = H3 * smallH * smallH
                     H7  = H5 * smallH * smallH
                     
-                    v2  = -1/6 * bn.nansum((H3 - Hp3) / d3)
-                    v3  = 0.075 * bn.nansum((H5 - Hp5) / d5)     # 3/40
-                    v4  = -15/336 * bn.nansum((H7 - Hp7) / d7)   
-                    dV2 = self.G_rho_dxdy * (v2 + v3 + v4)
+                    dV2 = self._window_weighted_sum(((H3 - Hp3) / d3) * (-1/6), small_rho)
+                    dV2 += self._window_weighted_sum(((H5 - Hp5) / d5) * 0.075, small_rho)     # 3/40
+                    dV2 += self._window_weighted_sum(((H7 - Hp7) / d7) * (-15/336), small_rho)
                     
                     # Total potential change
                     dV = dV1 + dV2
@@ -946,7 +982,9 @@ class TerrainQuantities:
             # radius-based window
             for i in tqdm(range(nrows_P), desc='Computing indirect effect'):
                 for j in range(ncols_P):
+                    i_start, i_end, j_start, j_end = self.get_window_indices(i, j)
                     smallH, smallX, smallY, smallZ = self.get_window(i, j)
+                    small_rho = self._density_window(i_start, i_end, j_start, j_end)
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
                         self.sinlamp[i, j] * (smallX - self.Xp[i, j])
@@ -962,7 +1000,7 @@ class TerrainQuantities:
                     d7 = d5 * d * d
 
                     # Potential change of regular part
-                    dV1 = -np.pi * self.G * self.rho * Hp[i, j] ** 2
+                    dV1 = -np.pi * self.G * self._point_density(i, j) * Hp[i, j] ** 2
                     
                     # Powers of heights
                     Hp3 = Hp[i, j] ** 3
@@ -972,10 +1010,9 @@ class TerrainQuantities:
                     H5  = H3 * smallH * smallH
                     H7  = H5 * smallH * smallH
                     
-                    v2  = -1/6 * bn.nansum((H3 - Hp3) / d3)
-                    v3  = 0.075 * bn.nansum((H5 - Hp5) / d5)
-                    v4  = -15/336 * bn.nansum((H7 - Hp7) / d7)
-                    dV2 = self.G_rho_dxdy * (v2 + v3 + v4)
+                    dV2 = self._window_weighted_sum(((H3 - Hp3) / d3) * (-1/6), small_rho)
+                    dV2 += self._window_weighted_sum(((H5 - Hp5) / d5) * 0.075, small_rho)
+                    dV2 += self._window_weighted_sum(((H7 - Hp7) / d7) * (-15/336), small_rho)
                     
                     # Total potential change
                     dV = dV1 + dV2
@@ -1017,7 +1054,7 @@ class TerrainQuantities:
         Hp = self.ori_P['z'].values
 
         # Potential change of the regular part of topography
-        dV1 = -np.pi * self.G * self.rho * Hp ** 2
+        dV1 = -np.pi * self.G * self._point_density_grid() * Hp ** 2
         # Normal gravity at the ellipsoid
         gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)
         
@@ -1045,7 +1082,8 @@ class TerrainQuantities:
             delayed(compute_ind_chunk)(
                 row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
                 self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_rho_dxdy, Hp, self.ori_topo['z'].values, window_indices
+                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                self.rho_grid is not None, window_indices
             ) for row_start, row_end in chunks
         )
         
@@ -1119,7 +1157,7 @@ class TerrainQuantities:
         
         '''
         print('Computing the secondary indirect effect on gravity...')
-        Dg_SITE = - (2 * np.pi * self.G * self.rho * self.ori_P['z'].values ** 2) / self.R
+        Dg_SITE = - (self.two_pi_G * self._point_density_grid() * self.ori_P['z'].values ** 2) / self.R
         Dg_SITE *= 1e5  # Convert to mGal
         save_to_netcdf(
             data=Dg_SITE,
@@ -1165,6 +1203,7 @@ class TerrainQuantities:
                     smallX = self.X[n1:n2, m1:m2]
                     smallY = self.Y[n1:n2, m1:m2]
                     smallZ = self.Z[n1:n2, m1:m2]
+                    small_rho = self._density_window(n1, n2, m1, m2)
 
                     # Local coordinates (x, y)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
@@ -1187,10 +1226,11 @@ class TerrainQuantities:
                     z5 = smallH**5 - smallH_ref**5
 
                     # Integrate the RTM height anomaly
-                    c1 = bn.nansum(z1 / d)
-                    c2 = -1/6 * bn.nansum(z3 / d3)
-                    c3 = 0.075 * bn.nansum(z5 / d5)  # 3/40
-                    z_rtm[i, j] = (1 / 9.82) * self.G_rho_dxdy * (c1 + c2 + c3)
+                    z_rtm[i, j] = (1 / 9.82) * (
+                        self._window_weighted_sum(z1 / d, small_rho)
+                        + self._window_weighted_sum((-1/6) * (z3 / d3), small_rho)
+                        + self._window_weighted_sum(0.075 * (z5 / d5), small_rho)
+                    )
 
                     # Moving window
                     m1 += 1
@@ -1200,7 +1240,9 @@ class TerrainQuantities:
         else:
             for i in tqdm(range(nrows_P), desc='Computing RTM height anomaly'):
                 for j in range(ncols_P):
+                    i_start, i_end, j_start, j_end = self.get_window_indices(i, j)
                     smallH, smallX, smallY, smallZ, smallH_ref = self.get_window(i, j, include_ref=True)
+                    small_rho = self._density_window(i_start, i_end, j_start, j_end)
                     x = self.coslamp[i, j] * (smallY - self.Yp[i, j]) - \
                         self.sinlamp[i, j] * (smallX - self.Xp[i, j])
                     y = self.cosphip[i, j] * (smallZ - self.Zp[i, j]) - \
@@ -1215,10 +1257,11 @@ class TerrainQuantities:
                     z1 = smallH - smallH_ref
                     z3 = smallH**3 - smallH_ref**3
                     z5 = smallH**5 - smallH_ref**5
-                    c1 = bn.nansum(z1 / d)
-                    c2 = -1/6 * bn.nansum(z3 / d3)
-                    c3 = 0.075 * bn.nansum(z5 / d5)
-                    z_rtm[i, j] = (1 / 9.82) * self.G_rho_dxdy * (c1 + c2 + c3)
+                    z_rtm[i, j] = (1 / 9.82) * (
+                        self._window_weighted_sum(z1 / d, small_rho)
+                        + self._window_weighted_sum((-1/6) * (z3 / d3), small_rho)
+                        + self._window_weighted_sum(0.075 * (z5 / d5), small_rho)
+                    )
 
         return z_rtm
 
@@ -1267,7 +1310,8 @@ class TerrainQuantities:
             delayed(compute_rtm_height_anomaly_chunk)(
                 row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
                 self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_rho_dxdy, HrefP, self.ref_topo['z'].values, window_indices
+                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                self.rho_grid is not None, HrefP, self.ref_topo['z'].values, window_indices
             ) for row_start, row_end in chunks
         )
 

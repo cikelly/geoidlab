@@ -11,7 +11,8 @@ def compute_tc_chunk(
     row_start: int, row_end: int, ncols_P: int, coslamp: np.ndarray, sinlamp: np.ndarray,
     cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray,
     X: np.ndarray, Y: np.ndarray, Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray,
-    Zp: np.ndarray, radius: float, G_rho_dxdy: float, window_indices: np.ndarray
+    Zp: np.ndarray, radius: float, G_dxdy: float, rho: float, rho_grid: np.ndarray,
+    use_variable_density: bool, window_indices: np.ndarray
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the terrain correction matrix.
@@ -56,6 +57,7 @@ def compute_tc_chunk(
             smallX = X[i_start:i_end, j_start:j_end]
             smallY = Y[i_start:i_end, j_start:j_end]
             smallZ = Z[i_start:i_end, j_start:j_end]
+            small_rho = rho_grid[i_start:i_end, j_start:j_end]
 
             # Local coordinates (x, y)
             x = coslamp_i[j] * (smallY - Yp[i, j]) - \
@@ -81,9 +83,14 @@ def compute_tc_chunk(
             DH4 = DH2 * DH2
             DH6 = DH4 * DH2
 
-            c1  = 0.5 *  G_rho_dxdy * np.nansum(DH2 / d3)      # 1/2
-            c2  = -0.375 * G_rho_dxdy * np.nansum(DH4 / d5)    # 3/8
-            c3  = 0.3125 * G_rho_dxdy * np.nansum(DH6 / d7)    # 5/16
+            if use_variable_density:
+                c1 = 0.5 * G_dxdy * np.nansum(small_rho * (DH2 / d3))
+                c2 = -0.375 * G_dxdy * np.nansum(small_rho * (DH4 / d5))
+                c3 = 0.3125 * G_dxdy * np.nansum(small_rho * (DH6 / d7))
+            else:
+                c1 = 0.5 * G_dxdy * rho * np.nansum(DH2 / d3)
+                c2 = -0.375 * G_dxdy * rho * np.nansum(DH4 / d5)
+                c3 = 0.3125 * G_dxdy * rho * np.nansum(DH6 / d7)
             tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
 
     return row_start, row_end, tc_chunk
@@ -170,8 +177,9 @@ def compute_tc_chunk_cap(
 def compute_rtm_tc_chunk(
     row_start: int, row_end: int, ncols_P: int, coslamp: np.ndarray, sinlamp: np.ndarray, 
     cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
-    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_rho_dxdy: float,
-    Hp_ref: np.ndarray, ref_topo: np.ndarray, window_indices: np.ndarray
+    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_dxdy: float,
+    rho: float, rho_grid: np.ndarray, use_variable_density: bool, Hp_ref: np.ndarray,
+    ref_topo: np.ndarray, window_indices: np.ndarray
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the terrain correction matrix.
@@ -214,6 +222,7 @@ def compute_rtm_tc_chunk(
             smallX = X[i_start:i_end, j_start:j_end]
             smallY = Y[i_start:i_end, j_start:j_end]
             smallZ = Z[i_start:i_end, j_start:j_end]
+            small_rho = rho_grid[i_start:i_end, j_start:j_end]
 
             # Local coordinates (x, y)
             x = coslamp_i[j] * (smallY - Yp[i, j]) - \
@@ -246,9 +255,14 @@ def compute_rtm_tc_chunk(
             
             # Integrate the RMT terrain correction
 
-            c1  = 0.5 *  G_rho_dxdy * np.nansum((DH_ref2 - DH2) / d3)      # 1/2
-            c2  = -0.375 * G_rho_dxdy * np.nansum((DH_ref4 - DH4) / d5)    # 3/8
-            c3  = 0.3125 * G_rho_dxdy * np.nansum((DH_ref6 - DH6) / d7)    # 5/16
+            if use_variable_density:
+                c1 = 0.5 * G_dxdy * np.nansum(small_rho * ((DH_ref2 - DH2) / d3))
+                c2 = -0.375 * G_dxdy * np.nansum(small_rho * ((DH_ref4 - DH4) / d5))
+                c3 = 0.3125 * G_dxdy * np.nansum(small_rho * ((DH_ref6 - DH6) / d7))
+            else:
+                c1 = 0.5 * G_dxdy * rho * np.nansum((DH_ref2 - DH2) / d3)
+                c2 = -0.375 * G_dxdy * rho * np.nansum((DH_ref4 - DH4) / d5)
+                c3 = 0.3125 * G_dxdy * rho * np.nansum((DH_ref6 - DH6) / d7)
             tc_chunk[i - row_start, j] = (c1 + c2 + c3) * 1e5  # [mGal]
 
     return row_start, row_end, tc_chunk
@@ -258,8 +272,8 @@ def compute_rtm_tc_chunk(
 def compute_ind_chunk(
     row_start: int, row_end: int, ncols_P: int, coslamp: np.ndarray, sinlamp: np.ndarray, 
     cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray, X: np.ndarray, Y: np.ndarray, 
-    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_rho_dxdy: float,
-    Hp_ref: np.ndarray, ref_topo: np.ndarray, window_indices: np.ndarray
+    Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray, Zp: np.ndarray, radius: float, G_dxdy: float,
+    rho: float, rho_grid: np.ndarray, use_variable_density: bool, window_indices: np.ndarray
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the indirect effect of Helmert's second method of condensation
@@ -303,6 +317,7 @@ def compute_ind_chunk(
             smallX = X[i_start:i_end, j_start:j_end]
             smallY = Y[i_start:i_end, j_start:j_end]
             smallZ = Z[i_start:i_end, j_start:j_end]
+            small_rho = rho_grid[i_start:i_end, j_start:j_end]
 
             # Local coordinates (x, y)
             x = coslamp_i[j] * (smallY - Yp[i, j]) - \
@@ -333,10 +348,15 @@ def compute_ind_chunk(
             H5  = H3 * smallH * smallH
             H7  = H5 * smallH * smallH
 
-            v2  = -1/6 * np.nansum((H3 - Hp3) / d3) 
-            v3  = 0.075 * np.nansum((H5 - Hp5) / d5)    # 3/40
-            v4  = -15/336 * np.nansum((H7 - Hp7) / d7)  
-            ind_chunk[i - row_start, j] = G_rho_dxdy * (v2 + v3 + v4)
+            if use_variable_density:
+                v2 = G_dxdy * np.nansum(small_rho * (((H3 - Hp3) / d3) * (-1/6)))
+                v3 = G_dxdy * np.nansum(small_rho * (((H5 - Hp5) / d5) * 0.075))
+                v4 = G_dxdy * np.nansum(small_rho * (((H7 - Hp7) / d7) * (-15/336)))
+            else:
+                v2 = G_dxdy * rho * np.nansum(((H3 - Hp3) / d3) * (-1/6))
+                v3 = G_dxdy * rho * np.nansum(((H5 - Hp5) / d5) * 0.075)
+                v4 = G_dxdy * rho * np.nansum(((H7 - Hp7) / d7) * (-15/336))
+            ind_chunk[i - row_start, j] = v2 + v3 + v4
 
     return row_start, row_end, ind_chunk
 
@@ -345,8 +365,8 @@ def compute_rtm_height_anomaly_chunk(
     row_start: int, row_end: int, ncols_P: int, coslamp: np.ndarray, sinlamp: np.ndarray,
     cosphip: np.ndarray, sinphip: np.ndarray, Hp: np.ndarray, ori_topo: np.ndarray,
     X: np.ndarray, Y: np.ndarray, Z: np.ndarray, Xp: np.ndarray, Yp: np.ndarray,
-    Zp: np.ndarray, radius: float, G_rho_dxdy: float, HrefP: np.ndarray, ref_topo: np.ndarray,
-    window_indices: np.ndarray
+    Zp: np.ndarray, radius: float, G_dxdy: float, rho: float, rho_grid: np.ndarray,
+    use_variable_density: bool, HrefP: np.ndarray, ref_topo: np.ndarray, window_indices: np.ndarray
 ) -> tuple[int, int, np.ndarray]:
     '''
     Compute a chunk of rows for the RTM height anomaly.
@@ -388,6 +408,7 @@ def compute_rtm_height_anomaly_chunk(
             smallX = X[i_start:i_end, j_start:j_end]
             smallY = Y[i_start:i_end, j_start:j_end]
             smallZ = Z[i_start:i_end, j_start:j_end]
+            small_rho = rho_grid[i_start:i_end, j_start:j_end]
 
             # Local coordinates (x, y)
             x = coslamp_i[j] * (smallY - Yp[i, j]) - \
@@ -411,9 +432,14 @@ def compute_rtm_height_anomaly_chunk(
             z5 = smallH**5 - smallH_ref**5
 
             # Integrate the RTM height anomaly
-            c1 = np.nansum(z1 / d)
-            c2 = -1/6 * np.nansum(z3 / d3)
-            c3 = 0.075 * np.nansum(z5 / d5)
-            z_rtm_chunk[i - row_start, j] = (1 / 9.82) * G_rho_dxdy * (c1 + c2 + c3)
+            if use_variable_density:
+                c1 = G_dxdy * np.nansum(small_rho * (z1 / d))
+                c2 = G_dxdy * np.nansum(small_rho * ((z3 / d3) * (-1/6)))
+                c3 = G_dxdy * np.nansum(small_rho * ((z5 / d5) * 0.075))
+            else:
+                c1 = G_dxdy * rho * np.nansum(z1 / d)
+                c2 = G_dxdy * rho * np.nansum((z3 / d3) * (-1/6))
+                c3 = G_dxdy * rho * np.nansum((z5 / d5) * 0.075)
+            z_rtm_chunk[i - row_start, j] = (1 / 9.82) * (c1 + c2 + c3)
 
     return row_start, row_end, z_rtm_chunk
