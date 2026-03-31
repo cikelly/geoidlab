@@ -4,13 +4,12 @@
 # Author: Caleb Kelly  (2024)                              #
 ############################################################
 
+from contextlib import contextmanager
+
 import numpy as np
 import xarray as xr
 import bottleneck as bn
 
-import time
-import sys
-import threading
 from pathlib import Path
 import warnings
 
@@ -28,6 +27,33 @@ from geoidlab.utils.io import save_to_netcdf
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
+from joblib.parallel import BatchCompletionCallBack
+
+
+@contextmanager
+def tqdm_joblib(total: int, desc: str, disable: bool=False):
+    '''
+    Display a tqdm progress bar that advances as joblib batches complete.
+    '''
+    if disable:
+        yield None
+        return
+
+    tqdm_bar = tqdm(total=total, desc=desc, unit='chunk')
+
+    class TqdmBatchCompletionCallback(BatchCompletionCallBack):
+        def __call__(self, *args, **kwargs):
+            tqdm_bar.update(self.batch_size)
+            return super().__call__(*args, **kwargs)
+
+    import joblib.parallel
+    original_callback = joblib.parallel.BatchCompletionCallBack
+    joblib.parallel.BatchCompletionCallBack = TqdmBatchCompletionCallback
+    try:
+        yield tqdm_bar
+    finally:
+        joblib.parallel.BatchCompletionCallBack = original_callback
+        tqdm_bar.close()
 
 class TerrainQuantities:
     '''
@@ -525,16 +551,6 @@ class TerrainQuantities:
         -------
         tc         : Terrain Correction
         '''
-        if progress:
-            def print_progress(stop_signal) -> None:
-                '''
-                Prints '#' every second to indicate progress.
-                '''
-                while not stop_signal.is_set():
-                    sys.stdout.write("#")
-                    sys.stdout.flush()
-                    time.sleep(1.5)  # Adjust the frequency as needed
-
         nrows_P, ncols_P = self.ori_P['z'].shape
         tc = np.zeros((nrows_P, ncols_P))
         Hp = self.ori_P['z'].values
@@ -545,12 +561,7 @@ class TerrainQuantities:
             for i in range(0, nrows_P, chunk_size)
         ]
 
-        print('Computing terrain correction...') 
-
-        if progress:
-            stop_signal = threading.Event()
-            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
-            progress_thread.start()
+        print('Computing terrain correction...')
 
         # Precompute window indices as a Numpy array
         window_indices = np.zeros((nrows_P, ncols_P, 4), dtype=np.int32)
@@ -558,19 +569,15 @@ class TerrainQuantities:
             for j in range(ncols_P):
                 window_indices[i, j] = self.get_window_indices(i, j)
 
-        results = Parallel(n_jobs=-1)(
-            delayed(compute_tc_chunk)(
-                row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
-                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
-                self.rho_grid is not None, window_indices
-            ) for row_start, row_end in chunks
-        )
-
-        if progress:
-            stop_signal.set()
-            progress_thread.join()
-            print('\nCompleted.')
+        with tqdm_joblib(total=len(chunks), desc='Computing terrain correction', disable=not progress):
+            results = Parallel(n_jobs=-1)(
+                delayed(compute_tc_chunk)(
+                    row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
+                    self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
+                    self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                    self.rho_grid is not None, window_indices
+                ) for row_start, row_end in chunks
+            )
 
         # Collect results
         for row_start, row_end, tc_chunk in results:
@@ -773,16 +780,6 @@ class TerrainQuantities:
         -------
         dg_RTM     : Residual terrain (RTM) gravity anomalies
         '''
-        if progress:
-            def print_progress(stop_signal) -> None:
-                '''
-                Prints '#' every second to indicate progress.
-                '''
-                while not stop_signal.is_set():
-                    sys.stdout.write("#")
-                    sys.stdout.flush()
-                    time.sleep(1.5)  # Adjust the frequency as needed
-        
         nrows_P, ncols_P = self.ori_P['z'].shape
         dg_RTM = np.zeros((nrows_P, ncols_P))
         Hp     = self.ori_P['z'].values
@@ -796,11 +793,6 @@ class TerrainQuantities:
         
         print('Computing RTM terrain correction...')
         
-        if progress:
-            stop_signal = threading.Event()
-            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
-            progress_thread.start()
-        
         # Precompute window indices as a Numpy array
         window_indices = np.zeros((nrows_P, ncols_P, 4), dtype=np.int32)
         for i in range(nrows_P):
@@ -808,19 +800,15 @@ class TerrainQuantities:
                 window_indices[i, j] = self.get_window_indices(i, j)
                 
         # Submit tasks for each chunk
-        results = Parallel(n_jobs=-1)(
-            delayed(compute_rtm_tc_chunk)(
-                row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
-                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
-                self.rho_grid is not None, Hp_ref, self.ref_topo['z'].values, window_indices
-            ) for row_start, row_end in chunks
-        )
-        
-        if progress:
-            stop_signal.set()
-            progress_thread.join()
-            print('\nCompleted.')
+        with tqdm_joblib(total=len(chunks), desc='Computing RTM terrain correction', disable=not progress):
+            results = Parallel(n_jobs=-1)(
+                delayed(compute_rtm_tc_chunk)(
+                    row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
+                    self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
+                    self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                    self.rho_grid is not None, Hp_ref, self.ref_topo['z'].values, window_indices
+                ) for row_start, row_end in chunks
+            )
         
         # Collect results
         for row_start, row_end, dg_RTM_chunk in results:
@@ -1039,16 +1027,6 @@ class TerrainQuantities:
         -------
         ind        : Indirect effect
         '''
-        if progress:
-            def print_progress(stop_signal) -> None:
-                '''
-                Prints '#' every second to indicate progress.
-                '''
-                while not stop_signal.is_set():
-                    sys.stdout.write("#")
-                    sys.stdout.flush()
-                    time.sleep(1.5)  # Adjust the frequency as needed
-
         nrows_P, ncols_P = self.ori_P['z'].shape
         dV2 = np.zeros((nrows_P, ncols_P)) # Potential change of irregular part
         Hp = self.ori_P['z'].values
@@ -1066,11 +1044,6 @@ class TerrainQuantities:
 
         print('Computing potential change of irregular part...') 
         
-        if progress:
-            stop_signal = threading.Event()
-            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
-            progress_thread.start()
-
         # Precompute window indices as a NumPy array
         window_indices = np.zeros((nrows_P, ncols_P, 4), dtype=np.int32)
         for i in range(nrows_P):
@@ -1078,19 +1051,15 @@ class TerrainQuantities:
                 window_indices[i, j] = self.get_window_indices(i, j)
         
         # Submit tasks for each chunk
-        results = Parallel(n_jobs=-1)(
-            delayed(compute_ind_chunk)(
-                row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
-                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
-                self.rho_grid is not None, window_indices
-            ) for row_start, row_end in chunks
-        )
-        
-        if progress:
-            stop_signal.set()
-            progress_thread.join()
-            print('\nCompleted.')
+        with tqdm_joblib(total=len(chunks), desc='Computing potential change of irregular part', disable=not progress):
+            results = Parallel(n_jobs=-1)(
+                delayed(compute_ind_chunk)(
+                    row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
+                    self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
+                    self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                    self.rho_grid is not None, window_indices
+                ) for row_start, row_end in chunks
+            )
         
         # Collect results
         for row_start, row_end, ind_chunk in results:
@@ -1281,13 +1250,6 @@ class TerrainQuantities:
         if self.ref_topo is None or self.ref_P is None:
             raise ValueError("Reference topography (ref_topo) is required for RTM height anomaly computation")
 
-        if progress:
-            def print_progress(stop_signal) -> None:
-                while not stop_signal.is_set():
-                    sys.stdout.write("#")
-                    sys.stdout.flush()
-                    time.sleep(1.5)
-
         nrows_P, ncols_P = self.ori_P['z'].shape
         z_rtm = np.zeros((nrows_P, ncols_P))
         Hp = self.ori_P['z'].values
@@ -1296,29 +1258,20 @@ class TerrainQuantities:
         chunks = [(i, min(i + chunk_size, nrows_P)) for i in range(0, nrows_P, chunk_size)]
         print('Computing RTM height anomaly...')
 
-        if progress:
-            stop_signal = threading.Event()
-            progress_thread = threading.Thread(target=print_progress, args=(stop_signal,))
-            progress_thread.start()
-
         window_indices = np.zeros((nrows_P, ncols_P, 4), dtype=np.int32)
         for i in range(nrows_P):
             for j in range(ncols_P):
                 window_indices[i, j] = self.get_window_indices(i, j)
 
-        results = Parallel(n_jobs=-1)(
-            delayed(compute_rtm_height_anomaly_chunk)(
-                row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
-                self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
-                self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
-                self.rho_grid is not None, HrefP, self.ref_topo['z'].values, window_indices
-            ) for row_start, row_end in chunks
-        )
-
-        if progress:
-            stop_signal.set()
-            progress_thread.join()
-            print('\nCompleted.')
+        with tqdm_joblib(total=len(chunks), desc='Computing RTM height anomaly', disable=not progress):
+            results = Parallel(n_jobs=-1)(
+                delayed(compute_rtm_height_anomaly_chunk)(
+                    row_start, row_end, ncols_P, self.coslamp, self.sinlamp, self.cosphip,
+                    self.sinphip, Hp, self.ori_topo['z'].values, self.X, self.Y, self.Z, self.Xp,
+                    self.Yp, self.Zp, self.radius, self.G_dxdy, self.rho, self.rho_grid_numba,
+                    self.rho_grid is not None, HrefP, self.ref_topo['z'].values, window_indices
+                ) for row_start, row_end in chunks
+            )
 
         for row_start, row_end, z_rtm_chunk in results:
             z_rtm[row_start:row_end, :] = z_rtm_chunk
