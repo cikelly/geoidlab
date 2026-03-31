@@ -1335,8 +1335,13 @@ class TerrainQuantities:
                 if any(possible_name in lower_name for possible_name in possible_names):
                     rename_dict[name] = standard_name
                     break
-        
-        return ds.rename(rename_dict)
+
+        ds = ds.rename(rename_dict)
+        if 'x' in ds.coords and ds['x'].size > 1 and ds['x'].values[0] > ds['x'].values[-1]:
+            ds = ds.sortby('x')
+        if 'y' in ds.coords and ds['y'].size > 1 and ds['y'].values[0] > ds['y'].values[-1]:
+            ds = ds.sortby('y')
+        return ds
             
     @staticmethod
     def km2deg(km:float, radius:float=6371.) -> float:

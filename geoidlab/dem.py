@@ -73,6 +73,13 @@ def standardize_dem_dataset(
         raise ValueError('DEM dataset must contain a height/elevation variable that can be standardized to "z".')
     if 'x' not in ds.coords or 'y' not in ds.coords:
         raise ValueError('DEM dataset must contain longitude and latitude coordinates that can be standardized to "x" and "y".')
+
+    # TerrainQuantities slices with increasing x/y bounds, so normalize
+    # DEM coordinates to ascending order regardless of raster source.
+    if ds['x'].size > 1 and ds['x'].values[0] > ds['x'].values[-1]:
+        ds = ds.sortby('x')
+    if ds['y'].size > 1 and ds['y'].values[0] > ds['y'].values[-1]:
+        ds = ds.sortby('y')
     return ds
 
 def get_readme_path() -> Path:
@@ -842,6 +849,7 @@ def download_dem_cog(
         
     dem['z'] = dem['z'].where(dem['z'] != nodata_value, np.nan)
     dem = dem.squeeze(dim='band')
+    dem = standardize_dem_dataset(dem)
     # dem = dem.drop_vars('band')
     print(f'DEM created successfully in {time.time() - start_time:.2f} seconds!\n')
     
