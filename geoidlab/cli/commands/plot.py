@@ -33,6 +33,53 @@ UNIT_CONVERSIONS = {
 
 cpt_list = cpt_cmap(cpt_list=True)
 
+
+def load_boundary_data(boundary_path: str) -> list[tuple[np.ndarray, np.ndarray]]:
+    '''
+    Load boundary linework from a CSV or shapefile.
+
+    Returns
+    -------
+    segments : list of (lon, lat) arrays
+    '''
+    path = Path(boundary_path)
+    suffix = path.suffix.lower()
+
+    if suffix == '.csv':
+        boundary_data = pd.read_csv(path)
+        if 'lon' not in boundary_data.columns or 'lat' not in boundary_data.columns:
+            raise ValueError(f'Boundary file {boundary_path} must contain "lon" and "lat" columns.')
+        return [(boundary_data['lon'].to_numpy(), boundary_data['lat'].to_numpy())]
+
+    if suffix == '.shp':
+        try:
+            import shapefile
+        except ImportError as exc:
+            raise ImportError(
+                'Shapefile boundary plotting requires the "pyshp" package.'
+            ) from exc
+
+        segments: list[tuple[np.ndarray, np.ndarray]] = []
+        reader = shapefile.Reader(str(path))
+        for shape in reader.shapes():
+            if not shape.points:
+                continue
+            points = np.asarray(shape.points, dtype=float)
+            parts = list(shape.parts) + [len(points)]
+            for start, end in zip(parts[:-1], parts[1:]):
+                segment = points[start:end]
+                if len(segment) == 0:
+                    continue
+                segments.append((segment[:, 0], segment[:, 1]))
+
+        if not segments:
+            raise ValueError(f'No plottable linework found in shapefile {boundary_path}.')
+        return segments
+
+    raise ValueError(
+        f'Unsupported boundary file format: {boundary_path}. Supported formats are .csv and .shp.'
+    )
+
 def get_colormap(cmap_name: str) -> Colormap:
     '''Retrieve colormap by name, handling custom and GMT .cpt colormaps'''
     if cmap_name in CUSTOM_CMAPS:
@@ -88,7 +135,7 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
-    parser.add_argument('--boundary', type=str, help='CSV file containing boundary coordinates (columns: lon, lat)')
+    parser.add_argument('--boundary', type=str, help='Boundary file to overlay (.csv with lon/lat columns or .shp shapefile)')
     parser.add_argument('--bound-color', type=str, default='k', help='Color for boundary lines (default: k)')
     parser.add_argument('--bound-linewidth', type=float, default=1.2, help='Line width for boundary lines (default: 1.2)')
     parser.add_argument('--sharex', action='store_true', help='Share x-axis between subplots')
@@ -161,10 +208,7 @@ def main(args=None) -> None:
     boundary_data = None
     if args.boundary:
         try:
-            boundary_data = pd.read_csv(args.boundary)
-            if 'lon' not in boundary_data.columns or 'lat' not in boundary_data.columns:
-                print(f'Warning: Boundary file {args.boundary} must contain "lon" and "lat" columns. Skipping boundary plotting.')
-                boundary_data = None
+            boundary_data = load_boundary_data(args.boundary)
         except Exception as e:
             print(f'Warning: Could not load boundary file {args.boundary}: {e}. Skipping boundary plotting.')
             boundary_data = None
@@ -457,10 +501,11 @@ def main(args=None) -> None:
         # Add boundary if specified
         if boundary_data is not None:
             boundary_kwargs = {'color': args.bound_color, 'linewidth': args.bound_linewidth}
-            if use_cartopy:
-                ax.plot(boundary_data.lon, boundary_data.lat, transform=data_crs, **boundary_kwargs)
-            else:
-                ax.plot(boundary_data.lon, boundary_data.lat, **boundary_kwargs)
+            for boundary_lon, boundary_lat in boundary_data:
+                if use_cartopy:
+                    ax.plot(boundary_lon, boundary_lat, transform=data_crs, **boundary_kwargs)
+                else:
+                    ax.plot(boundary_lon, boundary_lat, **boundary_kwargs)
 
         colorbar_kwargs = {}
         if use_cartopy:
