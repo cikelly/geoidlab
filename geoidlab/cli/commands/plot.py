@@ -7,8 +7,12 @@ import pandas as pd
 
 from typing import Callable
 from pathlib import Path
-from matplotlib.colors import Colormap
+from numbers import Number
+from matplotlib.colors import Colormap, LightSource, Normalize
+from matplotlib.cm import ScalarMappable
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+from matplotlib.transforms import Bbox
 
 try:
     import cartopy.crs as ccrs
@@ -80,6 +84,150 @@ def load_boundary_data(boundary_path: str) -> list[tuple[np.ndarray, np.ndarray]
         f'Unsupported boundary file format: {boundary_path}. Supported formats are .csv and .shp.'
     )
 
+
+def build_relief_image(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    data: np.ndarray,
+    cmap: Colormap,
+    vmin: float | None,
+    vmax: float | None,
+    azdeg: float,
+    altdeg: float,
+    exaggeration: float,
+) -> tuple[np.ndarray, Normalize, str]:
+    '''
+    Build a shaded-relief RGB image from gridded data.
+    '''
+    lon = np.asarray(lon)
+    lat = np.asarray(lat)
+    data = np.asarray(data, dtype=float)
+
+    finite = data[np.isfinite(data)]
+    if finite.size == 0:
+        raise ValueError('Cannot build relief image from an array with no finite values.')
+
+    data_min = float(np.nanmin(finite)) if vmin is None else float(vmin)
+    data_max = float(np.nanmax(finite)) if vmax is None else float(vmax)
+    if np.isclose(data_min, data_max):
+        data_max = data_min + 1e-12
+
+    norm = Normalize(vmin=data_min, vmax=data_max)
+    shaded_data = np.nan_to_num(data, nan=data_min)
+
+    dx = float(np.nanmedian(np.abs(np.diff(lon)))) if lon.size > 1 else 1.0
+    dy = float(np.nanmedian(np.abs(np.diff(lat)))) if lat.size > 1 else 1.0
+    if dx == 0:
+        dx = 1.0
+    if dy == 0:
+        dy = 1.0
+
+    light_source = LightSource(azdeg=azdeg, altdeg=altdeg)
+    relief_image = light_source.shade(
+        shaded_data,
+        cmap=cmap,
+        norm=norm,
+        blend_mode='overlay',
+        vert_exag=exaggeration,
+        dx=dx,
+        dy=dy,
+    )
+
+    if np.isnan(data).any():
+        relief_image = relief_image.copy()
+        relief_image[np.isnan(data), -1] = 0.0
+
+    origin = 'lower' if lat[0] <= lat[-1] else 'upper'
+    return relief_image, norm, origin
+
+
+def build_surface_coordinates(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    data: np.ndarray,
+    exaggeration: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    '''
+    Convert lon/lat/elevation grids to locally scaled surface coordinates in km.
+
+    The vertical axis is visually scaled relative to the map span so oblique
+    surface plots read like a terrain block diagram instead of a tilted map.
+    '''
+    lon = np.asarray(lon, dtype=float)
+    lat = np.asarray(lat, dtype=float)
+    data = np.asarray(data, dtype=float)
+
+    lon0 = float(np.nanmean(lon))
+    lat0 = float(np.nanmean(lat))
+    km_per_deg_lat = 111.32
+    km_per_deg_lon = km_per_deg_lat * np.cos(np.deg2rad(lat0))
+    if np.isclose(km_per_deg_lon, 0.0):
+        km_per_deg_lon = km_per_deg_lat
+
+    x = (lon - lon0) * km_per_deg_lon
+    y = (lat - lat0) * km_per_deg_lat
+    x2d, y2d = np.meshgrid(x, y)
+
+    finite = data[np.isfinite(data)]
+    z_fill = float(np.nanmin(finite)) if finite.size else 0.0
+    z_km = np.nan_to_num(data, nan=z_fill) / 1000.0
+
+    z_min = float(np.nanmin(z_km))
+    z_max = float(np.nanmax(z_km))
+    z_range = max(z_max - z_min, 1e-6)
+    horizontal_span = max(np.ptp(x), np.ptp(y), 1.0)
+
+    # Scale the relief to a visible fraction of the horizontal map span.
+    vertical_span = 0.25 * horizontal_span * exaggeration
+    z2d = ((z_km - z_min) / z_range) * vertical_span
+
+    return x2d, y2d, z2d, z_min
+
+
+def parse_save_pad(values) -> tuple[float | None, float | None, float | None, float | None]:
+    '''
+    Parse save padding as LEFT [RIGHT] [BOTTOM] [TOP].
+    Values may be numeric or the string "None".
+    '''
+    if values is None:
+        return (None, None, None, None)
+
+    parsed = []
+    for value in values[:4]:
+        if isinstance(value, str) and value.lower() == 'none':
+            parsed.append(None)
+        else:
+            parsed.append(float(value))
+
+    while len(parsed) < 4:
+        parsed.append(None)
+
+    return tuple(parsed)
+
+
+def apply_save_pad(fig, renderer, bbox, save_pad) -> Bbox:
+    '''
+    Apply asymmetric per-side padding/cropping to a bbox in inches.
+    Positive values expand outward; negative values crop inward.
+    '''
+    if save_pad is None:
+        return bbox
+
+    left, right, bottom, top = save_pad
+    x0, y0, x1, y1 = bbox.extents
+
+    if isinstance(left, Number):
+        x0 -= left
+    if isinstance(right, Number):
+        x1 += right
+    if isinstance(bottom, Number):
+        y0 -= bottom
+    if isinstance(top, Number):
+        y1 += top
+
+    return Bbox.from_extents(x0, y0, x1, y1)
+
+
 def get_colormap(cmap_name: str) -> Colormap:
     '''Retrieve colormap by name, handling custom and GMT .cpt colormaps'''
     if cmap_name in CUSTOM_CMAPS:
@@ -125,9 +273,20 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--title-font-size', type=int, default=12, help='Font size for title')
     parser.add_argument('--font-family', type=str, default='Arial', help='Font family for labels')
     parser.add_argument('--cbar-title', type=str, default=None, help='Title for colorbar')
+    parser.add_argument('--cbar-orientation', type=str, default='vertical', choices=['horizontal', 'vertical'], help='Orientation for per-panel colorbars.')
+    parser.add_argument('--cbar-shrink', type=float, default=1.0, help='Shrink factor for per-panel colorbars.')
+    parser.add_argument('--cbar-pad', type=float, default=None, help='Padding between the plot and per-panel colorbar.')
     parser.add_argument('--list-cmaps', action='store_true', help='List available colormaps and exit')
     parser.add_argument('--save', action='store_true', help='Save figure')
     parser.add_argument('--dpi', type=int, default=300, help='DPI for saving figure')
+    parser.add_argument(
+        '--save-pad',
+        nargs='*',
+        default=None,
+        help='Extra save padding/cropping in inches as LEFT [RIGHT] [BOTTOM] [TOP]. '
+             'Use numeric values or "None". Positive expands outward; negative crops inward. '
+             'Examples: --save-pad 0.2, --save-pad 0.1 -0.1, --save-pad None -0.2 None None'
+    )
     parser.add_argument('-pn', '--proj-name', type=str, default='GeoidProject', help='Name of the project')
     parser.add_argument('--xlim', type=float, nargs=2, default=None, help='X-axis limits')
     parser.add_argument('--ylim', type=float, nargs=2, default=None, help='Y-axis limits')
@@ -135,6 +294,14 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--scalebar-units', type=str, default='km', choices=['km', 'degrees'], help='Scalebar units')
     parser.add_argument('--scalebar-fancy', action='store_true', help='Use fancy scalebar')
     parser.add_argument('-u', '--unit', type=str, default=None, choices=['m', 'cm', 'mm'], help='Unit to display data with length units')
+    parser.add_argument('--relief', action='store_true', help='Render the grid as a shaded-relief 2D map instead of pcolormesh.')
+    parser.add_argument('--relief-exaggeration', type=float, default=10.0, help='Vertical exaggeration used for shaded relief.')
+    parser.add_argument('--relief-azdeg', type=float, default=135.0, help='Illumination azimuth in degrees for shaded relief.')
+    parser.add_argument('--relief-altdeg', type=float, default=45.0, help='Illumination altitude in degrees for shaded relief.')
+    parser.add_argument('--surface', action='store_true', help='Render the grid as an oblique surface on 3D axes.')
+    parser.add_argument('--surface-exaggeration', type=float, default=0.5, help='Vertical exaggeration used for surface rendering.')
+    parser.add_argument('--surface-elev', type=float, default=30.0, help='Camera elevation angle in degrees for surface rendering.')
+    parser.add_argument('--surface-azim', type=float, default=-110.0, help='Camera azimuth angle in degrees for surface rendering.')
     parser.add_argument('--boundary', type=str, help='Boundary file to overlay (.csv with lon/lat columns or .shp shapefile)')
     parser.add_argument('--bound-color', type=str, default='k', help='Color for boundary lines (default: k)')
     parser.add_argument('--bound-linewidth', type=float, default=1.2, help='Line width for boundary lines (default: 1.2)')
@@ -194,6 +361,22 @@ def main(args=None) -> None:
         return 0
 
     contour_levels = parse_contour_levels(getattr(args, 'contour_levels', None))
+    try:
+        save_pad = parse_save_pad(args.save_pad)
+    except ValueError as exc:
+        print(f'Warning: Invalid --save-pad value ({exc}). Ignoring save padding override.')
+        save_pad = (None, None, None, None)
+    if args.cbar_shrink <= 0:
+        print('Warning: --cbar-shrink must be positive. Using default value of 1.0.')
+        args.cbar_shrink = 1.0
+    if args.relief and args.relief_exaggeration <= 0:
+        print('Warning: --relief-exaggeration must be positive. Using default value of 10.0.')
+        args.relief_exaggeration = 10.0
+    if args.surface and args.surface_exaggeration <= 0:
+        print('Warning: --surface-exaggeration must be positive. Using default value of 1.0.')
+        args.surface_exaggeration = 1.0
+    if args.surface and args.relief:
+        print('Warning: --surface and --relief were both provided. Using --surface.')
     
     # Ensure we have a filename
     if not args.filename:
@@ -311,9 +494,12 @@ def main(args=None) -> None:
     nrows, ncols = determine_layout(total_panels)
 
     # Determine sharing parameters and subplot kwargs
-    use_cartopy = bool(args.global_plot and HAS_CARTOPY)
+    use_surface = bool(args.surface)
+    use_cartopy = bool(args.global_plot and HAS_CARTOPY and not use_surface)
     if args.global_plot and not HAS_CARTOPY:
         print('Warning: --global-plot requested but Cartopy is not installed. Install cartopy to enable global plotting. Falling back to standard plotting.')
+    if use_surface and args.global_plot:
+        print('Warning: --global-plot is not supported with --surface. Ignoring global plot settings.')
     sharex = 'all' if args.sharex else False
     sharey = 'all' if args.sharey else False
     subplot_kwargs = {}
@@ -322,7 +508,11 @@ def main(args=None) -> None:
     global_cbar_orientation = args.global_cbar_orientation
     global_cbar_shrink = args.global_cbar_shrink
     global_cbar_pad = args.global_cbar_pad
-    if use_cartopy:
+    if use_surface:
+        sharex = False
+        sharey = False
+        subplot_kwargs['subplot_kw'] = {'projection': '3d'}
+    elif use_cartopy:
         projection = get_cartopy_projection(args.projection)
         if projection is None:
             use_cartopy = False
@@ -378,6 +568,8 @@ def main(args=None) -> None:
     shared_colorbar_label = None
     shared_cmap_name = args.cmap[0] if args.cmap else None
     skip_scalebar_warning = False
+    skip_boundary_warning = False
+    skip_surface_contour_warning = False
     visible_axes = []
     last_pcm = None
     for i, (ds, var) in enumerate(file_variables):
@@ -406,15 +598,109 @@ def main(args=None) -> None:
             cmap_name = args.cmap[i % len(args.cmap)]
             cmap = get_colormap(cmap_name)
 
-        if use_cartopy:
+        plot_vmin = shared_vmin if args.share_cbar else args.vmin
+        plot_vmax = shared_vmax if args.share_cbar else args.vmax
+
+        if use_surface:
+            finite = data[np.isfinite(data)]
+            if finite.size == 0:
+                raise ValueError('Surface plotting requires at least one finite grid value.')
+            surface_vmin = float(np.nanmin(finite)) if plot_vmin is None else float(plot_vmin)
+            surface_vmax = float(np.nanmax(finite)) if plot_vmax is None else float(plot_vmax)
+            if np.isclose(surface_vmin, surface_vmax):
+                surface_vmax = surface_vmin + 1e-12
+            surface_norm = Normalize(vmin=surface_vmin, vmax=surface_vmax)
+            shaded_surface = np.nan_to_num(data, nan=surface_vmin)
+            x_surface, y_surface, z_surface, _z_offset_km = build_surface_coordinates(
+                lon=lon,
+                lat=lat,
+                data=data,
+                exaggeration=args.surface_exaggeration,
+            )
+            facecolors = cmap(surface_norm(shaded_surface))
+            facecolors[np.isnan(data), -1] = 0.0
+            pcm = ScalarMappable(norm=surface_norm, cmap=cmap)
+            pcm.set_array(data)
+            ax.plot_surface(
+                x_surface,
+                y_surface,
+                z_surface,
+                facecolors=facecolors,
+                rstride=1,
+                cstride=1,
+                linewidth=0,
+                antialiased=False,
+                shade=False,
+            )
+            if args.contour:
+                if not skip_surface_contour_warning:
+                    print('Warning: --contour is not currently supported with --surface. Skipping contours.')
+                    skip_surface_contour_warning = True
+            ax.view_init(elev=args.surface_elev, azim=args.surface_azim)
+            ax.set_box_aspect((
+                np.ptp(x_surface) if x_surface.size > 1 else 1.0,
+                np.ptp(y_surface) if y_surface.size > 1 else 1.0,
+                max(np.ptp(z_surface), 1.0),
+            ))
+            ax.set_xlim(float(np.nanmin(x_surface)), float(np.nanmax(x_surface)))
+            ax.set_ylim(float(np.nanmin(y_surface)), float(np.nanmax(y_surface)))
+            if args.xlim:
+                lon0 = float(np.nanmean(lon))
+                lat0 = float(np.nanmean(lat))
+                km_per_deg_lon = 111.32 * np.cos(np.deg2rad(lat0))
+                ax.set_xlim((np.asarray(args.xlim, dtype=float) - lon0) * km_per_deg_lon)
+            if args.ylim:
+                lat0 = float(np.nanmean(lat))
+                ax.set_ylim((np.asarray(args.ylim, dtype=float) - lat0) * 111.32)
+            z_finite = z_surface[np.isfinite(z_surface)]
+            if z_finite.size:
+                ax.set_zlim(float(np.nanmin(z_finite)), float(np.nanmax(z_finite)))
+            ax.set_axis_off()
+        elif args.relief:
+            relief_image, relief_norm, relief_origin = build_relief_image(
+                lon=lon,
+                lat=lat,
+                data=data,
+                cmap=cmap,
+                vmin=plot_vmin,
+                vmax=plot_vmax,
+                azdeg=args.relief_azdeg,
+                altdeg=args.relief_altdeg,
+                exaggeration=args.relief_exaggeration,
+            )
+            extent = [
+                float(np.nanmin(lon)),
+                float(np.nanmax(lon)),
+                float(np.nanmin(lat)),
+                float(np.nanmax(lat)),
+            ]
+            if use_cartopy:
+                ax.imshow(
+                    relief_image,
+                    extent=extent,
+                    origin=relief_origin,
+                    transform=data_crs,
+                    interpolation='nearest',
+                )
+            else:
+                ax.imshow(
+                    relief_image,
+                    extent=extent,
+                    origin=relief_origin,
+                    interpolation='nearest',
+                    aspect='auto',
+                )
+            pcm = ScalarMappable(norm=relief_norm, cmap=cmap)
+            pcm.set_array(data)
+        elif use_cartopy:
             pcm = ax.pcolormesh(
                 lon,
                 lat,
                 data,
                 cmap=cmap,
                 shading='auto',
-                vmin=shared_vmin if args.share_cbar else args.vmin,
-                vmax=shared_vmax if args.share_cbar else args.vmax,
+                vmin=plot_vmin,
+                vmax=plot_vmax,
                 transform=data_crs,
             )
         else:
@@ -424,12 +710,12 @@ def main(args=None) -> None:
                 data,
                 cmap=cmap,
                 shading='auto',
-                vmin=shared_vmin if args.share_cbar else args.vmin,
-                vmax=shared_vmax if args.share_cbar else args.vmax,
+                vmin=plot_vmin,
+                vmax=plot_vmax,
             )
         last_pcm = pcm
 
-        if args.contour:
+        if args.contour and not use_surface:
             contour_kwargs = {
                 'colors': args.contour_color,
                 'linewidths': args.contour_linewidth,
@@ -462,7 +748,8 @@ def main(args=None) -> None:
                 else:
                     return f"x={x:.2f}, y={y:.2f}"
             return format_coord
-        ax.format_coord = make_format_coord(lon, lat, data)
+        if not use_surface:
+            ax.format_coord = make_format_coord(lon, lat, data)
 
         # Get long_name for use in title and colorbar
         long_name = var.attrs.get('long_name', var.name)
@@ -479,7 +766,9 @@ def main(args=None) -> None:
 
         ax.set_title(title, fontweight='bold', fontsize=args.title_font_size)
 
-        if use_cartopy:
+        if use_surface:
+            ax.grid(True, linewidth=0.3, alpha=0.4)
+        elif use_cartopy:
             if args.xlim or args.ylim:
                 lon_extent = args.xlim if args.xlim else (float(np.nanmin(lon)), float(np.nanmax(lon)))
                 lat_extent = args.ylim if args.ylim else (float(np.nanmin(lat)), float(np.nanmax(lat)))
@@ -501,11 +790,16 @@ def main(args=None) -> None:
         # Add boundary if specified
         if boundary_data is not None:
             boundary_kwargs = {'color': args.bound_color, 'linewidth': args.bound_linewidth}
-            for boundary_lon, boundary_lat in boundary_data:
-                if use_cartopy:
-                    ax.plot(boundary_lon, boundary_lat, transform=data_crs, **boundary_kwargs)
-                else:
-                    ax.plot(boundary_lon, boundary_lat, **boundary_kwargs)
+            if use_surface:
+                if not skip_boundary_warning:
+                    print('Warning: --boundary is not currently supported with --surface. Skipping boundary overlay.')
+                    skip_boundary_warning = True
+            else:
+                for boundary_lon, boundary_lat in boundary_data:
+                    if use_cartopy:
+                        ax.plot(boundary_lon, boundary_lat, transform=data_crs, **boundary_kwargs)
+                    else:
+                        ax.plot(boundary_lon, boundary_lat, **boundary_kwargs)
 
         colorbar_kwargs = {}
         if use_cartopy:
@@ -513,6 +807,22 @@ def main(args=None) -> None:
                 'orientation': global_cbar_orientation,
                 'shrink': global_cbar_shrink,
                 'pad': global_cbar_pad,
+            }
+        elif use_surface:
+            colorbar_kwargs = {
+                'orientation': args.cbar_orientation,
+                'shrink': args.cbar_shrink,
+                'pad': (
+                    args.cbar_pad
+                    if args.cbar_pad is not None
+                    else (0.02 if args.cbar_orientation == 'horizontal' else 0.03)
+                ),
+            }
+        else:
+            colorbar_kwargs = {
+                'orientation': args.cbar_orientation,
+                'shrink': args.cbar_shrink,
+                **({'pad': args.cbar_pad} if args.cbar_pad is not None else {}),
             }
 
         colorbar_label = None
@@ -536,7 +846,11 @@ def main(args=None) -> None:
 
         # Add scalebar
         if args.scalebar:
-            if use_cartopy:
+            if use_surface:
+                if not skip_scalebar_warning:
+                    print('Warning: Scalebar is not supported with --surface. Skipping scalebar.')
+                    skip_scalebar_warning = True
+            elif use_cartopy:
                 if not skip_scalebar_warning:
                     print('Warning: Scalebar is not supported for projected global plots. Skipping scalebar.')
                     skip_scalebar_warning = True
@@ -634,7 +948,9 @@ def main(args=None) -> None:
         for tick in cbar.ax.get_xticklabels():
             tick.set_fontsize(args.shared_cbar_font_size)
     
-    if not args.share_cbar:
+    if use_surface:
+        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.96, wspace=0.02, hspace=0.02)
+    elif not args.share_cbar:
         plt.tight_layout()
     
     if args.save:
@@ -645,8 +961,14 @@ def main(args=None) -> None:
             # For multiple files, create a combined filename
             file_names = [f.split('/')[-1].split('.')[0] for f in args.filename]
             file_name = '_'.join(file_names)
+        if use_surface:
+            file_name = f'{file_name}_3D'
         output_path = figures_dir / f'{file_name}.png'
-        plt.savefig(output_path, dpi=args.dpi, bbox_inches='tight')
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        save_bbox = apply_save_pad(fig, renderer, tight_bbox, save_pad)
+        plt.savefig(output_path, dpi=args.dpi, bbox_inches=save_bbox, pad_inches=0.0)
         print(f'Figure saved to: {output_path.absolute()}')
     else:
         plt.show()
