@@ -228,6 +228,68 @@ def apply_save_pad(fig, renderer, bbox, save_pad) -> Bbox:
     return Bbox.from_extents(x0, y0, x1, y1)
 
 
+def add_panel_colorbar(fig, ax, mappable, label: str, args, use_surface: bool=False):
+    '''
+    Add a per-panel colorbar with side or inset-corner placement.
+    '''
+    inset_locations = {'upper-right', 'lower-right', 'upper-left', 'lower-left'}
+
+    if args.cbar_location in inset_locations:
+        shrink = max(args.cbar_shrink, 0.05)
+        pad = args.cbar_pad if args.cbar_pad is not None else 0.01
+        edge_margin = 0.01
+        # 3D axes can mutate their active drawing box as the camera and aspect
+        # change. Use the original subplot slot so corner colorbars stay
+        # anchored to the requested corner instead of drifting across the figure.
+        ax_pos = ax.get_position(original=True).frozen()
+        ax_x0, ax_y0, ax_w, ax_h = ax_pos.bounds
+
+        if args.cbar_orientation == 'vertical':
+            cbar_w = 0.018
+            cbar_h = ax_h * max(0.18, min(0.9, 0.5 * shrink))
+            if 'right' in args.cbar_location:
+                x0 = ax_x0 + ax_w - cbar_w - pad
+            else:
+                x0 = ax_x0 + pad
+
+            if 'upper' in args.cbar_location:
+                y0 = ax_y0 + ax_h - cbar_h - edge_margin
+            else:
+                y0 = ax_y0 + edge_margin
+        else:
+            cbar_w = ax_w * max(0.18, min(0.9, 0.5 * shrink))
+            cbar_h = 0.018
+            if 'right' in args.cbar_location:
+                x0 = ax_x0 + ax_w - cbar_w - edge_margin
+            else:
+                x0 = ax_x0 + edge_margin
+
+            if 'upper' in args.cbar_location:
+                y0 = ax_y0 + ax_h - cbar_h - pad
+            else:
+                y0 = ax_y0 + pad
+
+        cax = fig.add_axes([x0, y0, cbar_w, cbar_h])
+        cax.set_in_layout(False)
+        cbar = fig.colorbar(mappable, cax=cax, orientation=args.cbar_orientation)
+        cbar.ax.set_in_layout(False)
+    else:
+        colorbar_kwargs = {
+            'orientation': args.cbar_orientation,
+            'shrink': args.cbar_shrink,
+        }
+        if args.cbar_pad is not None:
+            colorbar_kwargs['pad'] = args.cbar_pad
+        elif use_surface:
+            colorbar_kwargs['pad'] = 0.02 if args.cbar_orientation == 'horizontal' else 0.03
+        if args.cbar_location in {'left', 'right', 'top', 'bottom'}:
+            colorbar_kwargs['location'] = args.cbar_location
+        cbar = fig.colorbar(mappable, ax=ax, **colorbar_kwargs)
+
+    cbar.set_label(label)
+    return cbar
+
+
 def get_colormap(cmap_name: str) -> Colormap:
     '''Retrieve colormap by name, handling custom and GMT .cpt colormaps'''
     if cmap_name in CUSTOM_CMAPS:
@@ -276,6 +338,13 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('--cbar-orientation', type=str, default='vertical', choices=['horizontal', 'vertical'], help='Orientation for per-panel colorbars.')
     parser.add_argument('--cbar-shrink', type=float, default=1.0, help='Shrink factor for per-panel colorbars.')
     parser.add_argument('--cbar-pad', type=float, default=None, help='Padding between the plot and per-panel colorbar.')
+    parser.add_argument(
+        '--cbar-location',
+        type=str,
+        default='right',
+        choices=['left', 'right', 'top', 'bottom', 'upper-right', 'lower-right', 'upper-left', 'lower-left'],
+        help='Location for per-panel colorbars. Side locations place the colorbar outside the axes; corner locations place it inside the plot.'
+    )
     parser.add_argument('--list-cmaps', action='store_true', help='List available colormaps and exit')
     parser.add_argument('--save', action='store_true', help='Save figure')
     parser.add_argument('--dpi', type=int, default=300, help='DPI for saving figure')
@@ -841,8 +910,11 @@ def main(args=None) -> None:
                 if cmap_name != shared_cmap_name:
                     shared_cmap_name = None
         else:
-            cbar = fig.colorbar(pcm, ax=ax, **colorbar_kwargs)
-            cbar.set_label(colorbar_label)
+            if use_cartopy:
+                cbar = fig.colorbar(pcm, ax=ax, **colorbar_kwargs)
+                cbar.set_label(colorbar_label)
+            else:
+                add_panel_colorbar(fig, ax, pcm, colorbar_label, args, use_surface=use_surface)
 
         # Add scalebar
         if args.scalebar:
