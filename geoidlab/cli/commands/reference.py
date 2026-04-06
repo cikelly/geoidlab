@@ -94,6 +94,7 @@ class GGMSynthesis():
         parallel: bool = False,
         force_parallel: bool = False,
         threaded_legendre: bool = False,
+        legendre_method: str = 'standard',
         tide_system: str = None,
         converted: bool = False,
         input_file: str = None,
@@ -150,6 +151,7 @@ class GGMSynthesis():
         self.parallel = parallel
         self.force_parallel = force_parallel
         self.threaded_legendre = threaded_legendre
+        self.legendre_method = legendre_method
         self.tide_system = tide_system
         self.converted = converted
         self.input_file = input_file
@@ -342,6 +344,7 @@ class GGMSynthesis():
             density_save=self.density_save,
             force_parallel=self.force_parallel,
             threaded_legendre=self.threaded_legendre,
+            legendre_method=self.legendre_method,
         )
 
         # Prepare call kwargs
@@ -524,6 +527,8 @@ def add_reference_arguments(parser) -> None:
                         help='Keep parallel=True for large batched arrays. This may use substantial memory.')
     parser.add_argument('--threaded-legendre', action='store_true', default=False,
                         help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
+    parser.add_argument('--legendre-method', type=str, default='standard', choices=['standard', 'holmes'],
+                        help='ALF backend for GGM synthesis. Use holmes for improved high-degree numerical stability, especially for nmax >= 2040.')
     parser.add_argument('-ell','--ellipsoid', type=str, default='wgs84', 
                         help='Reference ellipsoid: wgs84, grs80, or JSON object string')
     parser.add_argument('--ellipsoid-name', type=str, default=None,
@@ -599,6 +604,7 @@ def main(args=None) -> int:
         parallel=args.parallel,
         force_parallel=args.force_parallel,
         threaded_legendre=args.threaded_legendre,
+        legendre_method=args.legendre_method,
         tide_system=args.gravity_tide,
         converted=args.converted,
         input_file=args.input_file,

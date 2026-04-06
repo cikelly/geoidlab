@@ -21,10 +21,15 @@ from geoidlab.numba.ggm import (
     compute_gravity_chunk, 
     compute_gravity_chunk_parallel,
     compute_disturbance_chunk,
+    compute_disturbance_chunk_parallel,
     compute_disturbing_potential_chunk,
+    compute_disturbing_potential_chunk_parallel,
     compute_second_radial_chunk,
+    compute_second_radial_chunk_parallel,
     compute_separation_chunk,
-    compute_disturbing_potential_derivative_chunk
+    compute_separation_chunk_parallel,
+    compute_disturbing_potential_derivative_chunk,
+    compute_disturbing_potential_derivative_chunk_parallel
 )
 
 from tqdm import tqdm
@@ -35,8 +40,22 @@ import pandas as pd
 import xarray as xr
 from numba import get_num_threads
 
+HIGH_DEGREE_STANDARD_WARNING = 2040
+
 
 class GlobalGeopotentialModel:
+    def _parallel_status_message(self, n_chunks: int) -> str:
+        '''
+        Build a consistent status line for chunked threaded synthesis.
+        '''
+        legendre_mode = self.legendre_method
+        if self.legendre_method == 'standard' and self.threaded_legendre:
+            legendre_mode = 'standard-threaded'
+        return (
+            f'Data will be processed in {n_chunks} chunks using up to {get_num_threads()} '
+            f'Numba threads (Legendre mode: {legendre_mode}).\n'
+        )
+
     def __init__(
         self, 
         shc=None, 
@@ -58,6 +77,7 @@ class GlobalGeopotentialModel:
         density_save: bool = True,
         force_parallel: bool = False,
         threaded_legendre: bool = False,
+        legendre_method: str = 'standard',
     ) -> None:
         '''
         Initialize the GlobalGeopotentialModel class for potential modeling
@@ -83,6 +103,7 @@ class GlobalGeopotentialModel:
         density_save            : Whether to save density file (default: True)
         force_parallel          : Keep parallel processing enabled for large batched arrays (default: False)
         threaded_legendre       : Use threaded Legendre generation where supported (default: False)
+        legendre_method         : ALF backend ('standard' or 'holmes')
         '''
         self.shc       = shc
         self.model     = model_name
@@ -102,6 +123,14 @@ class GlobalGeopotentialModel:
         self.density_save = density_save
         self.force_parallel = force_parallel
         self.threaded_legendre = threaded_legendre
+        self.legendre_method = legendre_method
+
+        if self.legendre_method == 'standard' and self.nmax >= HIGH_DEGREE_STANDARD_WARNING:
+            print(
+                f"Warning: nmax={self.nmax} with legendre_method='standard' may show numerical artefacts "
+                f"at high degree. If you notice latitude-band artefacts, rerun with "
+                f"legendre_method='holmes'."
+            )
         
         # Input validation
         if self.model_dir is None:
@@ -179,6 +208,7 @@ class GlobalGeopotentialModel:
             show_progress=False,
             compute_derivative=compute_derivative,
             threaded=self.threaded_legendre,
+            backend=self.legendre_method,
         )
 
     def _get_density_points(self) -> np.ndarray:
@@ -298,8 +328,7 @@ class GlobalGeopotentialModel:
             # Process in chunks
         n_points = len(self.lon)
         n_chunks = (n_points + self.chunk - 1) // self.chunk
-        legendre_mode = 'threaded' if self.threaded_legendre else 'default'
-        print(f'Data will be processed in {n_chunks} chunks using up to {get_num_threads()} Numba threads (Legendre mode: {legendre_mode}).\n')
+        print(self._parallel_status_message(n_chunks))
 
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -380,7 +409,7 @@ class GlobalGeopotentialModel:
     
     def gravity_disturbance_parallel(self) -> np.ndarray:
         '''
-        Compute gravity disturbance using chunking and Numba optimization.
+        Compute gravity disturbance using chunking and a threaded Numba kernel.
         
         Returns
         -------
@@ -394,8 +423,8 @@ class GlobalGeopotentialModel:
         dg = np.zeros(len(self.lon))
         
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
-        print(f'Data will be processed in {n_chunks} chunks...\n')
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        print(self._parallel_status_message(n_chunks))
 
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -410,9 +439,10 @@ class GlobalGeopotentialModel:
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(2, self.nmax + 1):
-                dg_chunk += compute_disturbance_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
+
+            dg_chunk += compute_disturbance_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, self.nmax
+            )
 
             dg[start_idx:end_idx] = dg_chunk
             # print('\n')
@@ -482,7 +512,7 @@ class GlobalGeopotentialModel:
     
     def disturbing_potential_parallel(self, r_or_R='r') -> np.ndarray:
         '''
-        Compute disturbing potential using chunking and Numba optimization.
+        Compute disturbing potential using chunking and a threaded Numba kernel.
         
         Parameters
         ----------
@@ -502,7 +532,8 @@ class GlobalGeopotentialModel:
         T = np.zeros(len(self.lon))
                 
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        print(self._parallel_status_message(n_chunks))
         
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -517,9 +548,10 @@ class GlobalGeopotentialModel:
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(2, self.nmax + 1):
-                T_chunk += compute_disturbing_potential_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
+
+            T_chunk += compute_disturbing_potential_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, self.nmax
+            )
 
             T[start_idx:end_idx] = T_chunk
             # print('\n')
@@ -585,7 +617,7 @@ class GlobalGeopotentialModel:
     
     def second_radial_derivative_parallel(self) -> np.ndarray:
         '''
-        Compute second radial derivative using chunking and Numba optimization.
+        Compute second radial derivative using chunking and a threaded Numba kernel.
         
         
         Returns
@@ -600,7 +632,8 @@ class GlobalGeopotentialModel:
         Tzz = np.zeros(len(self.lon))
                 
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        print(self._parallel_status_message(n_chunks))
         
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -615,9 +648,10 @@ class GlobalGeopotentialModel:
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(2, self.nmax + 1):
-                Tzz_chunk += compute_second_radial_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
+
+            Tzz_chunk += compute_second_radial_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, self.nmax
+            )
 
             Tzz[start_idx:end_idx] = Tzz_chunk
             # print('\n')
@@ -862,7 +896,7 @@ class GlobalGeopotentialModel:
 
     def separation_parallel(self) -> np.ndarray:
         '''
-        Compute the geoid-quasi geoid separation using chunking and Numba optimization.
+        Compute the geoid-quasi geoid separation using chunking and a threaded Numba kernel.
         
         Returns
         -------
@@ -874,8 +908,8 @@ class GlobalGeopotentialModel:
 
         H = np.zeros(len(self.lon))
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
-        print(f'Data will be processed in {n_chunks} chunks...\n')
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        print(self._parallel_status_message(n_chunks))
 
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -887,15 +921,15 @@ class GlobalGeopotentialModel:
             H_chunk = np.zeros(len(lon_chunk))
             
             clear_output(wait=True)
-            print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
+            print(f'Processing chunk {i + 1} of {n_chunks}...')
             Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(0, self.nmax + 1):
-                H_chunk += compute_separation_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
+
+            H_chunk += compute_separation_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, self.nmax
+            )
             
             H[start_idx:end_idx] = H_chunk
-            print('\n')
         
         return H
     
@@ -1002,7 +1036,7 @@ class GlobalGeopotentialModel:
     
     def disturbing_potential_derivative_parallel(self, r_or_R='r') -> np.ndarray:
         '''
-        Compute disturbing potential using chunking and Numba optimization.
+        Compute disturbing potential derivative using chunking and a threaded Numba kernel.
         
         Parameters
         ----------
@@ -1022,7 +1056,8 @@ class GlobalGeopotentialModel:
         dTdtheta = np.zeros(len(self.lon))
                 
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        print(self._parallel_status_message(n_chunks))
         
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -1037,9 +1072,10 @@ class GlobalGeopotentialModel:
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
             _, dPnm_chunk = self._compute_alfs(vartheta_chunk, compute_derivative=True)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(2, self.nmax + 1):
-                T_chunk += compute_disturbing_potential_derivative_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, dPnm_chunk, n)
+
+            T_chunk += compute_disturbing_potential_derivative_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, dPnm_chunk, self.nmax
+            )
 
             dTdtheta[start_idx:end_idx] = T_chunk
             # print('\n')
@@ -1194,6 +1230,7 @@ class GlobalGeopotentialModel:
                 density_save=self.density_save,
                 force_parallel=self.force_parallel,
                 threaded_legendre=self.threaded_legendre,
+                legendre_method=self.legendre_method,
             )
             
             # Call the method on this batch

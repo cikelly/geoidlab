@@ -193,6 +193,7 @@ class ResidualAnomalyComputation:
         parallel: bool = False,
         force_parallel: bool = False,
         threaded_legendre: bool = False,
+        legendre_method: str = 'standard',
         chunk_size: int = 500,
         atm: bool = False,
         atm_method: str = 'noaa',
@@ -239,6 +240,7 @@ class ResidualAnomalyComputation:
         self.parallel = parallel
         self.force_parallel = force_parallel
         self.threaded_legendre = threaded_legendre
+        self.legendre_method = legendre_method
         self.chunk_size = chunk_size
         self.output_dir = Path(proj_name) / 'results'
         self.atm = atm
@@ -424,6 +426,7 @@ class ResidualAnomalyComputation:
             parallel=self.parallel,
             force_parallel=self.force_parallel,
             threaded_legendre=self.threaded_legendre,
+            legendre_method=self.legendre_method,
             chunk_size=self.chunk_size,
             atm=self.atm if include_corrections else False,
             atm_method=self.atm_method,
@@ -492,6 +495,7 @@ class ResidualAnomalyComputation:
             parallel=self.parallel,
             force_parallel=self.force_parallel,
             threaded_legendre=self.threaded_legendre,
+            legendre_method=self.legendre_method,
             tide_system=self.gravity_tide,
             converted=True,
             bbox=self.bbox,
@@ -528,6 +532,7 @@ class ResidualAnomalyComputation:
                 parallel=self.parallel,
                 force_parallel=self.force_parallel,
                 threaded_legendre=self.threaded_legendre,
+                legendre_method=self.legendre_method,
                 tide_system=self.gravity_tide,
                 converted=True,
                 bbox=self.bbox,
@@ -784,6 +789,7 @@ class ResidualAnomalyComputation:
             parallel=self.parallel,
             force_parallel=self.force_parallel,
             threaded_legendre=self.threaded_legendre,
+            legendre_method=self.legendre_method,
             tide_system=self.gravity_tide,
             converted=True,
             bbox=grid_extent,  # Use extended grid extent
@@ -905,6 +911,7 @@ def main(args=None) -> None:
         parallel=args.parallel,
         force_parallel=args.force_parallel,
         threaded_legendre=args.threaded_legendre,
+        legendre_method=args.legendre_method,
         chunk_size=args.chunk_size,
         atm=args.atm,
         atm_method=args.atm_method,
@@ -978,6 +985,7 @@ def main(args=None) -> None:
         parallel=args.parallel,
         force_parallel=args.force_parallel,
         threaded_legendre=args.threaded_legendre,
+        legendre_method=args.legendre_method,
         tide_system=args.gravity_tide,
         converted=True,
         bbox=bbox,

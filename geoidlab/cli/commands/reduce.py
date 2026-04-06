@@ -110,6 +110,7 @@ class GravityReduction:
         parallel: bool = False,
         force_parallel: bool = False,
         threaded_legendre: bool = False,
+        legendre_method: str = 'standard',
         chunk_size: int = 500,
         atm: bool = False,
         atm_method: str = 'noaa',
@@ -151,6 +152,7 @@ class GravityReduction:
         self.parallel = parallel
         self.force_parallel = force_parallel
         self.threaded_legendre = threaded_legendre
+        self.legendre_method = legendre_method
         self.chunk_size = chunk_size
         self.output_dir = Path(proj_name) / 'results'
         self.lonlatheight = None
@@ -489,6 +491,7 @@ class GravityReduction:
             chunk_size=self.chunk_size,
             force_parallel=self.force_parallel,
             threaded_legendre=self.threaded_legendre,
+            legendre_method=self.legendre_method,
         )
         
         ec = ggm.ellipsoidal_correction(parallel=self.parallel)
@@ -955,6 +958,8 @@ def add_reduce_arguments(parser) -> None:
                         help='Keep parallel=True for large batched GGM arrays. This may use substantial memory.')
     parser.add_argument('--threaded-legendre', action='store_true', default=False,
                         help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
+    parser.add_argument('--legendre-method', type=str, default='standard', choices=['standard', 'holmes'],
+                        help='ALF backend for GGM synthesis. Use holmes for improved high-degree numerical stability, especially for nmax >= 2040.')
     parser.add_argument('--chunk-size', type=int, default=500,
                         help='Chunk size for parallel processing')
     parser.add_argument('--atm', action='store_true',
@@ -1043,6 +1048,7 @@ def main(args=None) -> None:
         parallel=args.parallel,
         force_parallel=args.force_parallel,
         threaded_legendre=args.threaded_legendre,
+        legendre_method=args.legendre_method,
         chunk_size=args.chunk_size,
         atm=args.atm,
         atm_method=args.atm_method,

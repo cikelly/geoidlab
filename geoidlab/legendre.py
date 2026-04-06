@@ -9,6 +9,8 @@ from geoidlab.numba.legendre import (
     compute_legendre_chunk,
     compute_legendre_chunk_parallel,
     compute_legendre_chunk_with_deriv_parallel,
+    compute_alfs_holmes_pointwise,
+    compute_alfs_holmes_pointwise_parallel,
 )
 from numba_progress import ProgressBar
 
@@ -187,6 +189,7 @@ def ALFsGravityAnomaly(
     show_progress=True,
     compute_derivative: bool = True,
     threaded: bool = False,
+    backend: str = 'standard',
 ) -> Tuple[np.ndarray, np.ndarray]:
     '''
     Wrapper function to handle data and call the Numba-optimized function
@@ -201,6 +204,7 @@ def ALFsGravityAnomaly(
     show_progress : show progress bar
     compute_derivative : compute first derivatives of the ALFs
     threaded      : use point-wise threaded Numba recursion when derivatives are not needed
+    backend       : ALF backend ('standard' or 'holmes')
     
     Returns
     -------
@@ -219,6 +223,16 @@ def ALFsGravityAnomaly(
         if height is None:
             height = 0
         _, phi_bar, _ = geodetic2spherical(phi=phi, lambd=lambd, ellipsoid=ellipsoid, height=height)
+
+    if backend == 'holmes':
+        return compute_alfs_holmes(
+            phi_bar=phi_bar,
+            nmax=nmax,
+            compute_derivative=compute_derivative,
+            threaded=threaded,
+        )
+    if backend != 'standard':
+        raise ValueError(f"Unknown ALF backend '{backend}'")
     
     # Initialize Pnm array
     Pnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
@@ -259,6 +273,60 @@ def ALFsGravityAnomaly(
                 Pnm = compute_chunk(phi_bar, n, Pnm)
     
     return Pnm, dPnm
+
+def compute_alfs_holmes(
+    phi_bar,
+    nmax: int,
+    compute_derivative: bool = True,
+    threaded: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+    '''
+    Compute fully normalized ALFs using the Holmes-Featherstone scaled recursion.
+
+    Notes
+    -----
+    Adapted from a public-domain implementation by Tyler Sutterley based on
+    Holmes and Featherstone (2002). This backend is intended for improved
+    numerical stability at high degree and order.
+    '''
+    phi_bar = np.atleast_1d(phi_bar).flatten().astype(np.float64)
+    nmax = np.int64(nmax)
+    tri_size = (nmax + 1) * (nmax + 2) // 2
+    full_size = (nmax + 1) * (nmax + 1)
+    bytes_per_point = 8 * (tri_size + full_size * (2 if compute_derivative else 1))
+
+    # Keep the Holmes workspace bounded, but avoid overly tiny internal chunks
+    # that make the stable backend unusably slow.
+    target_bytes = 6 * 1024**3
+    subchunk_size = max(8, min(len(phi_bar), target_bytes // max(bytes_per_point, 1)))
+
+    plm_parts = []
+    dplm_parts = [] if compute_derivative else None
+
+    for start in range(0, len(phi_bar), subchunk_size):
+        stop = min(start + subchunk_size, len(phi_bar))
+        phi_chunk = phi_bar[start:stop]
+        if threaded:
+            plm_chunk, dplm_chunk = compute_alfs_holmes_pointwise_parallel(
+                phi_chunk,
+                nmax,
+                compute_derivative,
+            )
+        else:
+            plm_chunk, dplm_chunk = compute_alfs_holmes_pointwise(
+                phi_chunk,
+                nmax,
+                compute_derivative,
+            )
+        plm_parts.append(plm_chunk)
+        if compute_derivative:
+            dplm_parts.append(dplm_chunk)
+
+    plm = np.concatenate(plm_parts, axis=0) if len(plm_parts) > 1 else plm_parts[0]
+    if compute_derivative:
+        dplm = np.concatenate(dplm_parts, axis=0) if len(dplm_parts) > 1 else dplm_parts[0]
+        return plm, dplm
+    return plm, None
 
 def compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm) -> Tuple[np.ndarray, np.ndarray]:
     '''

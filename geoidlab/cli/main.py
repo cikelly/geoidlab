@@ -17,6 +17,7 @@ from geoidlab.cli.commands.plot import add_plot_arguments, main as plot_main
 from geoidlab.cli.commands.geoid import add_geoid_arguments, main as geoid_main
 from geoidlab.cli.commands.info import add_netcdf_info_arguments, main as netcdf_info_main
 from geoidlab.cli.commands.prep import add_prep_arguments, main as prep_main
+from geoidlab.cli.commands.dtm import add_dtm_arguments, main as dtm_main
 from geoidlab.cli.utils.config_parser import parse_config_file
 
 def auto_visualize(args) -> None:
@@ -94,9 +95,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             'GeoidLab: A toolkit for geodetic computations including gravity reductions, '
-            'terrain quantities, GGM synthesis, geoid computation, and visualization.'
+            'terrain quantities, DTM synthesis, GGM synthesis, geoid computation, and visualization.'
         ),
-        epilog='Available commands: ggm, reduce, topo, viz, geoid, ncinfo, prep'
+        epilog='Available commands: ggm, dtm, reduce, topo, viz, geoid, ncinfo, prep'
     )
     from geoidlab.__version__ import __version__
     parser.add_argument('-v', '--version', action='version', version=f'geoidlab {__version__}')
@@ -119,6 +120,11 @@ def main() -> None:
     topo_parser = subparsers.add_parser('topo', help='Compute topographic quantities from a Digital Elevation Model (DEM)')
     add_topo_arguments(topo_parser)
     topo_parser.set_defaults(func=topo_main)
+
+    # DTM
+    dtm_parser = subparsers.add_parser('dtm', help='Synthesize terrain heights from a spherical harmonic digital terrain model')
+    add_dtm_arguments(dtm_parser)
+    dtm_parser.set_defaults(func=dtm_main)
     
     # Helmert
     reduce_parser = subparsers.add_parser('reduce', help='Perform gravity reduction (Free-air, Bouguer, Helmert)')

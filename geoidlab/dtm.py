@@ -8,23 +8,50 @@
 # os.environ['OMP_DISPLAY_ENV'] = 'FALSE'    # Optional: disable OpenMP environment display
 
 import lzma
+import os
 
 import numpy as np
 
 from pathlib import Path
 from geoidlab import coordinates as co
 from geoidlab import curtin
-from geoidlab.legendre import ALF, ALFsGravityAnomaly
+from geoidlab.legendre import ALFsGravityAnomaly
 from geoidlab.numba.dtm import compute_harmonic_sum
-from tqdm import tqdm
+from numba import get_num_threads
 
-from multiprocessing import Pool, cpu_count
-
+HIGH_DEGREE_STANDARD_WARNING = 2040
 
 
 
 class DigitalTerrainModel:
-    def __init__(self, model_name=None, nmax=2190, ellipsoid='wgs84', model_format=None) -> None:
+    @staticmethod
+    def _recommended_chunk_memory_bytes() -> int:
+        '''
+        Pick a conservative default chunk-memory budget that scales with
+        available RAM when the user has not set an explicit limit.
+        '''
+        fallback = 2 * 1024**3
+        try:
+            total_memory = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+        except (AttributeError, OSError, ValueError):
+            return fallback
+
+        # Aim for about 10% of system RAM by default. Keep a modest floor for
+        # automatic mode only so very small systems still have a workable value.
+        target = int(total_memory * 0.10)
+        lower_bound = 1 * 1024**3
+        return max(lower_bound, target)
+
+    def __init__(
+        self,
+        model_name=None,
+        nmax=2190,
+        ellipsoid='wgs84',
+        model_format=None,
+        threaded_legendre: bool = False,
+        legendre_method: str = 'standard',
+        chunk_memory_gb: float | None = None,
+    ) -> None:
         '''
         Initialize the DigitalTerrainModel class
         
@@ -44,7 +71,17 @@ class DigitalTerrainModel:
         self.nmax = nmax
         self.ellipsoid = ellipsoid
         self.model_format = model_format
+        self.threaded_legendre = threaded_legendre
+        self.legendre_method = legendre_method
+        self.chunk_memory_gb = chunk_memory_gb
         # self.progress = show_progress
+
+        if self.legendre_method == 'standard' and self.nmax >= HIGH_DEGREE_STANDARD_WARNING:
+            print(
+                f"Warning: nmax={self.nmax} with legendre_method='standard' may show numerical artefacts "
+                f"at high degree. If you notice latitude-band artefacts, rerun with "
+                f"legendre_method='holmes'."
+            )
 
         if self.name is None:
             script_dir: Path = Path(__file__).resolve().parent
@@ -84,20 +121,33 @@ class DigitalTerrainModel:
             return 'bshc'
         return 'dtm2006_text'
 
-    @staticmethod
-    def process_chunk(args) -> np.ndarray:
-        self, lon_chunk, lat_chunk, height_chunk, nmax, ellipsoid, leg_progress, chunk_idx = args
-        _, theta, _ = co.geodetic2spherical(phi=lat_chunk, lambd=lon_chunk, ellipsoid=ellipsoid, height=height_chunk)
+    def _synthesize_chunk(
+        self,
+        lon_chunk: np.ndarray,
+        lat_chunk: np.ndarray,
+        height_chunk: np.ndarray,
+        leg_progress: bool = False,
+    ) -> np.ndarray:
+        _, theta, _ = co.geodetic2spherical(
+            phi=lat_chunk,
+            lambd=lon_chunk,
+            ellipsoid=self.ellipsoid,
+            height=height_chunk,
+        )
         _lambda = np.radians(lon_chunk)
-        m = np.arange(nmax + 1)
+        m = np.arange(self.nmax + 1)
         mlambda = m[:, np.newaxis] * _lambda
         cosm = np.cos(mlambda)
         sinm = np.sin(mlambda)
         
-        Pnm, _ = ALFsGravityAnomaly(vartheta=theta, nmax=nmax, ellipsoid=ellipsoid, show_progress=leg_progress)
-        
-        # H = 
-
+        Pnm, _ = ALFsGravityAnomaly(
+            vartheta=theta,
+            nmax=self.nmax,
+            ellipsoid=self.ellipsoid,
+            show_progress=leg_progress,
+            threaded=self.threaded_legendre,
+            backend=self.legendre_method,
+        )
         return compute_harmonic_sum(Pnm, self.HCnm, self.HSnm, cosm, sinm)
 
     def read_dtm2006(self) -> None:
@@ -200,8 +250,15 @@ class DigitalTerrainModel:
         cosm = np.cos(mlambda)
         sinm = np.sin(mlambda)
         
-        Pnm, _ = ALF(vartheta=theta, nmax=self.nmax, ellipsoid=self.ellipsoid)
-        H = np.sum((self.HCnm * Pnm) @ cosm + (self.HSnm * Pnm) @ sinm)
+        Pnm, _ = ALFsGravityAnomaly(
+            vartheta=np.array([theta]),
+            nmax=self.nmax,
+            ellipsoid=self.ellipsoid,
+            show_progress=False,
+            threaded=self.threaded_legendre,
+            backend=self.legendre_method,
+        )
+        H = np.sum((self.HCnm * Pnm[0]) @ cosm + (self.HSnm * Pnm[0]) @ sinm)
         
         return float(H)
 
@@ -241,7 +298,7 @@ class DigitalTerrainModel:
         chunk_size  : number of points to process at a time
         leg_progress: show progress bar for Legendre polynomial computation
         height      : height above ellipsoid (optional)
-        n_workers   : number of parallel workers
+        n_workers   : retained for API compatibility; chunk execution now stays in one process
         
         Returns
         -------
@@ -268,56 +325,40 @@ class DigitalTerrainModel:
 
         H_flat = np.zeros(num_points)
         
-        # Memory-based chunk size cap (optional)
-        max_chunk_memory = 4e9  # ~4GB in bytes
-        point_memory = (self.nmax + 1) ** 2 * 8
-        max_points = int(max_chunk_memory / point_memory)
-        chunk_size = min(chunk_size, max_points)
-        
-        if num_points <= chunk_size:
-            r, theta, _ = co.geodetic2spherical(
-                phi=lat_flat,
-                lambd=lon_flat,
-                ellipsoid=self.ellipsoid,
-                height=height_flat
-            )
-            _lambda = np.radians(lon_flat)
-            m = np.arange(self.nmax + 1)
-            mlambda = m[:, np.newaxis] * _lambda
-            cosm = np.cos(mlambda)
-            sinm = np.sin(mlambda)
-            
-            Pnm, _ = ALFsGravityAnomaly(
-                vartheta=theta,
-                nmax=self.nmax,
-                ellipsoid=self.ellipsoid,
-                show_progress=leg_progress
-            )
-            
-            H_flat = compute_harmonic_sum(Pnm, self.HCnm, self.HSnm, cosm, sinm)
+        requested_chunk_size = chunk_size
+
+        # Memory-based chunk size cap (optional). Account for the full ALF cube
+        # plus the packed Holmes-style workspace used by the stable backend.
+        if self.chunk_memory_gb is not None:
+            max_chunk_memory = int(self.chunk_memory_gb * 1024**3)
         else:
-            n_workers = n_workers or cpu_count()
-            chunk_starts = list(range(0, num_points, chunk_size))
-            chunks = [
-                (
-                    self,
-                    lon_flat[start:min(start + chunk_size, num_points)],
-                    lat_flat[start:min(start + chunk_size, num_points)],
-                    height_flat[start:min(start + chunk_size, num_points)],
-                    self.nmax,
-                    self.ellipsoid,
-                    leg_progress,
-                    i  # Chunk index for timing
-                )
-                for i, start in enumerate(chunk_starts)
-            ]
-            
-            with Pool(processes=n_workers) as pool:
-                results = list(tqdm(pool.imap(DigitalTerrainModel.process_chunk, chunks), total=len(chunks), desc='Computing chunks'))
-            
-            for start, result in zip(chunk_starts, results):
-                end = min(start + chunk_size, num_points)
-                H_flat[start:end] = result
+            max_chunk_memory = self._recommended_chunk_memory_bytes()
+        point_memory = ((self.nmax + 1) ** 2 + ((self.nmax + 1) * (self.nmax + 2) // 2)) * 8
+        max_points = int(max_chunk_memory / point_memory)
+        chunk_size = min(chunk_size, max(1, max_points))
+        
+        n_chunks = (num_points + chunk_size - 1) // chunk_size
+        print(
+            f'Data will be processed in {n_chunks} chunks using up to {get_num_threads()} '
+            f'Numba threads (Legendre mode: '
+            f"{'standard-threaded' if self.legendre_method == 'standard' and self.threaded_legendre else self.legendre_method}).\n"
+        )
+        if chunk_size < num_points:
+            print(
+                f'Effective DTM chunk size: {chunk_size} points '
+                f'(requested: {requested_chunk_size}, '
+                f'memory budget ~{max_chunk_memory / 1024**3:.1f} GiB).\n'
+            )
+
+        for i, start in enumerate(range(0, num_points, chunk_size)):
+            end = min(start + chunk_size, num_points)
+            print(f'Processing chunk {i + 1} of {n_chunks}...')
+            H_flat[start:end] = self._synthesize_chunk(
+                lon_flat[start:end],
+                lat_flat[start:end],
+                height_flat[start:end],
+                leg_progress=leg_progress and i == 0,
+            )
         
         H = H_flat.reshape(input_shape)
         

@@ -18,6 +18,7 @@ from geoidlab.cli.commands.plot import main as plot_main
 from geoidlab.cli.commands.geoid import main as geoid_main
 from geoidlab.cli.commands.info import main as netcdf_info_main
 from geoidlab.cli.commands.prep import main as prep_main
+from geoidlab.cli.commands.dtm import main as dtm_main
 
 def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argparse.Namespace:
     '''
@@ -49,13 +50,14 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     
     # Required subcommand
     if 'subcommand' not in config or 'command' not in config['subcommand']:
-        print("Error: Config file must specify [subcommand] with 'command' (ggm, topo, reduce, viz, geoid, ncinfo).")
+        print("Error: Config file must specify [subcommand] with 'command' (ggm, dtm, topo, reduce, viz, geoid, ncinfo).")
         sys.exit(1)
     
     subcommand = config['subcommand'].get('command', '').strip()
     # valid_subcommands = {'ggm', 'topo', 'reduce', 'viz', 'geoid', 'ncinfo'}
     valid_subcommands = {
         'ggm': ggm_main,
+        'dtm': dtm_main,
         'topo': topo_main,
         'reduce': reduce_main,
         'viz': plot_main,
@@ -91,6 +93,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'max_deg'               : ('max_deg', None),
         'icgem'                 : ('icgem', False),
         'dtm_model'             : ('dtm_model', None),
+        'model_format'          : ('model_format', None),
         'earth2014_model'       : ('earth2014_model', None),
         'earth2014_resolution'  : ('earth2014_resolution', '5min'),
         'gravity_tide'          : ('gravity_tide', 'mean_tide'),
@@ -112,6 +115,9 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'ref_topo'              : ('ref_topo', None),
         'dtm_nmax'              : ('dtm_nmax', None),
         'dtm_chunk_size'        : ('dtm_chunk_size', None),
+        'chunk_memory_gb'       : ('chunk_memory_gb', None),
+        'workers'               : ('workers', None),
+        'leg_progress'          : ('leg_progress', False),
         'radius'                : ('radius', None),
         'ellipsoid'             : ('ellipsoid', None),
         'ellipsoid_name'        : ('ellipsoid_name', None),
@@ -136,6 +142,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'parallel'              : ('parallel', False),
         'force_parallel'        : ('force_parallel', False),
         'threaded_legendre'     : ('threaded_legendre', False),
+        'legendre_method'       : ('legendre_method', 'standard'),
         'chunk_size'            : ('chunk_size', None),
         'atm'                   : ('atm', False),
         'atm_method'            : ('atm_method', 'noaa'),
@@ -178,11 +185,11 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction'}:
+        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction', 'leg_progress'}:
             return value.lower() in {'true', 'yes', '1'}
-        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution'}:
+        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution', 'workers'}:
             return int(value)
-        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax'}:
+        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax', 'chunk_memory_gb'}:
             return float(value)
         if key in {'bbox', 'fig_size', 'xlim', 'ylim'}:
             return [float(x) for x in value.split()]

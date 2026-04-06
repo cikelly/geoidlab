@@ -154,6 +154,13 @@ DATASET_CONFIG = {
         'fname'      : 'H',
         'long_name'  : 'Geoid-Quasigeoid Separation',
     },
+    'H_dtm': {
+        'var_name'   : 'H',
+        'units'      : 'm',
+        'description': 'Terrain height synthesized from a digital terrain model spherical harmonic expansion',
+        'fname'      : 'H_dtm',
+        'long_name'  : 'Synthesized Terrain Height',
+    },
     'zero_degree_term': {
         'var_name'   : 'zero_degree_term',
         'units'      : 'm',
@@ -353,7 +360,6 @@ def save_to_netcdf(
     
     return 'Failed'
     # ds.to_netcdf(filename, mode='w')
-
 
 
 
