@@ -108,6 +108,8 @@ class GravityReduction:
         radius: float = 167.0,
         interp_method: str = 'slinear',
         parallel: bool = False,
+        force_parallel: bool = False,
+        threaded_legendre: bool = False,
         chunk_size: int = 500,
         atm: bool = False,
         atm_method: str = 'noaa',
@@ -147,6 +149,8 @@ class GravityReduction:
         self.radius = radius
         self.interp_method = interp_method
         self.parallel = parallel
+        self.force_parallel = force_parallel
+        self.threaded_legendre = threaded_legendre
         self.chunk_size = chunk_size
         self.output_dir = Path(proj_name) / 'results'
         self.lonlatheight = None
@@ -482,7 +486,9 @@ class GravityReduction:
             ellipsoid=self.ellipsoid,
             grav_data=grav_data,
             nmax=self.max_deg,
-            chunk_size=self.chunk_size
+            chunk_size=self.chunk_size,
+            force_parallel=self.force_parallel,
+            threaded_legendre=self.threaded_legendre,
         )
         
         ec = ggm.ellipsoidal_correction(parallel=self.parallel)
@@ -870,7 +876,10 @@ class GravityReduction:
         '''Execute specified tasks in order.'''
         self.tasks = tasks
         results = {}
-        for task in tasks:
+        task_queue = list(tasks)
+        if task_queue:
+            print(f'Running tasks {task_queue} sequentially.')
+        for idx, task in enumerate(task_queue):
             if task not in self.TASK_CONFIG:
                 raise ValueError(f'Unknown task: {task}')
             config = self.TASK_CONFIG[task]
@@ -879,6 +888,8 @@ class GravityReduction:
                 results[task] = method(anomaly_type=config['anomaly_type'])
             else:
                 results[task] = method()
+            remaining_tasks = task_queue[idx + 1:]
+            print(f'Remaining tasks {remaining_tasks}.')
         output_files = []
         for result in results.values():
             if isinstance(result['output_file'], list):
@@ -899,7 +910,7 @@ def add_reduce_arguments(parser) -> None:
                         help='Maximum degree of truncation for ellipsoidal correction')
     # parser.add_argument('--marine-data', type=str,
     #                     help='Input file with lon, lat, height, and Dg.')
-    parser.add_argument('--do', type=str, default='helmert', choices=['free-air', 'bouguer', 'helmert', 'all'],
+    parser.add_argument('--do', type=str, default=None, choices=['free-air', 'bouguer', 'helmert', 'all'],
                         help='Computation steps to perform: [free-air, bouguer, helmert, or all (default: helmert)]')
     parser.add_argument('-s', '--start', type=str, choices=['free-air', 'bouguer', 'helmert'],
                         help='Start processing from this step')
@@ -940,6 +951,10 @@ def add_reduce_arguments(parser) -> None:
                         help='Interpolation method for terrain correction')
     parser.add_argument('--parallel', action='store_true',
                         help='Enable parallel processing for terrain correction')
+    parser.add_argument('--force-parallel', action='store_true', default=False,
+                        help='Keep parallel=True for large batched GGM arrays. This may use substantial memory.')
+    parser.add_argument('--threaded-legendre', action='store_true', default=False,
+                        help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
     parser.add_argument('--chunk-size', type=int, default=500,
                         help='Chunk size for parallel processing')
     parser.add_argument('--atm', action='store_true',
@@ -992,16 +1007,18 @@ def main(args=None) -> None:
         args = parser.parse_args()
     
     workflow = ['free-air', 'bouguer', 'helmert']
-    if args.do != 'all' and (args.start or args.end):
+    if args.do is not None and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
-    if args.do == 'all':
-        tasks = workflow
-    elif args.start or args.end:
+    if args.start or args.end:
         start_idx = 0 if args.start is None else workflow.index(args.start)
         end_idx = len(workflow) - 1 if args.end is None else workflow.index(args.end)
         tasks = workflow[start_idx:end_idx + 1]
-    else:
+    elif args.do == 'all':
+        tasks = workflow
+    elif args.do is not None:
         tasks = [args.do]
+    else:
+        tasks = ['helmert']
 
     reduction = GravityReduction(
         input_file=args.input_file,
@@ -1024,6 +1041,8 @@ def main(args=None) -> None:
         radius=args.radius,
         interp_method=args.interp_method,
         parallel=args.parallel,
+        force_parallel=args.force_parallel,
+        threaded_legendre=args.threaded_legendre,
         chunk_size=args.chunk_size,
         atm=args.atm,
         atm_method=args.atm_method,

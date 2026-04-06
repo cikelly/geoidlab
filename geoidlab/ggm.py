@@ -19,6 +19,7 @@ from geoidlab.density import ingest_unb_density, get_processed_density_path
 from geoidlab.legendre import ALFsGravityAnomaly, ALF
 from geoidlab.numba.ggm import (
     compute_gravity_chunk, 
+    compute_gravity_chunk_parallel,
     compute_disturbance_chunk,
     compute_disturbing_potential_chunk,
     compute_second_radial_chunk,
@@ -32,6 +33,7 @@ from IPython.display import clear_output
 import numpy as np
 import pandas as pd
 import xarray as xr
+from numba import get_num_threads
 
 
 class GlobalGeopotentialModel:
@@ -54,6 +56,8 @@ class GlobalGeopotentialModel:
         density_interp_method: str = 'nearest',
         density_unit: str = 'kg/m3',
         density_save: bool = True,
+        force_parallel: bool = False,
+        threaded_legendre: bool = False,
     ) -> None:
         '''
         Initialize the GlobalGeopotentialModel class for potential modeling
@@ -77,6 +81,8 @@ class GlobalGeopotentialModel:
         density_interp_method   : Interpolation method for density file (default: 'nearest')
         density_unit            : Unit of density (default: 'kg/m3')
         density_save            : Whether to save density file (default: True)
+        force_parallel          : Keep parallel processing enabled for large batched arrays (default: False)
+        threaded_legendre       : Use threaded Legendre generation where supported (default: False)
         '''
         self.shc       = shc
         self.model     = model_name
@@ -94,6 +100,8 @@ class GlobalGeopotentialModel:
         self.density_interp_method = density_interp_method
         self.density_unit = density_unit
         self.density_save = density_save
+        self.force_parallel = force_parallel
+        self.threaded_legendre = threaded_legendre
         
         # Input validation
         if self.model_dir is None:
@@ -159,6 +167,19 @@ class GlobalGeopotentialModel:
             
         self.lambda_ = np.radians(self.lon)
         # self.phi     = np.radians(self.lat)
+
+    def _compute_alfs(self, vartheta, compute_derivative: bool = False):
+        '''
+        Compute ALFs using the configured Legendre mode.
+        '''
+        return ALFsGravityAnomaly(
+            vartheta=vartheta,
+            nmax=self.nmax,
+            ellipsoid=self.ellipsoid,
+            show_progress=False,
+            compute_derivative=compute_derivative,
+            threaded=self.threaded_legendre,
+        )
 
     def _get_density_points(self) -> np.ndarray:
         '''
@@ -237,7 +258,7 @@ class GlobalGeopotentialModel:
         ---------
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         '''
-        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = self._compute_alfs(self.vartheta, compute_derivative=False)
         Dg  = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
@@ -254,7 +275,7 @@ class GlobalGeopotentialModel:
     
     def gravity_anomaly_parallel(self) -> np.ndarray:
         '''
-        Compute gravity anomalies using chunking and Numba optimization.
+        Compute gravity anomalies using chunking and a threaded Numba kernel.
         
         Returns
         -------
@@ -276,8 +297,9 @@ class GlobalGeopotentialModel:
         # else:
             # Process in chunks
         n_points = len(self.lon)
-        n_chunks = (n_points // self.chunk) + 1
-        print(f'Data will be processed in {n_chunks} chunks...\n')
+        n_chunks = (n_points + self.chunk - 1) // self.chunk
+        legendre_mode = 'threaded' if self.threaded_legendre else 'default'
+        print(f'Data will be processed in {n_chunks} chunks using up to {get_num_threads()} Numba threads (Legendre mode: {legendre_mode}).\n')
 
         for i in range(n_chunks):
             start_idx = i * self.chunk
@@ -291,11 +313,12 @@ class GlobalGeopotentialModel:
             clear_output(wait=True)  # Clear the output in Jupyter Notebook
             # print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r') # for notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...')
-            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
-            
-            for n in range(2, self.nmax + 1):
-                Dg_chunk += compute_gravity_chunk(Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, n)
+
+            Dg_chunk += compute_gravity_chunk_parallel(
+                Cnm, Snm, lon_rad_chunk, a, r_chunk, Pnm_chunk, self.nmax
+            )
             
             Dg[start_idx:end_idx] = Dg_chunk
             # print('\n') # for Jupyter Notebook
@@ -309,7 +332,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -340,7 +363,7 @@ class GlobalGeopotentialModel:
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.36b, p.297
         '''
         
-        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = self._compute_alfs(self.vartheta, compute_derivative=False)
         dg  = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity disturbance'):
@@ -385,7 +408,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -403,7 +426,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -440,7 +463,7 @@ class GlobalGeopotentialModel:
         '''
         r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
         
-        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = self._compute_alfs(self.vartheta, compute_derivative=False)
         T   = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing disturbing potential'):
@@ -492,7 +515,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -514,7 +537,7 @@ class GlobalGeopotentialModel:
         Parameters
         ----------
         r_or_R    : Either 'r' for radial distance or 'R' for reference radius
-        parallel  : Whether to use parallel processing (forced to False for large arrays)
+        parallel  : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size: Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -544,7 +567,7 @@ class GlobalGeopotentialModel:
         ---------
         1. Torge, Müller, & Pail (2023): Geodesy, Eq. 6.39, p.298
         '''
-        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = self._compute_alfs(self.vartheta, compute_derivative=False)
         Tzz = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing gravity anomalies'):
@@ -590,7 +613,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -609,7 +632,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -642,7 +665,7 @@ class GlobalGeopotentialModel:
         T          : Disturbing potential array (m2/s2)
         tolerance  : Tolerance for refining height anomaly
         max_iter   : Maximum number of iterations
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -712,7 +735,7 @@ class GlobalGeopotentialModel:
         ----------
         T          : Disturbing potential array (m2/s2)
         icgem      : Use ICGEM formula which accounts for topographic effect
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -822,7 +845,7 @@ class GlobalGeopotentialModel:
         H      : Geoid-quasi geoid separation values.
         '''
 
-        Pnm, _ = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        Pnm, _ = self._compute_alfs(self.vartheta, compute_derivative=False)
         H = np.zeros(len(self.lon))
 
         for n in tqdm(range(0, self.nmax + 1), desc='Computing separation'):
@@ -865,7 +888,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)
             print(f'Processing chunk {i + 1} of {n_chunks}...', end='\r')
-            Pnm_chunk, _ = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            Pnm_chunk, _ = self._compute_alfs(vartheta_chunk, compute_derivative=False)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(0, self.nmax + 1):
@@ -883,7 +906,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -960,7 +983,7 @@ class GlobalGeopotentialModel:
         '''
         r = self.shc['a'] * np.ones(len(self.lon)) if r_or_R == 'R' else self.r
         
-        _, dPnm = ALFsGravityAnomaly(vartheta=self.vartheta, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+        _, dPnm = self._compute_alfs(self.vartheta, compute_derivative=True)
         dTdtheta   = np.zeros(len(self.lon))
         
         for n in tqdm(range(2, self.nmax + 1), desc='Computing disturbing potential'):
@@ -1012,7 +1035,7 @@ class GlobalGeopotentialModel:
             
             clear_output(wait=True)  # Clear the output in Jupyter notebook
             print(f'Processing chunk {i + 1} of {n_chunks}...') #, end='\r')
-            _, dPnm_chunk = ALFsGravityAnomaly(vartheta=vartheta_chunk, nmax=self.nmax, ellipsoid=self.ellipsoid, show_progress=False)
+            _, dPnm_chunk = self._compute_alfs(vartheta_chunk, compute_derivative=True)
             lon_rad_chunk = np.radians(lon_chunk)
             
             for n in range(2, self.nmax + 1):
@@ -1034,7 +1057,7 @@ class GlobalGeopotentialModel:
         Parameters
         ----------
         r_or_R     : Either 'r' for radial distance or 'R' for reference radius
-        parallel   : Whether to use parallel processing (forced to False for large arrays)
+        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         batch_size : Maximum batch size for large arrays (default: 1000)
         
         Returns
@@ -1058,7 +1081,7 @@ class GlobalGeopotentialModel:
         
         Parameters
         ----------
-        parallel   : whether to use parallel processing (forced to False for large arrays)
+        parallel   : whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
         r_or_R     : Either 'r' for radial distance or 'R' for reference radius
         batch_size : Maximum batch size for large arrays (default: 1000)
         
@@ -1129,10 +1152,13 @@ class GlobalGeopotentialModel:
         # Batching needed
         print(f"Large array detected ({n_points} points). Processing in batches of {batch_size} to avoid memory issues...")
         
-        # Force parallel=False for large arrays to prevent memory issues
+        # Default to sequential batching unless the user explicitly accepts the memory risk.
         if kwargs.get('parallel', False):
-            print("Forcing parallel=False for large arrays to prevent memory issues.")
-            kwargs['parallel'] = False
+            if self.force_parallel:
+                print("Large array detected and force_parallel=True. Keeping parallel=True for batched processing; this may require substantial memory.")
+            else:
+                print("Forcing parallel=False for large arrays to prevent memory issues. Pass force_parallel=True to override this safeguard.")
+                kwargs['parallel'] = False
         
         results = []
         n_batches = (n_points + batch_size - 1) // batch_size
@@ -1166,6 +1192,8 @@ class GlobalGeopotentialModel:
                 density_interp_method=self.density_interp_method,
                 density_unit=self.density_unit,
                 density_save=self.density_save,
+                force_parallel=self.force_parallel,
+                threaded_legendre=self.threaded_legendre,
             )
             
             # Call the method on this batch

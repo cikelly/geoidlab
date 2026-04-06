@@ -134,6 +134,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'start'                 : ('start', None),
         'end'                   : ('end', None),
         'parallel'              : ('parallel', False),
+        'force_parallel'        : ('force_parallel', False),
+        'threaded_legendre'     : ('threaded_legendre', False),
         'chunk_size'            : ('chunk_size', None),
         'atm'                   : ('atm', False),
         'atm_method'            : ('atm_method', 'noaa'),
@@ -176,7 +178,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction'}:
+        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction'}:
             return value.lower() in {'true', 'yes', '1'}
         if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution'}:
             return int(value)

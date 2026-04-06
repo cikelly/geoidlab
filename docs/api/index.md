@@ -71,7 +71,7 @@ Classes for handling spherical harmonic gravity field models:
    
    Primary class for synthesizing gravity field functionals from spherical harmonic coefficients.
 
-   .. py:method:: __init__(shc=None, model_name=None, ellipsoid='wgs84', nmax=90, grav_data=None, zonal_harmonics=True, model_dir='downloads', chunk_size=None, dtm_model=None)
+   .. py:method:: __init__(shc=None, model_name=None, ellipsoid='wgs84', nmax=90, grav_data=None, zonal_harmonics=True, model_dir='downloads', chunk_size=None, dtm_model=None, force_parallel=False)
 
    .. py:method:: gravity_anomaly(parallel=True)
       
@@ -86,6 +86,7 @@ Classes for handling spherical harmonic gravity field models:
       
       :param T: Precomputed disturbing potential (optional)
       :param icgem: Apply topographic effect using DTM2006
+      :param parallel: Enable parallel processing. Large batched arrays fall back to sequential processing unless `force_parallel=True` was set on the model.
       :returns: Array of geoid heights (m)
 ```
 

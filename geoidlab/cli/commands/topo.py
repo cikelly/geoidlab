@@ -451,11 +451,16 @@ class TopographicQuantities:
             self._initialize_terrain()
 
         results = {}
-        for task in tasks:
+        task_queue = list(tasks)
+        if task_queue:
+            print(f'Running tasks {task_queue} sequentially.')
+        for idx, task in enumerate(task_queue):
             if task not in self.TASK_CONFIG:
                 raise ValueError(f'Unknown task: {task}')
             method = getattr(self, self.TASK_CONFIG[task]['method'])
             results[task] = method()
+            remaining_tasks = task_queue[idx + 1:]
+            print(f'Remaining tasks {remaining_tasks}.')
         output_files = [result['output_file'] for result in results.values() if result.get('output_file')]
         return {'status': 'success', 'output_files': output_files}
 
@@ -496,7 +501,7 @@ def add_topo_arguments(parser) -> None:
                         help='Reference ellipsoid: wgs84, grs80, or JSON object string')
     parser.add_argument('--ellipsoid-name', type=str, default=None,
                         help='Optional ellipsoid name to store in output metadata')
-    parser.add_argument('--do', type=str, default='all', choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr', 'all'], 
+    parser.add_argument('--do', type=str, default=None, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr', 'all'], 
                         help='Computation steps to perform.')
     parser.add_argument('-s', '--start', type=str, choices=['download', 'terrain-correction', 'indirect-effect', 'rtm-anomaly', 'height-anomaly', 'site', 'atm-corr'],
                         help='Start processing from this step')
@@ -555,20 +560,22 @@ def main(args=None) -> int:
     # Define workflow
     workflow = ['download', 'terrain-correction', 'rtm-anomaly', 'indirect-effect', 'height-anomaly', 'site', 'atm-corr']
     # Determine tasks to execute
-    if args.do != 'all' and (args.start or args.end):
+    if args.do is not None and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start or --end.')
-    if args.do == 'all':
-        tasks = [t for t in workflow if t != 'download'] # Exclude 'download' from all
-    elif args.start or args.end:
+    if args.start or args.end:
         start_idx = 0 if args.start is None else workflow.index(args.start)
         end_idx = len(workflow) if args.end is None else workflow.index(args.end) + 1
         tasks = workflow[start_idx:end_idx + 1]
         if 'download' in tasks:
             tasks.remove('download') # Download is handled implicitly
-    else:
+    elif args.do == 'all':
+        tasks = [t for t in workflow if t != 'download'] # Exclude 'download' from all
+    elif args.do is not None:
         tasks = [args.do]
         if args.do == 'download':
             tasks = [] # Download is handled implicitly
+    else:
+        tasks = [t for t in workflow if t != 'download']
 
     # Initialize and run workflow
     topo_workflow = TopographicQuantities(

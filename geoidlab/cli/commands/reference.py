@@ -92,6 +92,8 @@ class GGMSynthesis():
         ellipsoid_name: str | None = None,
         chunk_size: int = 500,
         parallel: bool = False,
+        force_parallel: bool = False,
+        threaded_legendre: bool = False,
         tide_system: str = None,
         converted: bool = False,
         input_file: str = None,
@@ -146,6 +148,8 @@ class GGMSynthesis():
         self.ellipsoid_name = ellipsoid_name
         self.chunk_size = chunk_size
         self.parallel = parallel
+        self.force_parallel = force_parallel
+        self.threaded_legendre = threaded_legendre
         self.tide_system = tide_system
         self.converted = converted
         self.input_file = input_file
@@ -336,6 +340,8 @@ class GGMSynthesis():
             density_interp_method=self.density_interp_method,
             density_unit=self.density_unit,
             density_save=self.density_save,
+            force_parallel=self.force_parallel,
+            threaded_legendre=self.threaded_legendre,
         )
 
         # Prepare call kwargs
@@ -467,7 +473,10 @@ class GGMSynthesis():
         
     def run(self, tasks: list) -> dict:
         results = {}
-        for task in tasks:
+        task_queue = list(tasks)
+        if task_queue:
+            print(f'Running tasks {task_queue} sequentially.')
+        for idx, task in enumerate(task_queue):
             if task not in self.TASK_CONFIG:
                 raise ValueError(f'Unknown task: {task}')
             # Reset grid attributes before each task to ensure task specific grid generation
@@ -477,6 +486,8 @@ class GGMSynthesis():
             config = self.TASK_CONFIG[task]
             method = getattr(self, config['method'])
             results[task] = method()
+            remaining_tasks = task_queue[idx + 1:]
+            print(f'Remaining tasks {remaining_tasks}.')
         output_files = [result['output_file'] for result in results.values() if result.get('output_file')]
         return {'status': 'success', 'output_files': output_files}
 
@@ -485,7 +496,7 @@ def add_reference_arguments(parser) -> None:
                         help='GGM name (e.g., EGM2008)')
     parser.add_argument('-md', '--model-dir', type=str, default=None, 
                         help='Directory for GGM files')
-    parser.add_argument('--do', type=str, default='all', 
+    parser.add_argument('--do', type=str, default=None, 
                         choices=['download', 'gravity-anomaly', 'reference-geoid', 'height-anomaly', 'gravity-disturbance', 'ellipsoidal-correction', 'disturbing-potential', 'disturbing-potential-derivative', 'second-radial-derivative', 'separation', 'zero-degree-term', 'all'],
                         help='Computation steps to perform')
     parser.add_argument('-s', '--start', type=str, default=None, 
@@ -509,6 +520,10 @@ def add_reference_arguments(parser) -> None:
                         help='Chunk size for parallel processing')
     parser.add_argument('-p','--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
+    parser.add_argument('--force-parallel', action='store_true', default=False,
+                        help='Keep parallel=True for large batched arrays. This may use substantial memory.')
+    parser.add_argument('--threaded-legendre', action='store_true', default=False,
+                        help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
     parser.add_argument('-ell','--ellipsoid', type=str, default='wgs84', 
                         help='Reference ellipsoid: wgs84, grs80, or JSON object string')
     parser.add_argument('--ellipsoid-name', type=str, default=None,
@@ -556,16 +571,18 @@ def main(args=None) -> int:
         args = parser.parse_args()
         
     workflow = ['download', 'disturbing-potential', 'disturbing-potential-derivative', 'second-radial-derivative', 'gravity-anomaly', 'gravity-disturbance', 'reference-geoid', 'height-anomaly', 'separation', 'zero-degree-term', 'ellipsoidal-correction']
-    if args.do != 'all' and (args.start or args.end):
+    if args.do is not None and (args.start or args.end):
         raise ValueError('Cannot specify both --do and --start/--end')
-    if args.do == 'all':
-        tasks = workflow
-    elif args.start or args.end:
+    if args.start or args.end:
         start_idx = 0 if args.start is None else workflow.index(args.start)
         end_idx = len(workflow) - 1 if args.end is None else workflow.index(args.end)
         tasks = workflow[start_idx:end_idx + 1]
-    else:
+    elif args.do == 'all':
+        tasks = workflow
+    elif args.do is not None:
         tasks = [args.do]
+    else:
+        tasks = workflow
         
     # Set args.ellipsoidal_correction to True if ellipsoidal-correction is in tasks
     if 'ellipsoidal-correction' in tasks:
@@ -580,6 +597,8 @@ def main(args=None) -> int:
         ellipsoid_name=args.ellipsoid_name,
         chunk_size=args.chunk_size,
         parallel=args.parallel,
+        force_parallel=args.force_parallel,
+        threaded_legendre=args.threaded_legendre,
         tide_system=args.gravity_tide,
         converted=args.converted,
         input_file=args.input_file,

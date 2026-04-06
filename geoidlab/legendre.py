@@ -5,7 +5,11 @@
 ############################################################
 # import constants
 from geoidlab.coordinates import geodetic2spherical
-from geoidlab.numba.legendre import compute_legendre_chunk
+from geoidlab.numba.legendre import (
+    compute_legendre_chunk,
+    compute_legendre_chunk_parallel,
+    compute_legendre_chunk_with_deriv_parallel,
+)
 from numba_progress import ProgressBar
 
 from typing import Tuple
@@ -180,7 +184,9 @@ def ALFsGravityAnomaly(
     vartheta=None, 
     nmax=60, 
     ellipsoid='wgs84',
-    show_progress=True
+    show_progress=True,
+    compute_derivative: bool = True,
+    threaded: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     '''
     Wrapper function to handle data and call the Numba-optimized function
@@ -193,6 +199,8 @@ def ALFsGravityAnomaly(
     nmax          : maximum degree of expansion
     ellipsoid     : reference ellipsoid ('wgs84' or 'grs80')
     show_progress : show progress bar
+    compute_derivative : compute first derivatives of the ALFs
+    threaded      : use point-wise threaded Numba recursion when derivatives are not needed
     
     Returns
     -------
@@ -214,7 +222,7 @@ def ALFsGravityAnomaly(
     
     # Initialize Pnm array
     Pnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
-    dPnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1))
+    dPnm = np.zeros((len(phi_bar), nmax + 1, nmax + 1)) if compute_derivative else None
     Pnm[:, 0, 0] = 1.0
 
     if nmax >= 1:
@@ -223,19 +231,32 @@ def ALFsGravityAnomaly(
         u = np.where(u == 0, np.finfo(float).eps, u) # avoid division by zero
         Pnm[:, 1, 0] = np.sqrt(3.0) * t
         Pnm[:, 1, 1] = np.sqrt(3.0) * u
-        dPnm[:, 1, 0] = (1.0 / u) * (t * Pnm[:, 1, 0] - np.sqrt(3.0) * Pnm[:, 0, 0])
-        dPnm[:, 1, 1] = (t / u) * Pnm[:, 1, 1]
+        if compute_derivative:
+            dPnm[:, 1, 0] = (1.0 / u) * (t * Pnm[:, 1, 0] - np.sqrt(3.0) * Pnm[:, 0, 0])
+            dPnm[:, 1, 1] = (t / u) * Pnm[:, 1, 1]
 
     # Initialize progress bar
-    if show_progress:
-        with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+    if compute_derivative:
+        compute_chunk_with_deriv = compute_legendre_chunk_with_deriv_parallel if threaded else compute_legendre_chunk_with_deriv
+        if show_progress:
+            with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+                for n in range(2, nmax + 1):
+                    Pnm, dPnm = compute_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
+                    pbar.update(1)
+        else:
+            # print('Computing Legendre Functions...')
             for n in range(2, nmax + 1):
-                Pnm, dPnm = compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
-                pbar.update(1)
+                Pnm, dPnm = compute_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
     else:
-        # print('Computing Legendre Functions...')
-        for n in range(2, nmax + 1):
-            Pnm, dPnm = compute_legendre_chunk_with_deriv(phi_bar, n, Pnm, dPnm)
+        compute_chunk = compute_legendre_chunk_parallel if threaded else compute_legendre_chunk
+        if show_progress:
+            with ProgressBar(total=nmax - 1, desc='Computing Legendre Functions') as pbar:
+                for n in range(2, nmax + 1):
+                    Pnm = compute_chunk(phi_bar, n, Pnm)
+                    pbar.update(1)
+        else:
+            for n in range(2, nmax + 1):
+                Pnm = compute_chunk(phi_bar, n, Pnm)
     
     return Pnm, dPnm
 
