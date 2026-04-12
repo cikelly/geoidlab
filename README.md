@@ -210,7 +210,7 @@ Contributions are welcome.
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
 
 ## References
-- Kelly, C.I., V.G. Ferreira, D. Yang, S.A. Andam-Akorful, D. Yan1, S. Osah, C.M. Hancock, G. Jing, A.T. Kabo-bah, (2026): GeoidLab: An Automated Open-Source Python Toolbox for Gravity-Field Analysis and Vertical Datum Unification (Under review)
+- Kelly, C.I., V.G. Ferreira, D. Yang, S.A. Andam-Akorful, D. Yan1, S. Osah, C.M. Hancock, G. Jing, A.T. Kabo-bah, (2026): [GeoidLab: An Automated Open-Source Python Toolbox for Gravity-Field Analysis and Vertical Datum Unification, 19(66)](https://doi.org/10.1007/s12145-026-02118-6)
 
 - Yakubu, C. I., Ferreira, V. G. and Asante, C. Y., (2017): [Towards the Selection of an Optimal Global Geopotential Model for the Computation of the Long-Wavelength Contribution: A Case Study of Ghana, Geosciences, 7(4), 113](http://www.mdpi.com/2076-3263/7/4/113)
 
