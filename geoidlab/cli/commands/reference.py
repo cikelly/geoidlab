@@ -353,6 +353,8 @@ class GGMSynthesis():
             call_kwargs.setdefault('icgem', icgem)
         if 'parallel' not in call_kwargs:
             call_kwargs['parallel'] = self.parallel
+        if ggm_method != 'zero_degree_term':
+            call_kwargs.setdefault('batch_size', self.chunk_size)
 
         # Remove 'parallel' from call_kwargs for zero_degree_term
         if ggm_method == 'zero_degree_term' and 'parallel' in call_kwargs:

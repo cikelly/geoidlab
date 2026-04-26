@@ -494,7 +494,7 @@ class GravityReduction:
             legendre_method=self.legendre_method,
         )
         
-        ec = ggm.ellipsoidal_correction(parallel=self.parallel)
+        ec = ggm.ellipsoidal_correction(parallel=self.parallel, batch_size=self.chunk_size)
         ec_grid = xr.Dataset(
             {'Dg_ELL': (['lat', 'lon'], ec.reshape(lat.shape))},
             coords={'lon': lon_grid, 'lat': lat_grid}
