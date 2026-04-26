@@ -200,14 +200,17 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
     
     
     if len(urls) > 1:
-        if (downloads_dir / 'merged_dem.nc').resolve().exists():
-            if check_bbox_contains(downloads_dir / 'merged_dem.nc', bbox):
-                print(f'{downloads_dir}/merged_dem.nc exists and covers bbox. Skip download\n')
-                return 'merged_dem.nc'
-            else:
-                print(f'{downloads_dir}/merged_dem.nc exists but does not cover bbox. Deleting ...\n')
-                (downloads_dir / 'merged_dem.nc').unlink(missing_ok=True)
-                print(f'Downloading and merging {len(urls)} tiles ...\n')
+        merged_filepath = downloads_dir / 'merged_dem.nc'
+        if merged_filepath.exists():
+            try:
+                if check_bbox_contains(merged_filepath, bbox):
+                    print(f'{merged_filepath} exists, is readable, and covers bbox. Skip download\n')
+                    return 'merged_dem.nc'
+                print(f'{merged_filepath} exists but does not cover bbox. Rebuilding from tiles ...\n')
+            except Exception as exc:
+                print(f'{merged_filepath} exists but is unreadable ({exc}). Rebuilding from tiles ...\n')
+            merged_filepath.unlink(missing_ok=True)
+        print(f'Preparing {len(urls)} SRTM30PLUS tiles for merge ...\n')
         
     filepaths: list[str] = []
     for url in urls:
@@ -216,17 +219,13 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         # Check if the file already exists
         if filepath.exists():
             try:
-            # 1. If file exists and is readable, use it
-                _ = netCDF4.Dataset(filepath)
-                if check_bbox_contains(filepath, bbox):
-                    print(f'{filename} exists, is readable, and covers bbox. Using local copy.\n')
-                    filepaths.append(filepath)
-                    continue  # Skip download
-                else:
-                    print(f'{filename} exists, is readable, but does NOT cover bbox. Redownloading ...\n')
-                    filepath.unlink(missing_ok=True)
-            except Exception:
-                print(f'{filename} exists but is unreadable. Redownloading ...\n')
+                with netCDF4.Dataset(filepath):
+                    pass
+                print(f'{filename} exists and is readable. Using local copy.\n')
+                filepaths.append(filepath)
+                continue  # Skip download
+            except Exception as exc:
+                print(f'{filename} exists but is unreadable ({exc}). Redownloading ...\n')
                 filepath.unlink(missing_ok=True)
                 
         print(f'Downloading {filename} to: \n\t{downloads_dir} ...')
@@ -251,7 +250,8 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
             print('\n')
             # Try to open the file after the download to verify. Skip if unreadable
             try:
-                _ = netCDF4.Dataset(filepath)
+                with netCDF4.Dataset(filepath):
+                    pass
                 filepaths.append(filepath)
             except Exception:
                 print(f'Skipping unreadable file {filename}.')
@@ -289,6 +289,11 @@ def download_srtm30plus(url=None, downloads_dir=None, bbox=None) -> str:
         })
         merged_filepath = downloads_dir / 'merged_dem.nc'
         merged_dataset.to_netcdf(merged_filepath)
+        if not check_bbox_contains(merged_filepath, bbox):
+            raise RuntimeError(
+                f'Merged SRTM30PLUS DEM does not contain requested bbox {bbox}. '
+                f'Merged DEM bounds: {get_dem_bounds(merged_filepath)}'
+            )
         return merged_filepath.parts[-1]
     else:
         return filepaths[0].parts[-1]
@@ -535,6 +540,13 @@ def dem4geoid(
     
     if interp_method not in VALID_INTERP_METHODS:
         raise ValueError(f'Invalid interp_method: {interp_method}. Must be one of: {VALID_INTERP_METHODS}')
+
+    bbox_subset = [
+        bbox[0] - bbox_off,
+        bbox[1] + bbox_off,
+        bbox[2] - bbox_off,
+        bbox[3] + bbox_off
+    ]
     
     # dictionary of DEM models and function calls
     params = {
@@ -547,7 +559,7 @@ def dem4geoid(
     }
     
     models_dict = {
-        'srtm30plus': lambda: download_srtm30plus(bbox=bbox, downloads_dir=downloads_dir),
+        'srtm30plus': lambda: download_srtm30plus(bbox=bbox_subset, downloads_dir=downloads_dir),
         'srtm'      : lambda: download_dem_cog(**params),
         'cop'       : lambda: download_dem_cog(**params),
         'nasadem'   : lambda: download_dem_cog(**params),
@@ -587,7 +599,7 @@ def dem4geoid(
     if not ncfile:
         # Check if a DEM file already exists
         if model == 'srtm30plus':
-            urls = fetch_url(bbox)
+            urls = fetch_url(bbox_subset)
             if len(urls) > 1:
                 expected_filename = 'merged_dem.nc'
             else:
@@ -598,7 +610,7 @@ def dem4geoid(
         
         if expected_filepath.exists():
             try:
-                if check_bbox_contains(expected_filepath, bbox):
+                if check_bbox_contains(expected_filepath, bbox_subset):
                     print(f'{expected_filename} exists and covers bbox. Using local copy.\n')
                     ncfile = expected_filename
                 else:
@@ -613,19 +625,8 @@ def dem4geoid(
             if model == 'srtm30plus':
                 ncfile = models_dict[model]()
             else:
-                dem = models_dict[model]()
+                models_dict[model]()
                 ncfile = expected_filename
-                # Add standard attributes
-                local_tz = get_localzone()
-                date_created = datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S')
-                dem.attrs.update({
-                    'date_created': f'{date_created} {local_tz}',
-                    'created_by'  : 'GeoidLab',
-                    'website'     : 'https://github.com/cikelly/geoidlab',
-                    'copyright'   : f'Copyright (c) {datetime.now().year}, Caleb Kelly',
-                })
-                dem.to_netcdf(downloads_dir / ncfile)
-                return dem
         except Exception as e:
             raise Exception(
                 f'Failed to download {model}: {e}',
@@ -650,12 +651,6 @@ def dem4geoid(
     if fill_value is not None:
         ds['z'] = ds['z'].where(ds['z'] != fill_value, np.nan)
     
-    bbox_subset = [
-        bbox[0] - bbox_off,
-        bbox[1] + bbox_off,
-        bbox[2] - bbox_off,
-        bbox[3] + bbox_off
-    ]
     # dem = ds.sel(
     #     x=slice(bbox_subset[0], bbox_subset[2]),
     #     y=slice(bbox_subset[1], bbox_subset[3])
