@@ -25,8 +25,9 @@ from geoidlab.numba.terrain import (
 from geoidlab.gravity import normal_gravity_somigliana
 from geoidlab.utils.io import save_to_netcdf
 
+from typing import Any
 from tqdm import tqdm
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, cpu_count
 from joblib.parallel import BatchCompletionCallBack
 
 
@@ -42,7 +43,7 @@ def tqdm_joblib(total: int, desc: str, disable: bool=False):
     tqdm_bar = tqdm(total=total, desc=desc, unit='chunk')
 
     class TqdmBatchCompletionCallback(BatchCompletionCallBack):
-        def __call__(self, *args, **kwargs):
+        def __call__(self, *args, **kwargs) -> Any:
             tqdm_bar.update(self.batch_size)
             return super().__call__(*args, **kwargs)
 
@@ -54,6 +55,32 @@ def tqdm_joblib(total: int, desc: str, disable: bool=False):
     finally:
         joblib.parallel.BatchCompletionCallBack = original_callback
         tqdm_bar.close()
+
+
+def row_chunks_for_parallel(
+    nrows: int,
+    chunk_size: int,
+    progress: bool = True,
+    min_chunks_per_worker: int = 4,
+) -> list[tuple[int, int]]:
+    '''
+    Build row chunks for joblib terrain computations.
+
+    Large user chunk sizes can collapse a run into one or two jobs, which makes
+    tqdm appear frozen until the computation is effectively done. When progress
+    is enabled, split oversized chunks into enough jobs to provide useful
+    completion updates without changing the numerical work.
+    '''
+    chunk_size = max(1, int(chunk_size))
+    if progress and nrows > 1:
+        target_chunks = max(1, cpu_count() * min_chunks_per_worker)
+        if int(np.ceil(nrows / chunk_size)) < target_chunks:
+            chunk_size = max(1, int(np.ceil(nrows / target_chunks)))
+
+    return [
+        (i, min(i + chunk_size, nrows))
+        for i in range(0, nrows, chunk_size)
+    ]
 
 class TerrainQuantities:
     '''
@@ -555,11 +582,8 @@ class TerrainQuantities:
         tc = np.zeros((nrows_P, ncols_P))
         Hp = self.ori_P['z'].values
 
-        # Divide rows into chunks
-        chunks = [
-            (i, min(i + chunk_size, nrows_P)) 
-            for i in range(0, nrows_P, chunk_size)
-        ]
+        # Divide rows into enough chunks for joblib progress updates.
+        chunks = row_chunks_for_parallel(nrows_P, chunk_size, progress=progress)
 
         print('Computing terrain correction...')
 
@@ -785,11 +809,8 @@ class TerrainQuantities:
         Hp     = self.ori_P['z'].values
         Hp_ref = self.ref_P['z'].values
         
-        # Divide rows into chunks
-        chunks = [
-            (i, min(i + chunk_size, nrows_P)) 
-            for i in range(0, nrows_P, chunk_size)
-        ]
+        # Divide rows into enough chunks for joblib progress updates.
+        chunks = row_chunks_for_parallel(nrows_P, chunk_size, progress=progress)
         
         print('Computing RTM terrain correction...')
         
@@ -936,24 +957,17 @@ class TerrainQuantities:
                     # d = np.where(d <= self.radius, d, np.nan)
                     # d[d > self.radius] = np.nan
                     d[(d > self.radius) | (d == 0)] = np.nan
-                    d3 = d * d * d
-                    d5 = d3 * d * d
-                    d7 = d5 * d * d
 
                     # Potential change of regular part
                     dV1 = -np.pi * self.G * self._point_density(i, j) * Hp[i, j] ** 2
                     
-                    # Powers of heights
-                    Hp3 = Hp[i, j] ** 3
-                    Hp5 = Hp3 * Hp[i, j] * Hp[i, j]
-                    Hp7 = Hp5 * Hp[i, j] * Hp[i, j]
-                    H3  = smallH ** 3
-                    H5  = H3 * smallH * smallH
-                    H7  = H5 * smallH * smallH
-                    
-                    dV2 = self._window_weighted_sum(((H3 - Hp3) / d3) * (-1/6), small_rho)
-                    dV2 += self._window_weighted_sum(((H5 - Hp5) / d5) * 0.075, small_rho)     # 3/40
-                    dV2 += self._window_weighted_sum(((H7 - Hp7) / d7) * (-15/336), small_rho)
+                    # Use the closed form of the irregular potential term. The
+                    # truncated power series is unstable when local relief is
+                    # large relative to cell distance.
+                    term = (np.arcsinh(smallH / d) - (smallH / d)) - (
+                        np.arcsinh(Hp[i, j] / d) - (Hp[i, j] / d)
+                    )
+                    dV2 = self._window_weighted_sum(term, small_rho)
                     
                     # Total potential change
                     dV = dV1 + dV2
@@ -983,24 +997,17 @@ class TerrainQuantities:
                     # Distances
                     d = np.hypot(x, y)
                     d[(d > self.radius) | (d == 0)] = np.nan
-                    d3 = d * d * d
-                    d5 = d3 * d * d
-                    d7 = d5 * d * d
 
                     # Potential change of regular part
                     dV1 = -np.pi * self.G * self._point_density(i, j) * Hp[i, j] ** 2
                     
-                    # Powers of heights
-                    Hp3 = Hp[i, j] ** 3
-                    Hp5 = Hp3 * Hp[i, j] * Hp[i, j]
-                    Hp7 = Hp5 * Hp[i, j] * Hp[i, j]
-                    H3  = smallH ** 3
-                    H5  = H3 * smallH * smallH
-                    H7  = H5 * smallH * smallH
-                    
-                    dV2 = self._window_weighted_sum(((H3 - Hp3) / d3) * (-1/6), small_rho)
-                    dV2 += self._window_weighted_sum(((H5 - Hp5) / d5) * 0.075, small_rho)
-                    dV2 += self._window_weighted_sum(((H7 - Hp7) / d7) * (-15/336), small_rho)
+                    # Use the closed form of the irregular potential term. The
+                    # truncated power series is unstable when local relief is
+                    # large relative to cell distance.
+                    term = (np.arcsinh(smallH / d) - (smallH / d)) - (
+                        np.arcsinh(Hp[i, j] / d) - (Hp[i, j] / d)
+                    )
+                    dV2 = self._window_weighted_sum(term, small_rho)
                     
                     # Total potential change
                     dV = dV1 + dV2
@@ -1036,11 +1043,8 @@ class TerrainQuantities:
         # Normal gravity at the ellipsoid
         gamma_0 = normal_gravity_somigliana(phi=self.LatP, ellipsoid=self.ellipsoid)
         
-        # Divide rows into chunks
-        chunks = [
-            (i, min(i + chunk_size, nrows_P)) 
-            for i in range(0, nrows_P, chunk_size)
-        ]
+        # Divide rows into enough chunks for joblib progress updates.
+        chunks = row_chunks_for_parallel(nrows_P, chunk_size, progress=progress)
 
         print('Computing potential change of irregular part...') 
         
@@ -1255,7 +1259,7 @@ class TerrainQuantities:
         Hp = self.ori_P['z'].values
         HrefP = self.ref_P['z'].values
 
-        chunks = [(i, min(i + chunk_size, nrows_P)) for i in range(0, nrows_P, chunk_size)]
+        chunks = row_chunks_for_parallel(nrows_P, chunk_size, progress=progress)
         print('Computing RTM height anomaly...')
 
         window_indices = np.zeros((nrows_P, ncols_P, 4), dtype=np.int32)

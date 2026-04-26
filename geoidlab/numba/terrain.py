@@ -335,28 +335,18 @@ def compute_ind_chunk(
                     if d[k, l] > radius or d[k, l] == 0:
                         d[k, l] = np.nan
 
-            d3 = d * d * d
-            d5 = d3 * d * d
-            d7 = d5 * d * d
-
-            # Potential change of the irregular part of topography
-            # Powers of height
-            Hp3 = Hp[i, j] ** 3
-            Hp5 = Hp3 * Hp[i, j] * Hp[i, j]
-            Hp7 = Hp5 * Hp[i, j] * Hp[i, j]
-            H3  = smallH ** 3
-            H5  = H3 * smallH * smallH
-            H7  = H5 * smallH * smallH
+            # Potential change of the irregular part of topography. This is
+            # the closed form behind the usual H^3, H^5, H^7 series; the
+            # series is unstable for steep near-zone relief where H / d > 1.
+            hp = Hp[i, j]
+            term = (np.arcsinh(smallH / d) - (smallH / d)) - (
+                np.arcsinh(hp / d) - (hp / d)
+            )
 
             if use_variable_density:
-                v2 = G_dxdy * np.nansum(small_rho * (((H3 - Hp3) / d3) * (-1/6)))
-                v3 = G_dxdy * np.nansum(small_rho * (((H5 - Hp5) / d5) * 0.075))
-                v4 = G_dxdy * np.nansum(small_rho * (((H7 - Hp7) / d7) * (-15/336)))
+                ind_chunk[i - row_start, j] = G_dxdy * np.nansum(small_rho * term)
             else:
-                v2 = G_dxdy * rho * np.nansum(((H3 - Hp3) / d3) * (-1/6))
-                v3 = G_dxdy * rho * np.nansum(((H5 - Hp5) / d5) * 0.075)
-                v4 = G_dxdy * rho * np.nansum(((H7 - Hp7) / d7) * (-15/336))
-            ind_chunk[i - row_start, j] = v2 + v3 + v4
+                ind_chunk[i - row_start, j] = G_dxdy * rho * np.nansum(term)
 
     return row_start, row_end, ind_chunk
 
