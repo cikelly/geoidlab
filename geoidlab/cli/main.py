@@ -185,7 +185,7 @@ def main() -> None:
     print('                                           Subcommand:', args.subcommand)
     print('********************************************************************************************************************')
     if args.subcommand == 'geoid':
-        print('User requested entire geoid computation workflow. NetCDF files will be saved by defualt.')
+        print('User requested entire geoid computation workflow. NetCDF files will be saved by default.')
         args.save = True  # Default to True for geoid command
         
     # Run the command
