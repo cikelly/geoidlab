@@ -42,8 +42,10 @@ def test_auto_visualize(tmp_path) -> None:
     
     # Verify both files were processed
     assert len(called_files) == 2
-    assert str(results_dir / "test1.nc") in called_files
-    assert str(results_dir / "test2.nc") in called_files
+    # assert str(results_dir / "test1.nc") in called_files
+    # assert str(results_dir / "test2.nc") in called_files
+    assert [str(results_dir / "test1.nc")] in called_files
+    assert [str(results_dir / "test2.nc")] in called_files
 
 def test_auto_visualize_skip_conditions() -> None:
     """Test conditions where auto_visualize should skip processing"""
