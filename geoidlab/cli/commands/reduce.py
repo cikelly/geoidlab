@@ -104,6 +104,12 @@ class GravityReduction:
         bbox_offset: float = 2.0,
         proj_name: str = 'GeoidProject',
         topo: str = None,
+        topo_file: str | Path = None,
+        topo_url: str = None,
+        topo_cog_url: str = None,
+        topo_lon_name: str = 'x',
+        topo_lat_name: str = 'y',
+        topo_height_name: str = 'z',
         tc_file: str = None,
         radius: float = 167.0,
         interp_method: str = 'slinear',
@@ -146,6 +152,12 @@ class GravityReduction:
         self.bbox_offset = bbox_offset
         self.proj_name = proj_name
         self.topo = topo
+        self.topo_file = topo_file
+        self.topo_url = topo_url
+        self.topo_cog_url = topo_cog_url
+        self.topo_lon_name = topo_lon_name
+        self.topo_lat_name = topo_lat_name
+        self.topo_height_name = topo_height_name
         self.tc_file = tc_file
         self.radius = radius
         self.interp_method = interp_method
@@ -183,6 +195,14 @@ class GravityReduction:
                 
         self._validate_params()
 
+    def _has_topo_source(self) -> bool:
+        return any([
+            self.topo is not None,
+            self.topo_file is not None,
+            self.topo_url is not None,
+            self.topo_cog_url is not None,
+        ])
+
     def _validate_params(self) -> None:
         if not Path(self.input_file).is_file():
             raise ValueError(f'Input file {self.input_file} does not exist')
@@ -203,6 +223,9 @@ class GravityReduction:
                 raise ValueError('Invalid bbox: west must be <= east, south <= north')
         if self.topo and self.topo not in ['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco']:
             raise ValueError('topo must be one of: srtm30plus, srtm, cop, nasadem, gebco')
+        topo_sources = [self.topo, self.topo_file, self.topo_url, self.topo_cog_url]
+        if sum(source is not None for source in topo_sources) > 1:
+            raise ValueError('Specify at most one DEM source: --topo, --topo-file, --topo-url, or --topo-cog-url')
         if self.tc_file and not Path(self.tc_file).is_file():
             raise ValueError(f'Terrain correction file {self.tc_file} does not exist')
         if self.grid_unit not in ['degrees', 'minutes', 'seconds']:
@@ -298,9 +321,15 @@ class GravityReduction:
                 tc_grid = xr.open_dataset(tc_file)
                 return tc_grid
             
-            print(f'Computing terrain correction using {self.topo} DEM...')
+            print('Computing terrain correction from DEM source...')
             topo_workflow = TopographicQuantities(
                 topo=self.topo,
+                topo_file=self.topo_file,
+                topo_url=self.topo_url,
+                topo_cog_url=self.topo_cog_url,
+                topo_lon_name=self.topo_lon_name,
+                topo_lat_name=self.topo_lat_name,
+                topo_height_name=self.topo_height_name,
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
@@ -355,6 +384,12 @@ class GravityReduction:
         if not hasattr(self, 'topo_workflow'):
             self.topo_workflow = TopographicQuantities(
                 topo=self.topo,
+                topo_file=self.topo_file,
+                topo_url=self.topo_url,
+                topo_cog_url=self.topo_cog_url,
+                topo_lon_name=self.topo_lon_name,
+                topo_lat_name=self.topo_lat_name,
+                topo_height_name=self.topo_height_name,
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
@@ -408,6 +443,12 @@ class GravityReduction:
         if not hasattr(self, 'topo_workflow'):
             self.topo_workflow = TopographicQuantities(
                 topo=self.topo,
+                topo_file=self.topo_file,
+                topo_url=self.topo_url,
+                topo_cog_url=self.topo_cog_url,
+                topo_lon_name=self.topo_lon_name,
+                topo_lat_name=self.topo_lat_name,
+                topo_height_name=self.topo_height_name,
                 model_dir=self.model_dir,
                 output_dir=self.output_dir,
                 ellipsoid=self.ellipsoid,
@@ -641,7 +682,7 @@ class GravityReduction:
         # For Bouguer anomalies, compute terrain-corrected version if terrain correction is available
         bouguer_tc = None
         tc_values = None
-        if anomaly_type == 'bouguer' and (self.topo or self.tc_file):
+        if anomaly_type == 'bouguer' and (self._has_topo_source() or self.tc_file):
             print('Computing terrain correction for Complete Bouguer anomalies...')
             tc_grid = self._compute_terrain_correction()
             tc_values = self._interpolate_tc(tc_grid)
@@ -765,8 +806,8 @@ class GravityReduction:
         
     def compute_helmert(self) -> dict:
         '''Compute Helmert anomalies using Free-air and terrain corrections.'''
-        if not (self.topo or self.tc_file):
-            raise ValueError('Either --topo or --tc-file must be provided for helmert anomalies')
+        if not (self._has_topo_source() or self.tc_file):
+            raise ValueError('Either a DEM source (--topo, --topo-file, --topo-url, --topo-cog-url) or --tc-file must be provided for helmert anomalies')
         
         output_file_csv = self.output_dir / 'helmert.csv'
         output_file_nc = self.output_dir / 'helmert.nc'
@@ -945,6 +986,18 @@ def add_reduce_arguments(parser) -> None:
                         help='Indicate that input data is already in the target tide system')
     parser.add_argument('--topo', type=str, choices=['srtm30plus', 'srtm', 'cop', 'nasadem', 'gebco'],
                         help='DEM model for terrain correction (required for helmert unless --tc-file is provided)')
+    parser.add_argument('--topo-file', type=str,
+                        help='Path to a local DEM file to use instead of a built-in model.')
+    parser.add_argument('--topo-url', type=str,
+                        help='URL to a custom remote DEM file that should be downloaded before ingestion.')
+    parser.add_argument('--topo-cog-url', type=str,
+                        help='URL to a cloud-optimized or GDAL-readable remote DEM source.')
+    parser.add_argument('--topo-lon-name', type=str, default='x',
+                        help='Longitude coordinate name for a user-supplied DEM file. Default: x')
+    parser.add_argument('--topo-lat-name', type=str, default='y',
+                        help='Latitude coordinate name for a user-supplied DEM file. Default: y')
+    parser.add_argument('--topo-height-name', type=str, default='z',
+                        help='Height/elevation variable name for a user-supplied DEM file. Default: z')
     parser.add_argument('--tc-file', type=str,
                         help='Path to precomputed terrain correction NetCDF file')
     parser.add_argument('--radius', type=float, default=167.0,
@@ -1042,6 +1095,12 @@ def main(args=None) -> None:
         bbox_offset=args.bbox_offset,
         proj_name=args.proj_name,
         topo=args.topo,
+        topo_file=args.topo_file,
+        topo_url=args.topo_url,
+        topo_cog_url=args.topo_cog_url,
+        topo_lon_name=args.topo_lon_name,
+        topo_lat_name=args.topo_lat_name,
+        topo_height_name=args.topo_height_name,
         tc_file=args.tc_file,
         radius=args.radius,
         interp_method=args.interp_method,

@@ -187,6 +187,12 @@ class ResidualAnomalyComputation:
         bbox_offset: float = 2.0,
         proj_name: str = 'GeoidProject',
         topo: str = None,
+        topo_file: str | Path = None,
+        topo_url: str = None,
+        topo_cog_url: str = None,
+        topo_lon_name: str = 'x',
+        topo_lat_name: str = 'y',
+        topo_height_name: str = 'z',
         tc_file: str = None,
         radius: float = 167.0,
         interp_method: str = 'slinear',
@@ -234,6 +240,12 @@ class ResidualAnomalyComputation:
         self.bbox_offset = bbox_offset
         self.proj_name = proj_name
         self.topo = topo
+        self.topo_file = topo_file
+        self.topo_url = topo_url
+        self.topo_cog_url = topo_cog_url
+        self.topo_lon_name = topo_lon_name
+        self.topo_lat_name = topo_lat_name
+        self.topo_height_name = topo_height_name
         self.tc_file = tc_file
         self.radius = radius
         self.interp_method = interp_method
@@ -266,6 +278,14 @@ class ResidualAnomalyComputation:
         
         directory_setup(proj_name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _has_topo_source(self) -> bool:
+        return any([
+            self.topo is not None,
+            self.topo_file is not None,
+            self.topo_url is not None,
+            self.topo_cog_url is not None,
+        ])
 
     def _validate_marine_configuration(self) -> None:
         """Validate marine input metadata before it enters the RCR workflow."""
@@ -305,10 +325,11 @@ class ResidualAnomalyComputation:
     def _validate_terrain_correction_configuration(self) -> None:
         """Validate terrain-correction requirements for the selected residual workflow."""
         if self.apply_terrain_correction:
-            if not (self.topo or self.tc_file):
+            if not (self._has_topo_source() or self.tc_file):
                 raise ValueError(
                     'Terrain correction is enabled by default for geoid computation. '
-                    'Provide --topo or --tc-file, or explicitly disable it with '
+                    'Provide a DEM source (--topo, --topo-file, --topo-url, --topo-cog-url) '
+                    'or --tc-file, or explicitly disable it with '
                     '--no-terrain-correction/--no-tc for station-only experimental runs.'
                 )
             return
@@ -420,6 +441,12 @@ class ResidualAnomalyComputation:
             bbox_offset=self.bbox_offset,
             proj_name=self.proj_name,
             topo=self.topo,
+            topo_file=self.topo_file,
+            topo_url=self.topo_url,
+            topo_cog_url=self.topo_cog_url,
+            topo_lon_name=self.topo_lon_name,
+            topo_lat_name=self.topo_lat_name,
+            topo_height_name=self.topo_height_name,
             tc_file=self.tc_file,
             radius=self.radius,
             interp_method=self.interp_method,
@@ -905,6 +932,12 @@ def main(args=None) -> None:
         bbox_offset=args.bbox_offset,
         proj_name=args.proj_name,
         topo=args.topo,
+        topo_file=args.topo_file,
+        topo_url=args.topo_url,
+        topo_cog_url=args.topo_cog_url,
+        topo_lon_name=args.topo_lon_name,
+        topo_lat_name=args.topo_lat_name,
+        topo_height_name=args.topo_height_name,
         tc_file=getattr(args, 'tc_file', None),
         radius=args.radius,
         interp_method=args.interp_method,
@@ -1013,6 +1046,12 @@ def main(args=None) -> None:
     # Step 5: Calculate indirect effect (N_ind)
     topo_quantities = TopographicQuantities(
         topo=args.topo,
+        topo_file=args.topo_file,
+        topo_url=args.topo_url,
+        topo_cog_url=args.topo_cog_url,
+        topo_lon_name=args.topo_lon_name,
+        topo_lat_name=args.topo_lat_name,
+        topo_height_name=args.topo_height_name,
         ref_topo=args.ref_topo,
         dtm_model=args.dtm_model,
         model_dir=model_dir,
