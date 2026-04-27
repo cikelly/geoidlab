@@ -63,7 +63,7 @@ def auto_visualize(args) -> None:
     print('\n')
 
 
-def copy_template_config() -> None:
+def copy_template_config(forced: bool = False) -> None:
     '''Copy the bundled geoidlab.cfg template to the current working directory.'''
     main_dir = Path(__file__).parent.parent.parent
     template_path = main_dir / 'docs' / 'geoidlab.cfg'
@@ -76,14 +76,16 @@ def copy_template_config() -> None:
         )
         sys.exit(1)
 
-    if dest_path.exists():
+    if dest_path.exists() and not forced:
         print(f"Note: '{dest_path}' already exists. Not overwriting.")
         print('To use the template, edit the existing geoidlab.cfg or specify a different config file with --config <path>.')
         sys.exit(0)
 
+    replacing_existing = dest_path.exists()
     try:
         shutil.copy(template_path, dest_path)
-        print(f"Template configuration file copied to '{dest_path}'.")
+        action = 'replaced' if forced and replacing_existing else 'copied'
+        print(f"Template configuration file {action} at '{dest_path}'.")
         print('Please edit geoidlab.cfg and run `geoidlab -c geoidlab.cfg` to use it.')
         sys.exit(0)
     except (PermissionError, OSError) as e:
@@ -108,6 +110,10 @@ def main() -> None:
     parser.add_argument(
         '--init', action='store_true',
         help='Copy the default geoidlab.cfg template into the current directory.'
+    )
+    parser.add_argument(
+        '--forced', action='store_true',
+        help='Overwrite an existing geoidlab.cfg when used with --init or bare -c.'
     )
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)
     
@@ -155,11 +161,11 @@ def main() -> None:
     
     # Handle config file
     if args.init:
-        copy_template_config()
+        copy_template_config(forced=args.forced)
 
     if args.config is not None:
         if args.config == '__COPY_TEMPLATE__':
-            copy_template_config()
+            copy_template_config(forced=args.forced)
         else:
             # Config file path provided, parse it
             args = parse_config_file(args.config, args)
