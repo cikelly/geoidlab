@@ -7,6 +7,7 @@ from pathlib import Path
 import argparse
 import matplotlib.pyplot as plt
 from geoidlab.cli.main import main, auto_visualize, copy_template_config
+from geoidlab.cli.commands.topo import TopographicQuantities
 from geoidlab.cli.utils.config_parser import parse_config_file
 
 def test_auto_visualize(tmp_path) -> None:
@@ -205,3 +206,66 @@ def test_viz_config_accepts_plot_options_and_shared_project(tmp_path, capsys) ->
     assert args.contour_linewidth == 0.5
     assert args.contour_alpha == 0.6
     assert args.contour_levels == "10"
+
+
+def test_config_force_flag_is_parsed(tmp_path) -> None:
+    config_file = tmp_path / "geoidlab.cfg"
+    input_file = tmp_path / "gravity.csv"
+    input_file.write_text("lon,lat,gravity,height\n0,0,980000,0\n")
+    config_file.write_text(
+        "\n".join(
+            [
+                "[subcommand]",
+                "command = reduce",
+                "",
+                "[input_data]",
+                f"input_file = {input_file.name}",
+                "",
+                "[ggm]",
+                "model = EGM2008",
+                "",
+                "[grid]",
+                "bbox = -1 1 -1 1",
+                "",
+                "[computation]",
+                "force = True",
+            ]
+        )
+    )
+
+    args = parse_config_file(
+        str(config_file),
+        argparse.Namespace(subcommand=None, func=None),
+    )
+
+    assert args.force is True
+
+
+def test_topo_indirect_effect_respects_force(tmp_path) -> None:
+    output_file = tmp_path / "N_ind.nc"
+    output_file.write_text("existing")
+
+    class DummyTerrain:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def indirect_effect(self, **kwargs) -> None:
+            self.calls += 1
+
+    workflow = TopographicQuantities.__new__(TopographicQuantities)
+    workflow.output_dir = tmp_path
+    workflow.parallel = False
+    workflow.chunk_size = 1
+    workflow.radius = 167.0
+    workflow.ellipsoid = "wgs84"
+    workflow.tq = DummyTerrain()
+    workflow.force = False
+
+    result = workflow.compute_ind()
+    assert result["status"] == "skipped"
+    assert workflow.tq.calls == 0
+
+    workflow.force = True
+    result = workflow.compute_ind()
+    assert result["status"] == "success"
+    assert workflow.tq.calls == 1

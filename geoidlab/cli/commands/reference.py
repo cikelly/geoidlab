@@ -93,6 +93,7 @@ class GGMSynthesis():
         chunk_size: int = 500,
         parallel: bool = False,
         force_parallel: bool = False,
+        force: bool = False,
         threaded_legendre: bool = False,
         legendre_method: str = 'standard',
         tide_system: str = None,
@@ -150,6 +151,7 @@ class GGMSynthesis():
         self.chunk_size = chunk_size
         self.parallel = parallel
         self.force_parallel = force_parallel
+        self.force = force
         self.threaded_legendre = threaded_legendre
         self.legendre_method = legendre_method
         self.tide_system = tide_system
@@ -379,6 +381,7 @@ class GGMSynthesis():
                 lat=self.lat_grid,
                 dataset_key=output_key,
                 filepath=output_file,
+                overwrite=True,
                 tide_system=self.ggm_tide,
                 method='Topographic correction applied (ICGEM method)' if icgem else 'Regular method (no correction applied)',
                 ellipsoid=self.ellipsoid,
@@ -527,6 +530,8 @@ def add_reference_arguments(parser) -> None:
                         help='Enable parallel processing')
     parser.add_argument('--force-parallel', action='store_true', default=False,
                         help='Keep parallel=True for large batched arrays. This may use substantial memory.')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Recompute and replace existing result files. Download caches are still reused.')
     parser.add_argument('--threaded-legendre', action='store_true', default=False,
                         help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
     parser.add_argument('--legendre-method', type=str, default='standard', choices=['standard', 'holmes'],
@@ -605,6 +610,7 @@ def main(args=None) -> int:
         chunk_size=args.chunk_size,
         parallel=args.parallel,
         force_parallel=args.force_parallel,
+        force=args.force,
         threaded_legendre=args.threaded_legendre,
         legendre_method=args.legendre_method,
         tide_system=args.gravity_tide,

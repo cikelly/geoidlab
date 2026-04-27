@@ -24,6 +24,8 @@ def add_prep_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--tide-system', type=str, default=None,
                         choices=['mean_tide', 'tide_free', 'zero_tide'],
                         help='Tide system metadata to store in the normalized file.')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Accepted for workflow consistency; normalized output is written to the requested path.')
 
 
 def main(args=None) -> None:

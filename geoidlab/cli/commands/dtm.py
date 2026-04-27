@@ -39,6 +39,7 @@ class DTMSynthesis:
         chunk_memory_gb: float | None = None,
         n_workers: int | None = None,
         leg_progress: bool = False,
+        force: bool = False,
         threaded_legendre: bool = False,
         legendre_method: str = 'standard',
         proj_name: str = 'GeoidProject',
@@ -60,6 +61,7 @@ class DTMSynthesis:
         self.chunk_memory_gb = chunk_memory_gb
         self.n_workers = n_workers
         self.leg_progress = leg_progress
+        self.force = force
         self.threaded_legendre = threaded_legendre
         self.legendre_method = legendre_method
         self.proj_name = proj_name
@@ -154,6 +156,11 @@ class DTMSynthesis:
         )
 
         lon, lat, height, grid_shape = self._prepare_coordinates()
+        output_file = self.output_dir / ('H_dtm.csv' if grid_shape is None else 'H_dtm.nc')
+        if output_file.exists() and not self.force:
+            print(f'DTM heights already computed at {output_file}. Skipping computation.')
+            return {'status': 'skipped', 'output_file': str(output_file)}
+
         dtm = DigitalTerrainModel(
             model_name=model_path,
             nmax=self.max_deg,
@@ -175,7 +182,6 @@ class DTMSynthesis:
         )
 
         if grid_shape is None:
-            output_file = self.output_dir / 'H_dtm.csv'
             df = pd.DataFrame({
                 'lon': np.asarray(lon).ravel(),
                 'lat': np.asarray(lat).ravel(),
@@ -183,13 +189,13 @@ class DTMSynthesis:
             })
             df.to_csv(output_file, index=False)
         else:
-            output_file = self.output_dir / 'H_dtm.nc'
             save_to_netcdf(
                 data=np.asarray(H).reshape(grid_shape),
                 lon=np.asarray(lon),
                 lat=np.asarray(lat),
                 dataset_key='H_dtm',
                 filepath=output_file,
+                overwrite=True,
                 ellipsoid=self.ellipsoid,
                 ellipsoid_name=self.ellipsoid_name,
             )
@@ -229,6 +235,8 @@ def add_dtm_arguments(parser) -> None:
                         help='Number of worker processes for chunked DTM synthesis.')
     parser.add_argument('--leg-progress', action='store_true', default=False,
                         help='Show Legendre progress for non-multiprocessing synthesis.')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Recompute and replace existing result files. Download caches are still reused.')
     parser.add_argument('--threaded-legendre', action='store_true', default=False,
                         help='Use threaded Legendre generation for supported DTM kernels.')
     parser.add_argument('--legendre-method', type=str, default='standard', choices=['standard', 'holmes'],
@@ -260,6 +268,7 @@ def main(args) -> dict:
         chunk_memory_gb=args.chunk_memory_gb,
         n_workers=args.workers,
         leg_progress=args.leg_progress,
+        force=args.force,
         threaded_legendre=args.threaded_legendre,
         legendre_method=args.legendre_method,
         proj_name=args.proj_name,

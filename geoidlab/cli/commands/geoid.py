@@ -198,6 +198,7 @@ class ResidualAnomalyComputation:
         interp_method: str = 'slinear',
         parallel: bool = False,
         force_parallel: bool = False,
+        force: bool = False,
         threaded_legendre: bool = False,
         legendre_method: str = 'standard',
         chunk_size: int = 500,
@@ -251,6 +252,7 @@ class ResidualAnomalyComputation:
         self.interp_method = interp_method
         self.parallel = parallel
         self.force_parallel = force_parallel
+        self.force = force
         self.threaded_legendre = threaded_legendre
         self.legendre_method = legendre_method
         self.chunk_size = chunk_size
@@ -452,6 +454,7 @@ class ResidualAnomalyComputation:
             interp_method=self.interp_method,
             parallel=self.parallel,
             force_parallel=self.force_parallel,
+            force=self.force,
             threaded_legendre=self.threaded_legendre,
             legendre_method=self.legendre_method,
             chunk_size=self.chunk_size,
@@ -521,6 +524,7 @@ class ResidualAnomalyComputation:
             chunk_size=self.chunk_size,
             parallel=self.parallel,
             force_parallel=self.force_parallel,
+            force=self.force,
             threaded_legendre=self.threaded_legendre,
             legendre_method=self.legendre_method,
             tide_system=self.gravity_tide,
@@ -558,6 +562,7 @@ class ResidualAnomalyComputation:
                 chunk_size=self.chunk_size,
                 parallel=self.parallel,
                 force_parallel=self.force_parallel,
+                force=self.force,
                 threaded_legendre=self.threaded_legendre,
                 legendre_method=self.legendre_method,
                 tide_system=self.gravity_tide,
@@ -696,7 +701,7 @@ class ResidualAnomalyComputation:
         correction_file = self.output_dir / correction_fname
         var_name = self.CORRECTION_VAR_MAP.get(correction_type, correction_type)
         
-        if correction_file.exists():
+        if correction_file.exists() and not self.force:
             if not self._should_recompute_grid(correction_file, target_grid_size_deg):
                 print(f'Loading existing {correction_type} grid...')
                 ds = xr.open_dataset(correction_file)
@@ -815,6 +820,7 @@ class ResidualAnomalyComputation:
             chunk_size=self.chunk_size,
             parallel=self.parallel,
             force_parallel=self.force_parallel,
+            force=self.force,
             threaded_legendre=self.threaded_legendre,
             legendre_method=self.legendre_method,
             tide_system=self.gravity_tide,
@@ -943,6 +949,7 @@ def main(args=None) -> None:
         interp_method=args.interp_method,
         parallel=args.parallel,
         force_parallel=args.force_parallel,
+        force=args.force,
         threaded_legendre=args.threaded_legendre,
         legendre_method=args.legendre_method,
         chunk_size=args.chunk_size,
@@ -1017,6 +1024,7 @@ def main(args=None) -> None:
         chunk_size=args.chunk_size,
         parallel=args.parallel,
         force_parallel=args.force_parallel,
+        force=args.force,
         threaded_legendre=args.threaded_legendre,
         legendre_method=args.legendre_method,
         tide_system=args.gravity_tide,
@@ -1061,6 +1069,7 @@ def main(args=None) -> None:
         chunk_size=args.chunk_size,
         radius=args.radius,
         parallel=args.parallel,
+        force=args.force,
         bbox=bbox,
         bbox_offset=args.bbox_offset,
         grid_size=args.ind_grid_size,

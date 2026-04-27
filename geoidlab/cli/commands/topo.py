@@ -88,6 +88,7 @@ class TopographicQuantities:
         grid_unit: str = 'seconds',
         window_mode: str = 'radius',
         parallel: bool = False,
+        force: bool = False,
         # resolution: int = 30,
         # resolution_unit: str = 'seconds',
         interp_method: str = 'slinear',
@@ -162,6 +163,7 @@ class TopographicQuantities:
         self.grid_unit = grid_unit
         self.proj_name = proj_name
         self.window_mode = window_mode
+        self.force = force
         # self.resolution = resolution
         # self.unit = resolution_unit
         self.interp_method = interp_method
@@ -370,8 +372,8 @@ class TopographicQuantities:
     def compute_ind(self) -> dict:
         '''Compute indirect effect'''
         output_file = self.output_dir / f"{self.TASK_CONFIG['indirect-effect']['output']['file']}.nc"
-        if output_file.exists():
-            print(f'Indirect effect exists. To recompute, please delete existing NetCDF file and rerun. Skipping computation...')
+        if output_file.exists() and not self.force:
+            print('Indirect effect exists. Use --force or force=true to recompute. Skipping computation...')
             return {
                 'status': 'skipped',
                 'output_file': str(output_file)
@@ -434,13 +436,13 @@ class TopographicQuantities:
         atm_file = self.output_dir / 'Dg_atm.nc'
         site_file = self.output_dir / 'Dg_SITE.nc'
         # Only compute if not already present
-        if not atm_file.exists() or not site_file.exists():
+        if self.force or not atm_file.exists() or not site_file.exists():
             if not hasattr(self, 'tq'):
                 self._initialize_terrain()
-            if not atm_file.exists():
+            if self.force or not atm_file.exists():
                 atm_corr = self.tq.atm_correction_grid()
                 output_file = self.output_dir / f"{self.TASK_CONFIG['atm-corr']['output']['file']}.nc"
-            if not site_file.exists():    
+            if self.force or not site_file.exists():    
                 site = self.tq.secondary_indirect_effect()
                 output_file = self.output_dir / f"{self.TASK_CONFIG['site']['output']['file']}.nc"
         return {'status': 'success', 'output_files': [str(atm_file), str(site_file)]}
@@ -519,6 +521,8 @@ def add_topo_arguments(parser) -> None:
                         help='Method for selecting sub-grid for computation. Default: radius')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, 
                         help='Enable parallel processing')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Recompute and replace existing result files. Download caches are still reused.')
     parser.add_argument('--chunk-size', type=int, default=500, 
                         help='Chunk size for parallel processing')
     parser.add_argument('--interpolation-method', type=str, default='slinear', choices=['linear', 'nearest', 'slinear', 'cubic', 'quintic'],
@@ -605,6 +609,7 @@ def main(args=None) -> int:
         grid_unit=args.grid_unit,
         window_mode=args.window_mode,
         parallel=args.parallel,
+        force=args.force,
         interp_method=args.interpolation_method,
         constant_density=not args.variable_density,
         density_model=args.density_model,

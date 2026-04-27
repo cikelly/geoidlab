@@ -115,6 +115,7 @@ class GravityReduction:
         interp_method: str = 'slinear',
         parallel: bool = False,
         force_parallel: bool = False,
+        force: bool = False,
         threaded_legendre: bool = False,
         legendre_method: str = 'standard',
         chunk_size: int = 500,
@@ -163,6 +164,7 @@ class GravityReduction:
         self.interp_method = interp_method
         self.parallel = parallel
         self.force_parallel = force_parallel
+        self.force = force
         self.threaded_legendre = threaded_legendre
         self.legendre_method = legendre_method
         self.chunk_size = chunk_size
@@ -316,7 +318,7 @@ class GravityReduction:
             tc_grid = xr.open_dataset(self.tc_file)
         else:
             tc_file = self.output_dir / 'TC.nc'
-            if tc_file.exists():
+            if tc_file.exists() and not self.force:
                 print(f'Loading terrain correction from {tc_file}')
                 tc_grid = xr.open_dataset(tc_file)
                 return tc_grid
@@ -342,6 +344,7 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
+                force=self.force,
                 interp_method=self.interp_method,
                 constant_density=self.constant_density,
                 density_model=self.density_model,
@@ -376,7 +379,7 @@ class GravityReduction:
     def _compute_secondary_indirect_effect(self) -> np.ndarray:
         '''Compute Secondary Indirect Topographic Effect (SITE) on gravity.'''
         site_file = self.output_dir / 'Dg_SITE.nc'
-        if site_file.exists():
+        if site_file.exists() and not self.force:
             print(f'Loading SITE from {site_file}')
             site_grid = xr.open_dataset(site_file)
             return site_grid
@@ -402,6 +405,7 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
+                force=self.force,
                 interp_method=self.interp_method,
                 constant_density=self.constant_density,
                 density_model=self.density_model,
@@ -435,7 +439,7 @@ class GravityReduction:
     def _compute_atmospheric_effect(self) -> np.ndarray:
         '''Compute gridded atmospheric effect on gravity (DAE)'''
         atm_file = self.output_dir / 'Dg_atm.nc'
-        if atm_file.exists():
+        if atm_file.exists() and not self.force:
             print(f'Loading ATM from {atm_file}')
             atm_grid = xr.open_dataset(atm_file)
             return atm_grid
@@ -461,6 +465,7 @@ class GravityReduction:
                 grid_size=self.tc_grid_size,
                 window_mode=self.window_mode,
                 parallel=self.parallel,
+                force=self.force,
                 interp_method=self.interp_method,
                 constant_density=self.constant_density,
                 density_model=self.density_model,
@@ -504,7 +509,7 @@ class GravityReduction:
             raise ValueError('Please specify a GGM model for ellipsoidal correction.')
         
         ec_file = self.output_dir / 'Dg_ELL.nc'
-        if ec_file.exists():
+        if ec_file.exists() and not self.force:
             print(f'Loading ellipsoidal correction from {ec_file}')
             return xr.open_dataset(ec_file)
         
@@ -811,7 +816,7 @@ class GravityReduction:
         
         output_file_csv = self.output_dir / 'helmert.csv'
         output_file_nc = self.output_dir / 'helmert.nc'
-        if output_file_csv.exists() and output_file_nc.exists():
+        if output_file_csv.exists() and output_file_nc.exists() and not self.force:
             print(f'helmert anomalies already computed at {output_file_csv} and {output_file_nc}. Skipping computation.')
             return {
                 'status': 'success',
@@ -1009,6 +1014,8 @@ def add_reduce_arguments(parser) -> None:
                         help='Enable parallel processing for terrain correction')
     parser.add_argument('--force-parallel', action='store_true', default=False,
                         help='Keep parallel=True for large batched GGM arrays. This may use substantial memory.')
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='Recompute and replace existing result files. Download caches are still reused.')
     parser.add_argument('--threaded-legendre', action='store_true', default=False,
                         help='Use threaded Legendre generation for supported GGM kernels. Default behavior remains unchanged unless this is set.')
     parser.add_argument('--legendre-method', type=str, default='standard', choices=['standard', 'holmes'],
@@ -1106,6 +1113,7 @@ def main(args=None) -> None:
         interp_method=args.interp_method,
         parallel=args.parallel,
         force_parallel=args.force_parallel,
+        force=args.force,
         threaded_legendre=args.threaded_legendre,
         legendre_method=args.legendre_method,
         chunk_size=args.chunk_size,

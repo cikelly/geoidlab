@@ -141,6 +141,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'end'                   : ('end', None),
         'parallel'              : ('parallel', False),
         'force_parallel'        : ('force_parallel', False),
+        'force'                 : ('force', False),
         'threaded_legendre'     : ('threaded_legendre', False),
         'legendre_method'       : ('legendre_method', 'standard'),
         'chunk_size'            : ('chunk_size', None),
@@ -222,7 +223,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction', 'leg_progress', 'list_cmaps', 'relief', 'surface', 'sharex', 'sharey', 'global_plot', 'share_cbar', 'contour'}:
+        if key in {'parallel', 'force_parallel', 'force', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction', 'leg_progress', 'list_cmaps', 'relief', 'surface', 'sharex', 'sharey', 'global_plot', 'share_cbar', 'contour'}:
             return value.lower() in {'true', 'yes', '1'}
         if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution', 'workers', 'nrows', 'ncols', 'shared_cbar_font_size'}:
             return int(value)

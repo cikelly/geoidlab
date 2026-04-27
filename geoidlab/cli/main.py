@@ -115,6 +115,10 @@ def main() -> None:
         '--forced', action='store_true',
         help='Overwrite an existing geoidlab.cfg when used with --init or bare -c.'
     )
+    parser.add_argument(
+        '--force', action='store_true', default=None,
+        help='Recompute and replace existing result files when running from a config file.'
+    )
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands', required=False)
     
     # GGM subcommand
