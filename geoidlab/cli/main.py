@@ -52,12 +52,14 @@ def auto_visualize(args) -> None:
     viz_args.cbar_title = None
     viz_args.variable = None
     viz_args.list_cmaps = False
+    if isinstance(getattr(viz_args, 'cmap', None), str):
+        viz_args.cmap = [viz_args.cmap]
     
     # Process each NetCDF file
     print(f'Plotting and saving all NetCDF files in {results_dir}.\n')
     for nc_file in nc_files:
         print(f'Saving {nc_file.name} data to {results_dir}/figures ...')
-        viz_args.filename = str(nc_file)
+        viz_args.filename = [str(nc_file)]
         plot_main(viz_args)
     
     print('\n')
