@@ -156,6 +156,8 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'method'                : ('method', 'hg'),
         'ind_grid_size'         : ('ind_grid_size', 30.0),
         'target_tide_system'    : ('target_tide_system', 'tide_free'),
+        # project
+        'proj_name'             : ('proj_name', 'GeoidProject'),
         # viz
         'filename'              : ('filename', None),
         'variable'              : ('variable', None),
@@ -164,20 +166,55 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'vmin'                  : ('vmin', None),
         'vmax'                  : ('vmax', None),
         'font_size'             : ('font_size', None),
+        'title'                 : ('title', None),
         'title_font_size'       : ('title_font_size', None),
         'font_family'           : ('font_family', None),
+        'cbar_title'            : ('cbar_title', None),
+        'cbar_orientation'      : ('cbar_orientation', 'vertical'),
+        'cbar_shrink'           : ('cbar_shrink', 1.0),
+        'cbar_pad'              : ('cbar_pad', None),
+        'cbar_location'         : ('cbar_location', 'right'),
+        'list_cmaps'            : ('list_cmaps', False),
         'save'                  : ('save', False),
         'dpi'                   : ('dpi', None),
-        'proj_name'             : ('proj_name', None),
+        'save_pad'              : ('save_pad', None),
         'xlim'                  : ('xlim', None),
         'ylim'                  : ('ylim', None),
         'scalebar'              : ('scalebar', False),
         'scalebar_units'        : ('scalebar_units', None),
         'scalebar_fancy'        : ('scalebar_fancy', False),
         'unit'                  : ('unit', None),
+        'relief'                : ('relief', False),
+        'relief_exaggeration'   : ('relief_exaggeration', 10.0),
+        'relief_azdeg'          : ('relief_azdeg', 135.0),
+        'relief_altdeg'         : ('relief_altdeg', 45.0),
+        'surface'               : ('surface', False),
+        'surface_exaggeration'  : ('surface_exaggeration', 0.5),
+        'surface_elev'          : ('surface_elev', 30.0),
+        'surface_azim'          : ('surface_azim', -110.0),
+        'boundary'              : ('boundary', None),
+        'bound_color'           : ('bound_color', 'k'),
+        'bound_linewidth'       : ('bound_linewidth', 1.2),
+        'sharex'                : ('sharex', False),
+        'sharey'                : ('sharey', False),
+        'nrows'                 : ('nrows', None),
+        'ncols'                 : ('ncols', None),
+        'global_plot'           : ('global_plot', False),
+        'projection'            : ('projection', 'PlateCarree'),
+        'global_cbar_orientation': ('global_cbar_orientation', 'horizontal'),
+        'global_cbar_shrink'    : ('global_cbar_shrink', 0.6),
+        'global_cbar_pad'       : ('global_cbar_pad', 0.05),
+        'share_cbar'            : ('share_cbar', False),
+        'shared_cbar_orientation': ('shared_cbar_orientation', 'vertical'),
+        'shared_cbar_shrink'    : ('shared_cbar_shrink', 0.5),
+        'shared_cbar_pad'       : ('shared_cbar_pad', 0.02),
+        'shared_cbar_font_size' : ('shared_cbar_font_size', 12),
+        'contour'               : ('contour', False),
+        'contour_color'         : ('contour_color', 'black'),
+        'contour_linewidth'     : ('contour_linewidth', 0.25),
+        'contour_alpha'         : ('contour_alpha', 0.8),
+        'contour_levels'        : ('contour_levels', None),
         # ncinfo
-        'filename'              : ('filename', None),  # Used for viz, ncinfo
-        'proj_name'             : ('proj_name', 'GeoidProject'),
         'verbose'               : ('verbose', False),
     }
     
@@ -185,17 +222,19 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
     def convert_value(key: str, value: str, config_dir: Path) -> any:
         if not value.strip():
             return None
-        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction', 'leg_progress'}:
+        if key in {'parallel', 'force_parallel', 'threaded_legendre', 'icgem', 'converted', 'atm', 'decimate', 'save', 'scalebar', 'scalebar_fancy', 'verbose', 'site', 'ellipsoidal_correction', 'approximation', 'variable_density', 'density_save', 'apply_terrain_correction', 'leg_progress', 'list_cmaps', 'relief', 'surface', 'sharex', 'sharey', 'global_plot', 'share_cbar', 'contour'}:
             return value.lower() in {'true', 'yes', '1'}
-        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution', 'workers'}:
+        if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution', 'workers', 'nrows', 'ncols', 'shared_cbar_font_size'}:
             return int(value)
-        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax', 'chunk_memory_gb'}:
+        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax', 'chunk_memory_gb', 'cbar_shrink', 'cbar_pad', 'relief_exaggeration', 'relief_azdeg', 'relief_altdeg', 'surface_exaggeration', 'surface_elev', 'surface_azim', 'bound_linewidth', 'global_cbar_shrink', 'global_cbar_pad', 'shared_cbar_shrink', 'shared_cbar_pad', 'contour_linewidth', 'contour_alpha'}:
             return float(value)
         if key in {'bbox', 'fig_size', 'xlim', 'ylim'}:
             return [float(x) for x in value.split()]
+        if key == 'save_pad':
+            return value.split()
         if key == 'variable':
             return [x.strip() for x in value.split(',')]
-        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir', 'density_file', 'topo_file'}:
+        if key in {'input_file', 'marine_data', 'tc_file', 'ref_topo', 'filename', 'model_dir', 'density_file', 'topo_file', 'boundary'}:
             # Resolve relative paths relative to config file directory
             path = Path(value)
             if not path.is_absolute():
@@ -236,8 +275,14 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
             print(f"Error: Input file '{input_file}' does not exist.")
             sys.exit(1)
     elif args_dict['subcommand'] == 'topo':
-        if not args_dict.get('topo'):
-            print("Error: 'topo' is required for topo subcommand.")
+        topo_sources = [
+            args_dict.get('topo'),
+            args_dict.get('topo_file'),
+            args_dict.get('topo_url'),
+            args_dict.get('topo_cog_url'),
+        ]
+        if sum(source is not None for source in topo_sources) != 1:
+            print("Error: specify exactly one DEM source for topo: 'topo', 'topo_file', 'topo_url', or 'topo_cog_url'.")
             sys.exit(1)
         if not args_dict.get('bbox'):
             print("Error: 'bbox' is required for topo subcommand.")
@@ -258,6 +303,13 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         if not args_dict.get('filename'):
             print("Error: 'filename' is required for ncinfo subcommand.")
             sys.exit(1)
+
+    if args_dict['subcommand'] == 'viz':
+        for key in {'filename', 'cmap', 'title'}:
+            if isinstance(args_dict.get(key), str):
+                args_dict[key] = [args_dict[key]]
+        if isinstance(args_dict.get('variable'), str):
+            args_dict['variable'] = [args_dict['variable']]
     
     # Convert grid flag for reduce
     if args_dict['subcommand'] == 'reduce' and args_dict.get('bbox') and args_dict.get('grid_size'):
