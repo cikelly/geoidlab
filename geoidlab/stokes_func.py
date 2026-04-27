@@ -135,6 +135,9 @@ class Stokes4ResidualGeoid:
             valid_cos_psi = cos_psi_flat[start_idx:end_idx][chunk_mask]
             Pn_chunk = legendre_poly_fast(t=valid_cos_psi, nmax=self.nmax)
             
+            if Pn_chunk.ndim == 1:
+                Pn_chunk = Pn_chunk[np.newaxis, :]
+                
             # Compute modification term with stable summation
             sum_terms = np.zeros(len(valid_cos_psi), dtype=np.float64)
             for n in range(2, self.nmax + 1):
