@@ -1028,10 +1028,10 @@ def main(args=None) -> None:
     if args.save:
         figures_dir = Path(f'{args.proj_name}/results/figures')
         if len(args.filename) == 1:
-            file_name = args.filename[0].split('/')[-1].split('.')[0]
+            file_name = Path(args.filename[0]).stem
         else:
             # For multiple files, create a combined filename
-            file_names = [f.split('/')[-1].split('.')[0] for f in args.filename]
+            file_names = [Path(f).stem for f in args.filename]
             file_name = '_'.join(file_names)
         if use_surface:
             file_name = f'{file_name}_3D'
