@@ -162,7 +162,10 @@ def add_geoid_arguments(parser) -> None:
     parser.add_argument('--no-terrain-correction', '--no-tc', dest='apply_terrain_correction',
                       action='store_false', default=True,
                       help='Disable terrain correction in the geoid workflow. This is only supported for the station residual method.')
-    
+    parser.add_argument('--fast', action='store_true', default=False,
+                      help='Use the row-exact accelerated far-zone integration (cap/radius window mode only). '
+                           'Algebraically equivalent to the standard method; speedup scales with the number of grid columns.')
+
 class ResidualAnomalyComputation:
     '''Class to handle computation of residual gravity anomalies using different methods'''
     
@@ -995,7 +998,8 @@ def main(args=None) -> None:
         method=args.method,
         ellipsoid=args.ellipsoid,
         nmax=args.max_deg,
-        window_mode=args.window_mode
+        window_mode=args.window_mode,
+        fast=args.fast
     )
     N_res = residual_geoid.compute_geoid()
     print(f'Saving residual geoid to {output_dir}/N_res.nc')

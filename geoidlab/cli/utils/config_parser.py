@@ -157,6 +157,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'method'                : ('method', 'hg'),
         'ind_grid_size'         : ('ind_grid_size', 30.0),
         'target_tide_system'    : ('target_tide_system', 'tide_free'),
+        'fast'                  : ('fast', False),
         # project
         'proj_name'             : ('proj_name', 'GeoidProject'),
         # viz

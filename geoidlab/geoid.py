@@ -35,7 +35,8 @@ class ResidualGeoid:
         method: str = 'hg',
         ellipsoid: str = 'wgs84',
         nmax: int = None,
-        window_mode: str = 'cap'
+        window_mode: str = 'cap',
+        fast: bool = False
     ) -> None:
         '''
         Initialize the ResidualGeoid class.
@@ -53,7 +54,8 @@ class ResidualGeoid:
         ellipsoid  : reference ellipsoid for normal gravity calculation
         nmax       : maximum degree of spherical harmonic expansion
         window_mode: window mode for integration. Options are: 'fixed' or 'cap'
-        
+        fast       : use the row-exact accelerated far-zone computation (cap/radius only)
+
         Returns
         -------
         None
@@ -126,7 +128,8 @@ class ResidualGeoid:
         self.ellipsoid = ellipsoid
         self.nmax = nmax
         self.window_mode = window_mode
-        
+        self.fast = fast
+
         # Grid information
         self.Lon, self.Lat = np.meshgrid(res_anomaly['lon'].values, res_anomaly['lat'].values)
         self.nrows, self.ncols = res_anomaly['Dg'].shape
@@ -172,6 +175,146 @@ class ResidualGeoid:
         S_k = np.nan_to_num(S_k, nan=0.0, posinf=0.0, neginf=0.0)
         
         return S_k
+
+    def _compute_far_zone_point(
+        self,
+        i: int,
+        j: int,
+        row_p: int,
+        col_p: int,
+        psi0: float,
+        dphi_2: float,
+        dlam_2: float
+    ) -> float:
+        '''Single-point far-zone contribution using the original cap method.'''
+        mask, (row_min, row_max, col_min, col_max) = self.get_cap_window(row_p, col_p)
+        win_Dg  = self.res_anomaly['Dg'].values[row_min:row_max, col_min:col_max]
+        win_phi = np.radians(self.Lat[row_min:row_max, col_min:col_max])
+        win_lon = np.radians(self.Lon[row_min:row_max, col_min:col_max])
+        win_Dg  = np.where(mask, win_Dg,  np.nan)
+        win_phi = np.where(mask, win_phi, np.nan)
+        win_lon = np.where(mask, win_lon, np.nan)
+        lat1 = win_phi - dphi_2
+        lat2 = win_phi + dphi_2
+        lon1 = win_lon - dlam_2
+        lon2 = win_lon + dlam_2
+        A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
+        A_k = np.where(np.isfinite(win_Dg), A_k, np.nan)
+        self.stokes_calculator = Stokes4ResidualGeoid(
+            lonp=self.lonp[i, j],
+            latp=self.phip[i, j],
+            lon=win_lon,
+            lat=win_phi,
+            psi0=psi0,
+            nmax=self.nmax
+        )
+        S_k = self.stokes_kernel()
+        S_k = np.where(mask, S_k, np.nan)
+        c_k = A_k * S_k
+        return np.nansum(c_k * win_Dg) / (4 * np.pi * self.gamma_0[i, j] * self.R)
+
+    def _compute_far_zone_row_exact(
+        self,
+        psi0: float,
+        dphi_2: float,
+        dlam_2: float
+    ) -> np.ndarray:
+        '''
+        Accelerated row-exact far-zone contribution.
+
+        For a regular geographic grid every computation point in row i shares the
+        same latitude, so the Stokes weight matrix W_i(a, b) is identical for all
+        columns j in that row.  The matrix is built once per row and the gravity-
+        anomaly window is shifted column-by-column without recomputing the kernel.
+
+        Rows and columns whose cap window is clipped by the grid boundary fall back
+        to _compute_far_zone_point so results are identical to the original method.
+
+        '''
+        N_far = np.zeros_like(self.N_inner)
+
+        lat     = self.res_anomaly['lat'].values
+        lon     = self.res_anomaly['lon'].values
+        lat_sub = self.res_anomaly_P['lat'].values
+        lon_sub = self.res_anomaly_P['lon'].values
+        row_start = np.where(lat == lat_sub[0])[0][0]
+        col_start = np.where(lon == lon_sub[0])[0][0]
+
+        dn = int(np.ceil(self.sph_cap / self.dphi))
+
+        for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
+            row_p = row_start + i
+            lat_i = self.Lat[row_p, col_start]
+            phi_i = np.radians(lat_i)
+            dm    = int(np.ceil(self.sph_cap / (self.dlam * np.cos(np.radians(lat_i)))))
+
+            # Rows where the cap window is clipped at the top or bottom grid edge
+            if row_p - dn < 0 or row_p + dn + 1 > self.nrows:
+                for j in range(self.ncols_P):
+                    N_far[i, j] = self._compute_far_zone_point(
+                        i, j, row_p, col_start + j, psi0, dphi_2, dlam_2
+                    )
+                continue
+
+            # --- Build W_i(a, b) once for this row (Eq. 11 of PDF) ---
+            a_vals = np.arange(-dn, dn + 1)         # row offsets, length 2*dn+1
+            b_vals = np.arange(-dm, dm + 1)         # col offsets, length 2*dm+1
+            A_grid, B_grid = np.meshgrid(a_vals, b_vals, indexing='ij')  # (2*dn+1, 2*dm+1)
+
+            row_idx = row_p + A_grid
+
+            # Integration-cell latitudes in degrees and radians
+            lat_k_deg = self.Lat[row_idx, col_start]    # (2*dn+1, 2*dm+1)
+            phi_k     = np.radians(lat_k_deg)
+
+            # Relative longitude offsets (Eq. 13: cos ψ depends only on b·Δλ)
+            b_lam_deg = B_grid * self.dlam
+            b_lam_rad = np.radians(b_lam_deg)
+
+            # Cell areas — depend only on integration-cell latitude (Eq. 4 of PDF)
+            A_k = self.R**2 * 2 * dlam_2 * np.abs(
+                np.sin(phi_k + dphi_2) - np.sin(phi_k - dphi_2)
+            )
+
+            # Stokes kernel with lonp=0 reference: algebraically equivalent to the
+            # original because the kernel depends only on the spherical distance ψ,
+            # and cos ψ_i(a,b) = sin φ_i sin φ_{ki+a} + cos φ_i cos φ_{ki+a} cos(b Δλ)
+            # (Eq. 13) is identical to the general formula with the longitude origin
+            # shifted to the computation point.
+            self.stokes_calculator = Stokes4ResidualGeoid(
+                lonp=0.0,
+                latp=phi_i,
+                lon=b_lam_rad,
+                lat=phi_k,
+                psi0=psi0,
+                nmax=self.nmax
+            )
+            S_k = self.stokes_kernel()
+
+            # Cap mask — same haversine logic as get_cap_window
+            distances = haversine_vectorized(0.0, lat_i, b_lam_deg, lat_k_deg, 'deg', 'deg')
+            chi = distances <= self.sph_cap
+
+            W = np.where(chi, A_k * S_k, np.nan)   # (2*dn+1, 2*dm+1)
+
+            # Shift W across all columns in this row
+            for j in range(self.ncols_P):
+                col_p = col_start + j
+
+                # Columns where the cap window is clipped at the left or right grid edge
+                if col_p - dm < 0 or col_p + dm + 1 > self.ncols:
+                    N_far[i, j] = self._compute_far_zone_point(
+                        i, j, row_p, col_p, psi0, dphi_2, dlam_2
+                    )
+                    continue
+
+                win_Dg = self.res_anomaly['Dg'].values[
+                    row_p - dn : row_p + dn + 1,
+                    col_p - dm : col_p + dm + 1
+                ]
+                N_far[i, j] = np.nansum(W * win_Dg) / (4 * np.pi * self.gamma_0[i, j] * self.R)
+
+        return N_far
 
     def compute_geoid(self) -> np.ndarray:
         '''
@@ -261,58 +404,60 @@ class ResidualGeoid:
                 n1 += 1
                 n2 += 1
         else:
-            # Find sub-grid offset in full grid
-            lat = self.res_anomaly['lat'].values
-            lon = self.res_anomaly['lon'].values
-            lat_sub = self.res_anomaly_P['lat'].values
-            lon_sub = self.res_anomaly_P['lon'].values
-            row_start = np.where(lat == lat_sub[0])[0][0]
-            col_start = np.where(lon == lon_sub[0])[0][0]
-            
-            for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
-                for j in range(self.ncols_P):
-                    # Map sub-grid to full grid indices
-                    row_p = row_start + i
-                    col_p = col_start + j
-                    
-                    # Get cap window bounds and mask
-                    mask, (row_min, row_max, col_min, col_max) = self.get_cap_window(row_p, col_p)
-                    
-                    # Extract window data
-                    win_Dg = self.res_anomaly['Dg'].values[row_min:row_max, col_min:col_max]
-                    win_phi = np.radians(self.Lat[row_min:row_max, col_min:col_max])
-                    win_lon = np.radians(self.Lon[row_min:row_max, col_min:col_max])
-                    
-                    # Apply mask to windowed data
-                    win_Dg = np.where(mask, win_Dg, np.nan)
-                    win_phi = np.where(mask, win_phi, np.nan)
-                    win_lon = np.where(mask, win_lon, np.nan)
-                    
-                    # Compute surface area on the sphere
-                    lat1 = win_phi - dphi_2
-                    lat2 = win_phi + dphi_2
-                    lon1 = win_lon - dlam_2
-                    lon2 = win_lon + dlam_2
-                    A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
-                    A_k = np.where(np.isfinite(win_Dg), A_k, np.nan)
+            if self.fast:
+                self.N_far = self._compute_far_zone_row_exact(psi0, dphi_2, dlam_2)
+            else:
+                # Find sub-grid offset in full grid
+                lat = self.res_anomaly['lat'].values
+                lon = self.res_anomaly['lon'].values
+                lat_sub = self.res_anomaly_P['lat'].values
+                lon_sub = self.res_anomaly_P['lon'].values
+                row_start = np.where(lat == lat_sub[0])[0][0]
+                col_start = np.where(lon == lon_sub[0])[0][0]
 
+                for i in tqdm(range(self.nrows_P), desc='Computing far zone contribution'):
+                    for j in range(self.ncols_P):
+                        # Map sub-grid to full grid indices
+                        row_p = row_start + i
+                        col_p = col_start + j
 
-                    self.stokes_calculator = Stokes4ResidualGeoid(
-                        lonp=self.lonp[i, j],
-                        latp=self.phip[i, j],
-                        lon=win_lon,
-                        lat=win_phi,
-                        psi0=psi0,
-                        nmax=self.nmax
-                    )
+                        # Get cap window bounds and mask
+                        mask, (row_min, row_max, col_min, col_max) = self.get_cap_window(row_p, col_p)
 
-                    S_k = self.stokes_kernel()
-                    # Apply mask to S_k (use mask from get_cap_window)
-                    S_k = np.where(mask, S_k, np.nan)
-                    
-                    # Outer (far) zone
-                    c_k = A_k * S_k
-                    self.N_far[i, j] = np.nansum(c_k * win_Dg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
+                        # Extract window data
+                        win_Dg = self.res_anomaly['Dg'].values[row_min:row_max, col_min:col_max]
+                        win_phi = np.radians(self.Lat[row_min:row_max, col_min:col_max])
+                        win_lon = np.radians(self.Lon[row_min:row_max, col_min:col_max])
+
+                        # Apply mask to windowed data
+                        win_Dg = np.where(mask, win_Dg, np.nan)
+                        win_phi = np.where(mask, win_phi, np.nan)
+                        win_lon = np.where(mask, win_lon, np.nan)
+
+                        # Compute surface area on the sphere
+                        lat1 = win_phi - dphi_2
+                        lat2 = win_phi + dphi_2
+                        lon1 = win_lon - dlam_2
+                        lon2 = win_lon + dlam_2
+                        A_k = self.R**2 * np.abs(lon2 - lon1) * np.abs(np.sin(lat2) - np.sin(lat1))
+                        A_k = np.where(np.isfinite(win_Dg), A_k, np.nan)
+
+                        self.stokes_calculator = Stokes4ResidualGeoid(
+                            lonp=self.lonp[i, j],
+                            latp=self.phip[i, j],
+                            lon=win_lon,
+                            lat=win_phi,
+                            psi0=psi0,
+                            nmax=self.nmax
+                        )
+
+                        S_k = self.stokes_kernel()
+                        # Apply mask to S_k (use mask from get_cap_window)
+                        S_k = np.where(mask, S_k, np.nan)
+
+                        # Outer (far) zone
+                        c_k = A_k * S_k
+                        self.N_far[i, j] = np.nansum(c_k * win_Dg) * 1 / (4 * np.pi * self.gamma_0[i, j] * self.R)
 
         print('Far zone computation completed.')
         N_res = self.N_inner + self.N_far
