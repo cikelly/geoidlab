@@ -328,8 +328,11 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument('-v', '--variable', action='append', type=str, help='Variable name(s) to plot')
     parser.add_argument('-c', '--cmap', type=str, nargs='+', help='Colormap(s) to use. Can specify multiple colormaps for multiple files. For GMT .cpt files, use the file name with extension.', default=['GMT_rainbow.cpt'])
     parser.add_argument('--fig-size', type=float, nargs=2, default=[5, 5], help='Figure size in inches')
-    parser.add_argument('--vmin', type=float, help='Minimum value for colorbar')
-    parser.add_argument('--vmax', type=float, help='Maximum value for colorbar')
+    parser.add_argument('--vmin', type=float, nargs='*', default=None,
+                       help='Min colorbar value. One value = all subplots; '
+                            'N values = per-subplot. Default: auto.')
+    parser.add_argument('--vmax', type=float, nargs='*', default=None,
+                       help='Max colorbar value (same rules as --vmin).')
     parser.add_argument('--font-size', type=int, default=10, help='Font size for labels')
     parser.add_argument('--title', type=str, nargs='+', default=None, help='Title(s) for the figure. Can specify multiple titles for multiple files.')
     parser.add_argument('--title-font-size', type=int, default=12, help='Font size for title')
@@ -613,8 +616,9 @@ def main(args=None) -> None:
     fig.set_size_inches(fig_width, fig_height)
     axes = np.atleast_2d(axes)
     
-    shared_vmin = args.vmin
-    shared_vmax = args.vmax
+    # For --share-cbar, use first value if list provided, else None.
+    shared_vmin = args.vmin[0] if args.vmin else None
+    shared_vmax = args.vmax[0] if args.vmax else None
     if args.share_cbar and total_panels > 0:
         if shared_vmin is None or shared_vmax is None:
             panel_mins = []
@@ -667,8 +671,15 @@ def main(args=None) -> None:
             cmap_name = args.cmap[i % len(args.cmap)]
             cmap = get_colormap(cmap_name)
 
-        plot_vmin = shared_vmin if args.share_cbar else args.vmin
-        plot_vmax = shared_vmax if args.share_cbar else args.vmax
+        # per-subplot vmin/vmax: single value → all panels; list → cycle
+        if args.share_cbar:
+            plot_vmin = shared_vmin
+            plot_vmax = shared_vmax
+        else:
+            vmin_list = args.vmin if args.vmin else [None]
+            vmax_list = args.vmax if args.vmax else [None]
+            plot_vmin = vmin_list[i % len(vmin_list)]
+            plot_vmax = vmax_list[i % len(vmax_list)]
 
         if use_surface:
             finite = data[np.isfinite(data)]

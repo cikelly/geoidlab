@@ -228,9 +228,9 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
             return value.lower() in {'true', 'yes', '1'}
         if key in {'max_deg', 'chunk_size', 'decimate_threshold', 'font_size', 'title_font_size', 'dpi', 'dtm_nmax', 'dtm_chunk_size', 'density_resolution', 'workers', 'nrows', 'ncols', 'shared_cbar_font_size'}:
             return int(value)
-        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'vmin', 'vmax', 'chunk_memory_gb', 'cbar_shrink', 'cbar_pad', 'relief_exaggeration', 'relief_azdeg', 'relief_altdeg', 'surface_exaggeration', 'surface_elev', 'surface_azim', 'bound_linewidth', 'global_cbar_shrink', 'global_cbar_pad', 'shared_cbar_shrink', 'shared_cbar_pad', 'contour_linewidth', 'contour_alpha'}:
+        if key in {'radius', 'bbox_offset', 'grid_size', 'sph_cap', 'tc_grid_size', 'ind_grid_size', 'chunk_memory_gb', 'cbar_shrink', 'cbar_pad', 'relief_exaggeration', 'relief_azdeg', 'relief_altdeg', 'surface_exaggeration', 'surface_elev', 'surface_azim', 'bound_linewidth', 'global_cbar_shrink', 'global_cbar_pad', 'shared_cbar_shrink', 'shared_cbar_pad', 'contour_linewidth', 'contour_alpha'}:
             return float(value)
-        if key in {'bbox', 'fig_size', 'xlim', 'ylim'}:
+        if key in {'bbox', 'fig_size', 'xlim', 'ylim', 'vmin', 'vmax'}:
             return [float(x) for x in value.split()]
         if key == 'save_pad':
             return value.split()
