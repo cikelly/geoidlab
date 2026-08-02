@@ -254,7 +254,7 @@ def plot_gravity_anomaly(
                 elev_column = [col for col in gravity_data.columns if pd.Series(col).str.contains('elev', case=False).any()][0]
             except IndexError:
                 elev_column = [col for col in gravity_data.columns if pd.Series(col).str.contains('height', case=False).any()][0]
-            grav_column = [col for col in gravity_data.columns if pd.Series(col).str.contains('grav', case=False).any()][0]
+            grav_column = [col for col in gravity_data.columns if pd.Series(col).str.contains('grav|g_', case=False).any()][0]
             
             free_air_anomaly, bouguer_anomaly = pygrav.gravity_anomalies(
                 lat=gravity_data[lat_column],
