@@ -16,6 +16,8 @@ Functions
 Coefficients
 src_old
 MATLAB
+*.md
+settings.json
 
 # Python packaging
 *.egg-info/
