@@ -108,6 +108,7 @@ class GGMSynthesis():
         dtm_model: str | Path = None,
         ellipsoidal_correction: bool = False,
         zero_degree_target: str = 'geoid',
+        zero_degree_mode: str = 'physical_w0',
         constant_density: bool = True,
         density_model: str | None = '30s',
         density_resolution: int | None = None,
@@ -169,6 +170,7 @@ class GGMSynthesis():
         self.dtm_model = dtm_model
         self.ellipsoidal_correction = ellipsoidal_correction
         self.zero_degree_target = zero_degree_target
+        self.zero_degree_mode = zero_degree_mode
         self.constant_density = constant_density
         self.density_model = density_model
         self.density_resolution = density_resolution
@@ -353,6 +355,8 @@ class GGMSynthesis():
         call_kwargs = method_kwargs
         if ggm_method == 'geoid' and icgem is not None:
             call_kwargs.setdefault('icgem', icgem)
+        if ggm_method in {'geoid', 'height_anomaly', 'zero_degree_term'}:
+            call_kwargs.setdefault('zero_degree_mode', self.zero_degree_mode)
         if 'parallel' not in call_kwargs:
             call_kwargs['parallel'] = self.parallel
         if ggm_method != 'zero_degree_term':
@@ -554,6 +558,9 @@ def add_reference_arguments(parser) -> None:
                         help='Enable ellipsoidal correction')
     parser.add_argument('--zero-degree-target', type=str, default='geoid', choices=['geoid', 'zeta'],
                         help='Target quantity for zero-degree term correction when computing zero-degree-term task.')
+    parser.add_argument('--zero-degree-mode', type=str, default='physical_w0',
+                        choices=['physical_w0', 'icgem', 'none'],
+                        help='Zero-degree convention: physical_w0 (default), icgem (GM*C00 only), or none.')
     parser.add_argument('--variable-density', action='store_true', default=False,
                         help='Enable variable topographic density for ICGEM topographic term in reference geoid computation.')
     parser.add_argument('--density-model', type=str, default='30s',
@@ -625,6 +632,7 @@ def main(args=None) -> int:
         dtm_model=args.dtm_model,
         ellipsoidal_correction=args.ellipsoidal_correction,
         zero_degree_target=args.zero_degree_target,
+        zero_degree_mode=args.zero_degree_mode,
         constant_density=not args.variable_density,
         density_model=args.density_model,
         density_resolution=args.density_resolution,

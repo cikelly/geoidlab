@@ -243,6 +243,31 @@ def test_config_force_flag_is_parsed(tmp_path) -> None:
     assert args.force is True
 
 
+def test_config_zero_degree_mode_is_parsed_independently_of_icgem(tmp_path) -> None:
+    config_file = tmp_path / "geoidlab.cfg"
+    config_file.write_text(
+        "\n".join(
+            [
+                "[subcommand]",
+                "command = ggm",
+                "",
+                "[ggm]",
+                "model = EGM2008",
+                "icgem = false",
+                "zero_degree_mode = icgem",
+            ]
+        )
+    )
+
+    args = parse_config_file(
+        str(config_file),
+        argparse.Namespace(subcommand=None, func=None),
+    )
+
+    assert args.icgem is False
+    assert args.zero_degree_mode == "icgem"
+
+
 def test_topo_indirect_effect_respects_force(tmp_path) -> None:
     output_file = tmp_path / "N_ind.nc"
     output_file.write_text("existing")

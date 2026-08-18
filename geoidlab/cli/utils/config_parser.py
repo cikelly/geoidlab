@@ -92,6 +92,7 @@ def parse_config_file(config_path: str, cli_args: argparse.Namespace) -> argpars
         'model_dir'             : ('model_dir', None),
         'max_deg'               : ('max_deg', None),
         'icgem'                 : ('icgem', False),
+        'zero_degree_mode'      : ('zero_degree_mode', 'physical_w0'),
         'dtm_model'             : ('dtm_model', None),
         'model_format'          : ('model_format', None),
         'earth2014_model'       : ('earth2014_model', None),

@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from numba import get_num_threads
+from typing import Tuple
 
 HIGH_DEGREE_STANDARD_WARNING = 2040
 
@@ -58,15 +59,15 @@ class GlobalGeopotentialModel:
 
     def __init__(
         self, 
-        shc=None, 
-        model_name=None, 
-        ellipsoid='wgs84', 
-        nmax=90, 
-        grav_data=None, 
-        zonal_harmonics=True,
-        model_dir='downloads',
-        chunk_size=None,
-        dtm_model=None,
+        shc: np.ndarray | None = None, 
+        model_name: str | None = None, 
+        ellipsoid: str = 'wgs84', 
+        nmax: int = 90, 
+        grav_data: pd.DataFrame | None = None, 
+        zonal_harmonics: bool = True,
+        model_dir: str = 'downloads',
+        chunk_size: int | None = None,
+        dtm_model: str | None = None,
         constant_density: bool = True,
         density_model: str | None = '30s',
         density_resolution: int | None = None,
@@ -197,7 +198,11 @@ class GlobalGeopotentialModel:
         self.lambda_ = np.radians(self.lon)
         # self.phi     = np.radians(self.lat)
 
-    def _compute_alfs(self, vartheta, compute_derivative: bool = False):
+    def _compute_alfs(
+        self, 
+        vartheta: np.ndarray, 
+        compute_derivative: bool = False
+    ) -> Tuple[np.ndarray, np.ndarray]:
         '''
         Compute ALFs using the configured Legendre mode.
         '''
@@ -474,7 +479,7 @@ class GlobalGeopotentialModel:
             return self.gravity_disturbance_sequential()
         
         
-    def disturbing_potential_sequential(self, r_or_R='r') -> np.ndarray:
+    def disturbing_potential_sequential(self, r_or_R: str = 'r') -> np.ndarray:
         '''
         Compute long-wavelength disturbing potential from a GGM
         
@@ -510,7 +515,7 @@ class GlobalGeopotentialModel:
         
         return T
     
-    def disturbing_potential_parallel(self, r_or_R='r') -> np.ndarray:
+    def disturbing_potential_parallel(self, r_or_R: str = 'r') -> np.ndarray:
         '''
         Compute disturbing potential using chunking and a threaded Numba kernel.
         
@@ -561,7 +566,7 @@ class GlobalGeopotentialModel:
         return T
     
     
-    def disturbing_potential(self, r_or_R='r', parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
+    def disturbing_potential(self, r_or_R: str = 'r', parallel: bool = True, batch_size: int = 1000) -> np.ndarray:
         '''
         Method to call either disturbing_potential_parallel() or disturbing_potential_sequential()
         with automatic batching for large arrays
@@ -685,26 +690,29 @@ class GlobalGeopotentialModel:
         
     def height_anomaly(
         self, 
-        T=None, 
-        tolerance=5e-3, 
-        max_iter=5,
-        parallel: bool=True,
-        batch_size: int = 1000
+        T: np.ndarray = None, 
+        tolerance: float = 5e-3, 
+        max_iter: int = 5,
+        parallel: bool = True,
+        batch_size: int = 1000,
+        zero_degree_mode: str = 'physical_w0',
     ) -> np.ndarray:
         '''
         Height anomaly based on Bruns' method with automatic batching for large arrays
         
         Parameters
         ----------
-        T          : Disturbing potential array (m2/s2)
-        tolerance  : Tolerance for refining height anomaly
-        max_iter   : Maximum number of iterations
-        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
-        batch_size : Maximum batch size for large arrays (default: 1000)
+        T                : Disturbing potential array (m2/s2)
+        tolerance        : Tolerance for refining height anomaly
+        max_iter         : Maximum number of iterations
+        parallel         : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
+        batch_size       : Maximum batch size for large arrays (default: 1000)
+        zero_degree_mode : Zero-degree convention: 'physical_w0' (default),
+                           'icgem', or 'none'
         
         Returns
         -------
-        zeta       : Height anomaly (m)
+        zeta             : Height anomaly (m)
         
         Notes
         -----
@@ -719,8 +727,11 @@ class GlobalGeopotentialModel:
         '''
         # Check if batching is needed
         if len(self.lon) > batch_size:
-            return self._batch_process('height_anomaly', batch_size=batch_size, 
-                                     T=T, tolerance=tolerance, max_iter=max_iter, parallel=parallel)
+            return self._batch_process(
+                'height_anomaly', batch_size=batch_size, T=T,
+                tolerance=tolerance, max_iter=max_iter, parallel=parallel,
+                zero_degree_mode=zero_degree_mode,
+            )
         
         # Original implementation for smaller arrays
         print('Using Bruns\' method with zero-degree correction to calculate height anomaly...\n')
@@ -729,7 +740,10 @@ class GlobalGeopotentialModel:
         gammaQ = gravity.normal_gravity_above_ellipsoid(phi=self.lat, h=self.h, ellipsoid=self.ellipsoid)
         gammaQ = gammaQ * 1e-5  # mgal to m/s2
         zeta_old = T / gammaQ
-        zeta_old = self.zero_degree_term(geoid=zeta_old, zeta_or_geoid='zeta')
+        zeta_old = self.zero_degree_term(
+            geoid=zeta_old, zeta_or_geoid='zeta',
+            zero_degree_mode=zero_degree_mode,
+        )
         
         if max_iter == 0:
             return zeta_old
@@ -745,7 +759,10 @@ class GlobalGeopotentialModel:
             zeta = T / gammaQ
             
             # Zero-degree term
-            zeta = self.zero_degree_term(geoid=zeta, zeta_or_geoid='zeta')
+            zeta = self.zero_degree_term(
+                geoid=zeta, zeta_or_geoid='zeta',
+                zero_degree_mode=zero_degree_mode,
+            )
             
             zeta_diff = np.abs(zeta - zeta_old)
             
@@ -761,20 +778,29 @@ class GlobalGeopotentialModel:
         
         return zeta
     
-    def geoid(self, T=None, icgem: bool = False, parallel: bool = False, batch_size: int = 1000) -> np.ndarray:
+    def geoid(
+        self, 
+        T: np.ndarray = None, 
+        icgem: bool = False, 
+        parallel: bool = False,
+        batch_size: int = 1000, 
+        zero_degree_mode: str = 'physical_w0'
+    ) -> np.ndarray:
         '''
         Geoid heights based on Bruns' method with automatic batching for large arrays
         
         Parameters
         ----------
-        T          : Disturbing potential array (m2/s2)
-        icgem      : Use ICGEM formula which accounts for topographic effect
-        parallel   : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
-        batch_size : Maximum batch size for large arrays (default: 1000)
+        T                : Disturbing potential array (m2/s2)
+        icgem            : Use ICGEM formula which accounts for topographic effect
+        parallel         : Whether to use parallel processing (large arrays fall back to sequential unless force_parallel=True)
+        batch_size       : Maximum batch size for large arrays (default: 1000)
+        zero_degree_mode : Zero-degree convention: 'physical_w0' (default),
+                           'icgem', or 'none'
         
         Returns
         -------
-        zeta       : Geoid height (m)
+        zeta             : Geoid height (m)
         
         Notes
         -----
@@ -787,7 +813,10 @@ class GlobalGeopotentialModel:
         '''
         # Check if batching is needed
         if len(self.lon) > batch_size:
-            return self._batch_process('geoid', batch_size=batch_size, T=T, icgem=icgem, parallel=parallel)
+            return self._batch_process(
+                'geoid', batch_size=batch_size, T=T, icgem=icgem,
+                parallel=parallel, zero_degree_mode=zero_degree_mode,
+            )
         
         # Original implementation for smaller arrays
         print('Using Bruns\' method with zero-degree correction to calculate geoid height...\n')
@@ -817,36 +846,62 @@ class GlobalGeopotentialModel:
         N -= N_topo
         
         # Zero-degree term
-        N = self.zero_degree_term(geoid=N, zeta_or_geoid='geoid')
+        N = self.zero_degree_term(
+            geoid=N, zeta_or_geoid='geoid', zero_degree_mode=zero_degree_mode
+        )
         print('Reference geoid computed successfully!')
         
         return N
 
-    def zero_degree_term(self, geoid=None, GM=None, zeta_or_geoid='geoid') -> np.ndarray:
+    def zero_degree_term(
+        self, 
+        geoid: np.ndarray = None, 
+        GM: float = None, 
+        zeta_or_geoid: str = 'geoid',
+        zero_degree_mode: str = 'physical_w0'
+    ) -> np.ndarray:
         '''
         Add zero-degree term to the GGM geoid
         
         Parameters
         ----------
-        geoid         : Geoid model (output of ggm.reference_geoid())
-        GM            : Gravity constant of the GGM
-        zeta_or_geoid : 'zeta' or 'geoid'
+        geoid            : Geoid model (output of ggm.reference_geoid())
+        GM               : Effective gravity constant of the GGM when `shc` is unavailable
+        zeta_or_geoid    : 'zeta' or 'geoid'
+        zero_degree_mode : 'physical_w0' (default), 'icgem', or 'none'
         Returns
         -------
-        N             : Geoid corrected for zero-degree term
+        N                : Geoid corrected for zero-degree term
         
         Reference
         ---------
         Hofmann-Wellenhof & Moritz (2006): Physical Geodesy, Eq. 2–356, p. 113
         '''
+        valid_modes = {'physical_w0', 'icgem', 'none'}
+        if zero_degree_mode not in valid_modes:
+            raise ValueError(
+                "zero_degree_mode must be one of 'physical_w0', 'icgem', or 'none'"
+            )
+
         if geoid is None:
             raise ValueError('Please provide geoid')
+
+        if zero_degree_mode == 'none':
+            return geoid
         
         if self.shc is None and GM is None:
             raise ValueError('Please provide shc (output of icgem.read_icgem()) or GM from GGM')
         
         if self.shc is not None and GM is None:
-            GM = self.shc['GM']
+            try:
+                C00 = self.shc['Cnm'][0, 0]
+            except (KeyError, IndexError, TypeError) as exc:
+                print(f'Warning: shc does not contain degree-zero coefficient Cnm[0, 0]. Setting to 1.0.')
+                C00 = 1.0
+            if not np.isfinite(C00):
+                print(f'Warning: shc degree-zero coefficient Cnm[0, 0] is not finite: {C00}. Setting to 1.0')
+                C00 = 1.0
+            GM = self.shc['GM'] * C00
         
         ref_ellipsoid = constants.resolve_ellipsoid(self.ellipsoid)
         constants.require_ellipsoid_params(
@@ -862,11 +917,15 @@ class GlobalGeopotentialModel:
             gamma   = gravity.normal_gravity_above_ellipsoid(
                 phi=self.lat, h=self.h, ellipsoid=self.ellipsoid
             ) # This is actually gamma_Q, but we use gamma here for convenience
-            gamma   = gamma   / 1e5 # mgal to m/s2
+            gamma   = gamma / 1e5 # mgal to m/s2
         else:
             gamma   = gravity.normal_gravity_somigliana(phi=self.lat, ellipsoid=self.ellipsoid)
         
-        N = geoid + ( (GM - GM0) / R - (W0 - U0) ) / gamma   
+        correction = (GM - GM0) / R
+        if zero_degree_mode == 'physical_w0':
+            correction -= W0 - U0
+
+        N = geoid + correction / gamma
         
         return N
     
@@ -998,7 +1057,7 @@ class GlobalGeopotentialModel:
 
         return df
     
-    def disturbing_potential_derivative_sequential(self, r_or_R='r') -> np.ndarray:
+    def disturbing_potential_derivative_sequential(self, r_or_R: str = 'r') -> np.ndarray:
         '''
         Compute the derivative of the disturbing potential with respect to theta (colatitude).
         
@@ -1034,7 +1093,7 @@ class GlobalGeopotentialModel:
         
         return dTdtheta
     
-    def disturbing_potential_derivative_parallel(self, r_or_R='r') -> np.ndarray:
+    def disturbing_potential_derivative_parallel(self, r_or_R: str = 'r') -> np.ndarray:
         '''
         Compute disturbing potential derivative using chunking and a threaded Numba kernel.
         
@@ -1085,7 +1144,12 @@ class GlobalGeopotentialModel:
         return dTdtheta
     
     
-    def disturbing_potential_derivative(self, r_or_R='r', parallel: bool=True, batch_size: int = 1000) -> np.ndarray:
+    def disturbing_potential_derivative(
+        self, 
+        r_or_R: str = 'r', 
+        parallel: bool = True, 
+        batch_size: int = 1000
+    ) -> np.ndarray:
         '''
         Method to call either disturbing_potential_derivative_parallel() or disturbing_potential_derivative_sequential()
         with automatic batching for large arrays
@@ -1111,7 +1175,12 @@ class GlobalGeopotentialModel:
         else:
             return self.disturbing_potential_derivative_sequential(r_or_R=r_or_R)
 
-    def ellipsoidal_correction(self, parallel: bool = True, r_or_R='r', batch_size: int = 1000) -> np.ndarray:
+    def ellipsoidal_correction(
+        self, 
+        parallel: bool = True, 
+        r_or_R: str = 'r', 
+        batch_size: int = 1000
+    ) -> np.ndarray:
         '''
         Compute the ellipsoidal correction for gravity anomalies with automatic batching for large arrays
         
@@ -1164,7 +1233,12 @@ class GlobalGeopotentialModel:
         print('Ellipsoidal correction computed successfully.')
         return Delta_g_ell
 
-    def _batch_process(self, method_name, batch_size=1000, **kwargs) -> np.ndarray:
+    def _batch_process(
+        self, 
+        method_name: str, 
+        batch_size: int = 1000, 
+        **kwargs
+    ) -> np.ndarray:
         '''
         Automatically batch process large arrays to avoid memory issues
         

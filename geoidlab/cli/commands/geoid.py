@@ -1039,6 +1039,7 @@ def main(args=None) -> None:
         proj_name=args.proj_name,
         icgem=args.icgem,
         dtm_model= args.dtm_model,
+        zero_degree_mode=args.zero_degree_mode,
         constant_density=not args.variable_density,
         density_model=args.density_model,
         density_resolution=args.density_resolution,
