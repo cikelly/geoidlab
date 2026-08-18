@@ -60,7 +60,7 @@ setup(
         'Issues': 'https://github.com/cikelly/geoidlab/issues',
     },
     install_requires=requirements,
-    python_requires='>=3.10,<3.13',
+    python_requires='>=3.10,<3.14',
     entry_points={
         'console_scripts': [
             'geoidlab=geoidlab.cli.main:main',
