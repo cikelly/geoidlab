@@ -49,16 +49,21 @@ def test_zero_degree_none_returns_input_unchanged() -> None:
     assert result is geoid
 
 
-def test_zero_degree_mode_and_c00_validation() -> None:
+def test_zero_degree_mode_and_invalid_c00_fallback() -> None:
     model = _zero_degree_model()
 
     with pytest.raises(ValueError, match='zero_degree_mode'):
         model.zero_degree_term(np.zeros(2), zero_degree_mode='invalid')
 
     model.shc['Cnm'][0, 0] = np.nan
-    with pytest.raises(ValueError, match='Cnm\\[0, 0\\]'):
-        model.zero_degree_term(np.zeros(2), zero_degree_mode='icgem')
+    expected = _zero_degree_model().zero_degree_term(
+        np.zeros(2), zero_degree_mode='icgem'
+    )
+    assert np.allclose(
+        model.zero_degree_term(np.zeros(2), zero_degree_mode='icgem'), expected
+    )
 
     model.shc['Cnm'] = np.empty((0, 0))
-    with pytest.raises(ValueError, match='Cnm\\[0, 0\\]'):
-        model.zero_degree_term(np.zeros(2), zero_degree_mode='icgem')
+    assert np.allclose(
+        model.zero_degree_term(np.zeros(2), zero_degree_mode='icgem'), expected
+    )
