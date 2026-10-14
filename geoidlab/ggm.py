@@ -134,14 +134,14 @@ class GlobalGeopotentialModel:
             )
         
         # Input validation
+        if self.shc is None and self.model is None:
+            raise ValueError('Either shc or model_name must be specified')
+                
         if self.model_dir is None:
             self.model_dir = 'downloads'
 
         if self.model.endswith('.gfc'):
             self.model = self.model.split('.gfc')[0]
-            
-        if self.shc is None and self.model is None:
-            raise ValueError('Either shc or model_name must be specified')
         
         if self.chunk is None:
             print('Chunk size not specified. Setting chunk size to 100...')
